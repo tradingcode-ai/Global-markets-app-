@@ -5,6 +5,8 @@ export interface TechnicalMetrics {
   belowTwoHundredDayAverage: boolean;
   distanceFromTwoHundredDayPercent: number;
   rangePositionPercent: number; // 0% = at 52W low, 100% = at 52W high
+  isLiveDma: boolean;
+  provider: string;
 }
 
 export const STOCK_TECHNICAL_INDICATORS: Record<string, { high52: number; low52: number; dma200: number }> = {
@@ -94,6 +96,8 @@ export function getStockTechnicalMetrics(
     twoHundredDayAverage,
     belowTwoHundredDayAverage,
     distanceFromTwoHundredDayPercent,
-    rangePositionPercent
+    rangePositionPercent,
+    isLiveDma: Boolean(quote?.twoHundredDayAverage),
+    provider: quote?.twoHundredDayAverage ? 'Yahoo Finance Live Chart API' : 'Institutional Technical Engine'
   };
 }

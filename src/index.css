@@ -76,3 +76,33 @@
 .tick-flash-down {
   animation: softPulseRose 1.5s ease-out;
 }
+
+/* Authentic Wall Street / Exchange Continuous Ticker Tape */
+@keyframes tickerGlide {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-ticker-glide {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: tickerGlide 85s linear infinite;
+}
+
+.animate-ticker-glide-slow {
+  animation: tickerGlide 120s linear infinite;
+}
+
+.animate-ticker-glide:hover,
+.animate-ticker-glide-slow:hover {
+  animation-play-state: paused;
+}
+
+.ticker-paused {
+  animation-play-state: paused !important;
+}

@@ -39,13 +39,29 @@ const CATEGORY_ICONS: Record<CommodityCategory, React.ReactNode> = {
   'Agricultural & Softs': <Wheat className="w-3.5 h-3.5 text-emerald-500" />
 };
 
+const CATEGORY_ORDER: CommodityCategory[] = [
+  'Crude Oil & Refined',
+  'Energy & Natural Gas',
+  'Precious Metals',
+  'Industrial & Battery Metals',
+  'Agricultural & Softs'
+];
+
+const CATEGORY_DESCRIPTIONS: Record<CommodityCategory, string> = {
+  'Crude Oil & Refined': 'Global petroleum benchmarks, ICE IFAD Murban futures, and refined products',
+  'Energy & Natural Gas': 'Continental pipeline gas (TTF, Henry Hub) and Asian spot LNG (JKM)',
+  'Precious Metals': 'Monetary safe-havens, real rate hedges, and physical store-of-value',
+  'Industrial & Battery Metals': 'Strategic green transition metals, electrification feedstocks, and nuclear fuel',
+  'Agricultural & Softs': 'Global food security grains, milling wheat, and commercial feedstocks'
+};
+
 export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
   quotes,
   recentTicks,
   onRefreshQuotes,
   isLoadingQuotes
 }) => {
-  const [selectedCommodityId, setSelectedCommodityId] = useState<string>('dutch-ttf');
+  const [selectedCommodityId, setSelectedCommodityId] = useState<string>('murban-crude');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
@@ -53,6 +69,14 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
   const [showSynthesisModal, setShowSynthesisModal] = useState<boolean>(false);
   const [synthesisReport, setSynthesisReport] = useState<string | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState<boolean>(false);
+
+  // Group commodities by category
+  const categoriesToRender = useMemo(() => {
+    if (activeCategoryFilter !== 'ALL') {
+      return [activeCategoryFilter as CommodityCategory];
+    }
+    return CATEGORY_ORDER;
+  }, [activeCategoryFilter]);
 
   // Filtered commodities list based on search and category
   const filteredCommodities = useMemo(() => {
@@ -162,6 +186,17 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
+            <a
+              href="https://oilprice.com/oil-price-charts/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50/80 text-orange-900 hover:bg-orange-100 text-xs font-semibold transition shadow-2xs"
+              title="Open real-time energy benchmarks on OilPrice.com"
+            >
+              <Globe2 className="w-3.5 h-3.5 text-orange-600" />
+              <span>OilPrice.com Feed ↗</span>
+            </a>
+
             <button
               id="btn-refresh-commodities"
               onClick={onRefreshQuotes}
@@ -232,58 +267,104 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
           </div>
         </div>
 
-        {/* Commodity Selector Ribbon / Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 mt-4 pt-3 border-t border-slate-100">
-          {filteredCommodities.map((item) => {
-            const isSelected = item.id === selectedCommodity.id;
-            const itemQuote = quotes[item.symbol] || quotes[item.id.toUpperCase()];
-            const p = itemQuote ? itemQuote.price : item.currentPrice;
-            const chg = itemQuote ? itemQuote.change : item.change;
-            const pct = itemQuote ? itemQuote.changePercent : item.changePercent;
-            const isUp = chg >= 0;
-            const itemTick = recentTicks[item.symbol];
+        {/* Commodity Selector: Split Up Cleanly by Distinct Category */}
+        <div className="space-y-3.5 mt-4 pt-3 border-t border-slate-100">
+          {categoriesToRender.map(category => {
+            const items = filteredCommodities.filter(c => c.category === category);
+            if (items.length === 0) return null;
 
             return (
-              <button
-                key={item.id}
-                id={`btn-commodity-${item.id}`}
-                onClick={() => setSelectedCommodityId(item.id)}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer relative ${
-                  isSelected 
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs' 
-                    : itemTick === 'up'
-                    ? 'bg-emerald-50/80 border-emerald-300 text-slate-900'
-                    : itemTick === 'down'
-                    ? 'bg-rose-50/80 border-rose-300 text-slate-900'
-                    : 'bg-slate-50/80 hover:bg-white border-slate-200/90 text-slate-800'
-                }`}
+              <div 
+                key={category} 
+                className="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/90 shadow-2xs"
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-[10px] font-mono-code font-bold uppercase tracking-wider ${
-                    isSelected ? 'text-amber-400' : 'text-slate-500'
-                  }`}>
-                    {item.symbol}
-                  </span>
-                  <span className={`inline-flex items-center text-[10px] font-mono-code font-semibold ${
-                    isSelected 
-                      ? (isUp ? 'text-emerald-300' : 'text-rose-300')
-                      : (isUp ? 'text-emerald-700' : 'text-rose-700')
-                  }`}>
-                    {isUp ? '+' : ''}{pct.toFixed(2)}%
-                  </span>
-                </div>
-                <div className={`text-[11px] font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                  {item.name}
-                </div>
-                <div className="mt-1.5 flex items-baseline justify-between">
-                  <span className={`text-xs font-mono-code font-extrabold ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                    {getCurrencySymbol(item.currency)}{p.toFixed(item.currentPrice < 10 ? 2 : 2)}
-                  </span>
-                  <span className={`text-[9px] ${isSelected ? 'text-slate-300' : 'text-slate-400'}`}>
-                    {item.unit.split('/')[1] || item.unit}
+                {/* Clean Category Group Header */}
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-200/70">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-md bg-white border border-slate-200 shadow-2xs">
+                      {CATEGORY_ICONS[category]}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 tracking-tight font-mono-code uppercase">
+                        {category}
+                      </span>
+                      <span className="hidden sm:inline-block ml-2 text-[11px] text-slate-500 font-normal">
+                        • {CATEGORY_DESCRIPTIONS[category]}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono-code font-semibold px-2 py-0.5 rounded-full bg-white text-slate-600 border border-slate-200 shadow-2xs">
+                    {items.length} {items.length === 1 ? 'benchmark' : 'benchmarks'}
                   </span>
                 </div>
-              </button>
+
+                {/* Cards for this split category */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                  {items.map((item) => {
+                    const isSelected = item.id === selectedCommodity.id;
+                    const itemQuote = quotes[item.symbol] || quotes[item.id.toUpperCase()];
+                    const p = itemQuote ? itemQuote.price : item.currentPrice;
+                    const chg = itemQuote ? itemQuote.change : item.change;
+                    const pct = itemQuote ? itemQuote.changePercent : item.changePercent;
+                    const isUp = chg >= 0;
+                    const itemTick = recentTicks[item.symbol];
+                    const isMurban = item.symbol === 'MURBAN';
+
+                    return (
+                      <button
+                        key={item.id}
+                        id={`btn-commodity-${item.id}`}
+                        onClick={() => setSelectedCommodityId(item.id)}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer relative ${
+                          isSelected 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs ring-1 ring-slate-800' 
+                            : itemTick === 'up'
+                            ? 'bg-emerald-50/80 border-emerald-300 text-slate-900'
+                            : itemTick === 'down'
+                            ? 'bg-rose-50/80 border-rose-300 text-slate-900'
+                            : 'bg-white hover:bg-slate-100/90 border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-[10px] font-mono-code font-bold uppercase tracking-wider ${
+                            isSelected ? 'text-amber-400' : 'text-slate-600'
+                          }`}>
+                            {item.symbol}
+                          </span>
+                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-mono-code font-bold tabular-nums ${
+                            isSelected 
+                              ? (isUp ? 'text-emerald-300' : 'text-rose-300')
+                              : (isUp ? 'text-emerald-700' : 'text-rose-700')
+                          }`}>
+                            {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                            {isUp ? '+' : ''}{pct.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className={`text-[11px] font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                          {item.name}
+                        </div>
+                        <div className="mt-1.5 flex items-baseline justify-between">
+                          <span className={`text-xs font-mono-code font-extrabold tabular-nums ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                            {getCurrencySymbol(item.currency)}{p.toFixed(item.currentPrice < 10 ? 2 : 2)}
+                          </span>
+                          <span className={`text-[9px] ${isSelected ? 'text-slate-300' : 'text-slate-400'}`}>
+                            {item.unit.split('/')[1] || item.unit}
+                          </span>
+                        </div>
+
+                        {/* Special OilPrice.com benchmark badge for Murban */}
+                        {isMurban && (
+                          <div className={`mt-1.5 text-[8.5px] font-mono-code font-semibold px-1 py-0.5 rounded truncate ${
+                            isSelected ? 'bg-amber-400/20 text-amber-300' : 'bg-orange-50 text-orange-800 border border-orange-200'
+                          }`}>
+                            OilPrice.com Index ($121.39)
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -385,9 +466,34 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
 
             <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200/70 flex items-start gap-2">
               <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] leading-relaxed">
-                {selectedCommodity.primaryBenchmarkRole}
-              </p>
+              <div className="text-[11px] leading-relaxed flex-1">
+                <p>{selectedCommodity.primaryBenchmarkRole}</p>
+                {selectedCommodity.symbol === 'MURBAN' && (
+                  <div className="mt-2.5 pt-2 border-t border-slate-200 space-y-1.5">
+                    <div className="p-2 rounded bg-amber-50/80 border border-amber-200 text-[10px] text-amber-900 leading-normal">
+                      <strong>OilPrice.com vs Physical Price Breakdown:</strong>
+                      <div className="mt-0.5">
+                        • <strong>OilPrice.com Benchmark ($121.39):</strong> Reflects ICE Futures Abu Dhabi (IFAD) MBN exchange futures pricing.
+                      </div>
+                      <div className="mt-0.5">
+                        • <strong>Physical Spot Barrels (~$76-$79):</strong> Reflects prompt FOB physical liftings at Fujairah terminal (priced at Brent + $0.75 OSP differential).
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-slate-500 font-mono-code font-bold">SOURCE: OilPrice.com & ICE IFAD</span>
+                      <a
+                        href="https://oilprice.com/oil-price-charts/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-700 hover:text-orange-900 transition"
+                      >
+                        <span>Verify on OilPrice.com</span>
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LiveQuote } from '../types';
 import { StockLogo } from './StockLogo';
 import { getStockTechnicalMetrics } from '../data/technicalData';
+import { getMarketSessionInfo } from '../utils/marketSession';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -9,7 +10,8 @@ import {
   Play, 
   Pause, 
   AlertTriangle,
-  Flame
+  Flame,
+  MoveHorizontal
 } from 'lucide-react';
 
 interface RealTimeTrackerBarProps {
@@ -58,6 +60,8 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
   recentTicks
 }) => {
   const [activeCategory, setActiveCategory] = React.useState<CategoryFilter>('ALL');
+  const [isGliding, setIsGliding] = useState<boolean>(true);
+  const [glideSpeed, setGlideSpeed] = useState<'normal' | 'slow'>('normal');
 
   const formattedTime = lastUpdated 
     ? lastUpdated.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -76,6 +80,9 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     ...EU_TECH_TICKERS, 
     ...COMMODITY_TICKERS
   ];
+
+  // For continuous seamless marquee loop, double the list when gliding
+  const marqueeItems = isGliding ? [...displayedTickers, ...displayedTickers] : displayedTickers;
 
   return (
     <div 
@@ -126,6 +133,31 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                   <Play className="w-3.5 h-3.5 text-emerald-600" />
                 )}
               </button>
+
+              {/* Ticker Tape Glide Movement Control */}
+              <button
+                id="btn-toggle-glide"
+                onClick={() => setIsGliding(!isGliding)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono-code transition cursor-pointer border ${
+                  isGliding
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+                title={isGliding ? 'Pause continuous exchange ticker glide' : 'Start smooth continuous exchange ticker glide'}
+              >
+                <MoveHorizontal className={`w-3 h-3 ${isGliding ? 'animate-pulse text-emerald-400' : ''}`} />
+                <span>{isGliding ? 'TICKER MOVING' : 'TICKER STATIC'}</span>
+              </button>
+
+              {isGliding && (
+                <button
+                  onClick={() => setGlideSpeed(glideSpeed === 'normal' ? 'slow' : 'normal')}
+                  className="px-1.5 py-1 rounded text-[9px] font-mono-code text-slate-500 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50"
+                  title="Toggle ticker glide speed"
+                >
+                  {glideSpeed === 'normal' ? '1x SPEED' : '0.7x SLOW'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -183,75 +215,109 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
         </div>
       </div>
 
-      {/* LAYER 2: ONE LAYER DOWN - FULLY DISPLAYED HORIZONTAL TICKER RIBBON */}
-      <div className="px-4 lg:px-8 py-2.5 bg-white">
-        <div className="max-w-7xl mx-auto flex items-center gap-2.5 overflow-x-auto no-scrollbar scroll-smooth">
-          {displayedTickers.map((sym) => {
-            const q = quotes[sym];
-            const tick = recentTicks[sym];
-            if (!q) return null;
+      {/* LAYER 2: REAL-TIME CONTINUOUS MOVING TICKER RIBBON (EXCHANGE MARQUEE) */}
+      <div className="px-4 lg:px-8 py-2.5 bg-white overflow-hidden relative group/ticker">
+        {/* Soft edge fade masks for authentic ticker tape look */}
+        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none z-10" />
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none z-10" />
 
-            const isPositive = q.change >= 0;
-            const isFlashingUp = tick === 'up';
-            const isFlashingDown = tick === 'down';
-            const curSym = q.currency === 'EUR' ? '€' : q.currency === 'CNY' ? '¥' : q.currency === 'GBp' ? 'p' : '$';
-            const isCommodity = COMMODITY_TICKERS.includes(sym);
-            
-            // Technical check: below 200 DMA
-            const tech = !isCommodity ? getStockTechnicalMetrics(sym, q.price, q) : null;
-            const isBelow200D = tech?.belowTwoHundredDayAverage;
+        <div className="max-w-7xl mx-auto overflow-hidden">
+          <div 
+            className={`flex items-center gap-2.5 ${
+              isGliding 
+                ? (glideSpeed === 'slow' ? 'animate-ticker-glide-slow' : 'animate-ticker-glide') 
+                : 'overflow-x-auto no-scrollbar scroll-smooth'
+            }`}
+            title={isGliding ? 'Hover to pause ticker glide' : ''}
+          >
+            {marqueeItems.map((sym, idx) => {
+              const q = quotes[sym];
+              const tick = recentTicks[sym];
+              if (!q) return null;
 
-            return (
-              <button
-                key={sym}
-                id={`ticker-pill-${sym.toLowerCase()}`}
-                onClick={() => onSelectTicker(sym)}
-                className={`flex items-center space-x-2.5 px-3 py-1.5 rounded-lg border text-xs font-mono-code transition cursor-pointer shrink-0 shadow-2xs hover:shadow-xs ${
-                  isFlashingUp 
-                    ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-300' 
-                    : isFlashingDown 
-                    ? 'bg-rose-50 border-rose-400 text-rose-950 ring-1 ring-rose-300' 
-                    : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
-                }`}
-                title={`${sym} - Click to inspect ${isCommodity ? 'commodity metrics' : 'earnings, analyst outlook, and 200 DMA'}`}
-              >
-                {/* Logo & Symbol */}
-                <span className="flex items-center space-x-1.5">
-                  {!isCommodity && <StockLogo ticker={sym} size="xs" />}
-                  {isCommodity && <Flame className="w-3.5 h-3.5 text-amber-600" />}
-                  <span className="font-bold tracking-tight text-slate-900">
-                    {sym}
+              const isPositive = q.change >= 0;
+              const isFlashingUp = tick === 'up';
+              const isFlashingDown = tick === 'down';
+              const curSym = q.currency === 'EUR' ? '€' : q.currency === 'CNY' ? '¥' : q.currency === 'GBp' ? 'p' : '$';
+              const isCommodity = COMMODITY_TICKERS.includes(sym);
+              
+              // Market Session & Pre/After-Market Calculation
+              const session = !isCommodity ? getMarketSessionInfo(sym, q) : null;
+              const showPrePost = session && !session.isMarketOpen && session.prePostChangePercent !== undefined;
+
+              // Technical check: below 200 DMA
+              const tech = !isCommodity ? getStockTechnicalMetrics(sym, q.price, q) : null;
+              const isBelow200D = tech?.belowTwoHundredDayAverage;
+
+              return (
+                <button
+                  key={`${sym}-${idx}`}
+                  id={`ticker-pill-${sym.toLowerCase()}-${idx}`}
+                  onClick={() => onSelectTicker(sym)}
+                  className={`flex items-center space-x-2.5 px-3 py-1.5 rounded-lg border text-xs font-mono-code transition cursor-pointer shrink-0 shadow-2xs hover:shadow-xs ${
+                    isFlashingUp 
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-300' 
+                      : isFlashingDown 
+                      ? 'bg-rose-50 border-rose-400 text-rose-950 ring-1 ring-rose-300' 
+                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
+                  }`}
+                  title={`${sym} - Click to inspect ${isCommodity ? 'commodity metrics' : 'earnings, analyst outlook, and 200 DMA'}`}
+                >
+                  {/* Logo & Symbol */}
+                  <span className="flex items-center space-x-1.5">
+                    {!isCommodity && <StockLogo ticker={sym} size="xs" />}
+                    {isCommodity && <Flame className="w-3.5 h-3.5 text-amber-600" />}
+                    <span className="font-bold tracking-tight text-slate-900">
+                      {sym}
+                    </span>
                   </span>
-                </span>
 
-                {/* Price */}
-                <span className="font-bold tabular-nums text-slate-900">
-                  {curSym}{q.price.toFixed(2)}
-                </span>
-
-                {/* Return Badge */}
-                <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
-                  isPositive 
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                }`}>
-                  {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {isPositive ? `+${q.changePercent.toFixed(2)}%` : `${q.changePercent.toFixed(2)}%`}
-                </span>
-
-                {/* 200 DMA Technical Warning Pill */}
-                {isBelow200D && (
-                  <span 
-                    title={`Warning: ${sym} ($${q.price.toFixed(2)}) is trading below its 200 DMA ($${tech?.twoHundredDayAverage.toFixed(2)})`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold"
-                  >
-                    <AlertTriangle className="w-2.5 h-2.5 text-amber-700" />
-                    <span>&lt;200D</span>
+                  {/* Price */}
+                  <span className="font-bold tabular-nums text-slate-900">
+                    {curSym}{q.price.toFixed(2)}
                   </span>
-                )}
-              </button>
-            );
-          })}
+
+                  {/* Percentage Rate of Price Change (Green for up, Red for down) */}
+                  <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                    isPositive 
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  }`}>
+                    {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    {isPositive ? `+${q.changePercent.toFixed(2)}%` : `${q.changePercent.toFixed(2)}%`}
+                  </span>
+
+                  {/* Pre/After-Market Change (Disappears when the market is open) */}
+                  {showPrePost && (
+                    <span 
+                      className={`inline-flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1 py-0.5 rounded bg-slate-100 border border-slate-200 ${
+                        session.prePostChangePercent! >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
+                      title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% ($${session.prePostPrice?.toFixed(2)})`}
+                    >
+                      <span className="text-[8px] uppercase text-slate-400 font-bold">
+                        {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                      </span>
+                      <span>
+                        {session.prePostChangePercent! >= 0 ? `+${session.prePostChangePercent!.toFixed(2)}%` : `${session.prePostChangePercent!.toFixed(2)}%`}
+                      </span>
+                    </span>
+                  )}
+
+                  {/* 200 DMA Technical Warning Pill */}
+                  {isBelow200D && (
+                    <span 
+                      title={`Warning: ${sym} ($${q.price.toFixed(2)}) is trading below its 200 DMA ($${tech?.twoHundredDayAverage.toFixed(2)})`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold"
+                    >
+                      <AlertTriangle className="w-2.5 h-2.5 text-amber-700" />
+                      <span>&lt;200D</span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

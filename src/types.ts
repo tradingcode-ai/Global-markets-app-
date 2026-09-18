@@ -15,6 +15,14 @@ export interface LiveQuote {
   twoHundredDayAverage?: number;
   sparkline?: number[];
   lastTickDirection?: 'up' | 'down' | 'unchanged';
+  provider?: string;
+  preMarketPrice?: number;
+  preMarketChange?: number;
+  preMarketChangePercent?: number;
+  postMarketPrice?: number;
+  postMarketChange?: number;
+  postMarketChangePercent?: number;
+  marketState?: 'PRE' | 'REGULAR' | 'POST' | 'CLOSED';
 }
 
 export type ThemeMode = 'soft-light' | 'soft-slate';
@@ -248,3 +256,27 @@ export interface AiEarningsAnalysis {
   bearCase: string;
   generatedAt: string;
 }
+
+export interface EarningsConsensusData {
+  ticker: string;
+  company_name: string;
+  earnings_info: {
+    next_earnings_date: string;
+    earnings_status: 'Confirmed' | 'Estimated' | string;
+    fiscal_quarter: string;
+  };
+  analyst_consensus: {
+    total_analysts: number;
+    consensus_price_target: number;
+    expected_eps: number;
+    expected_revenue: number;
+    expected_net_profit: number;
+  };
+  analyst_breakdown: Array<{
+    firm: string;
+    analyst_rating: 'Buy' | 'Hold' | 'Sell' | string;
+    price_target: number;
+    key_notes: string;
+  }>;
+}
+

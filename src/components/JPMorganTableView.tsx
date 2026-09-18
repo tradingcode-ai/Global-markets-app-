@@ -27,7 +27,8 @@ import {
   Wheat,
   Building2,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 import { getStockTechnicalMetrics } from '../data/technicalData';
 
@@ -344,12 +345,12 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
 
       {/* 4. Table Header Row (J.P. Morgan Authentic Hairline 2-Column or Multi-Column Table) */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+        <table className="w-full min-w-[820px] border-collapse text-left">
           <thead>
             <tr className="border-t border-b border-slate-200 bg-white text-xs font-semibold text-slate-900 uppercase tracking-tight">
               <th 
                 onClick={() => handleSort('name')}
-                className="py-3.5 px-4 border-r border-slate-200 cursor-pointer hover:bg-slate-50 transition select-none w-1/2 lg:w-5/12"
+                className="py-3.5 px-4 border-r border-slate-200 cursor-pointer hover:bg-slate-50 transition select-none w-5/12 sm:w-4/12"
               >
                 <div className="flex items-center gap-1.5 font-bold">
                   <span>FUND / SECURITY NAME</span>
@@ -366,7 +367,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
 
               <th 
                 onClick={() => handleSort('nav')}
-                className="py-3.5 px-4 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-50 transition select-none w-1/4 sm:w-2/12"
+                className="py-3.5 px-4 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-50 transition select-none w-28 sm:w-36"
               >
                 <div className="flex items-center justify-end gap-1.5 font-bold">
                   <span>NAV / PRICE ($)</span>
@@ -381,19 +382,21 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                 </div>
               </th>
 
-              {/* 52-Week High/Low & 200 DMA Technical Header */}
-              <th className="hidden sm:table-cell py-3.5 px-4 border-r border-slate-200 text-right w-3/12 lg:w-3/12 select-none">
-                <div className="flex items-center justify-end gap-1 font-bold text-slate-900">
-                  <span>52W HIGH/LOW & 200 DMA</span>
+              {/* 52-Week High/Low & 200 DMA Technical Header - ALWAYS VISIBLE */}
+              <th className="py-3.5 px-4 border-r border-slate-200 text-right w-56 sm:w-64 select-none bg-blue-50/20">
+                <div className="flex items-center justify-end gap-1.5 font-bold text-slate-900">
+                  <Activity className="w-3.5 h-3.5 text-blue-600" />
+                  <span>52W RANGE & 200 DMA</span>
                 </div>
-                <div className="text-[11px] font-normal text-slate-400 mt-0.5">
-                  technical range & dma alert
+                <div className="text-[10px] font-semibold text-blue-700 mt-0.5 uppercase tracking-wider font-mono-code flex items-center justify-end gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Live Yahoo Finance API</span>
                 </div>
               </th>
 
               <th 
                 onClick={() => handleSort('change')}
-                className="hidden md:table-cell py-3.5 px-4 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-50 transition select-none w-2/12"
+                className="hidden md:table-cell py-3.5 px-4 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-50 transition select-none w-28"
               >
                 <div className="flex items-center justify-end gap-1 font-bold">
                   <span>1-DAY RETURN</span>
@@ -403,7 +406,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                 </div>
               </th>
 
-              <th className="hidden lg:table-cell py-3.5 px-4 border-r border-slate-200 text-left w-2/12">
+              <th className="hidden lg:table-cell py-3.5 px-4 border-r border-slate-200 text-left w-36">
                 <span className="font-bold">ASSET CLASS & EXCHANGE</span>
               </th>
 
@@ -498,30 +501,42 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                       })()}
                     </td>
 
-                    {/* Column 3: 52-Week High / Low & 200-Day Moving Average */}
-                    <td className="hidden sm:table-cell py-3.5 px-4 border-r border-slate-200 text-right align-middle font-mono-code">
+                    {/* Column 3: 52-Week High / Low & 200-Day Moving Average - ALWAYS VISIBLE */}
+                    <td className="py-3 px-3 sm:px-4 border-r border-slate-200 text-right align-middle font-mono-code bg-slate-50/20">
                       {(() => {
                         const curSym = getCurrencySymbol(asset.currency);
                         const tech = getStockTechnicalMetrics(asset.ticker, asset.price, quotes[asset.ticker]);
 
                         return (
                           <div className="flex flex-col items-end">
-                            {/* 52W Range */}
-                            <div className="text-xs text-slate-800 flex items-center gap-1 font-medium">
+                            {/* 52W Range Visual Track */}
+                            <div className="flex items-center gap-1.5 text-xs text-slate-800 font-medium">
                               <span className="text-[10px] text-slate-400 uppercase font-sans">52W:</span>
                               <span className="font-bold text-slate-900">{curSym}{tech.fiftyTwoWeekLow.toFixed(2)}</span>
-                              <span className="text-slate-300">-</span>
+                              <div className="w-12 sm:w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden relative mx-0.5" title={`Position in 52W range: ${tech.rangePositionPercent}%`}>
+                                <div 
+                                  className="bg-blue-600 h-full rounded-full transition-all"
+                                  style={{ width: `${tech.rangePositionPercent}%` }}
+                                />
+                              </div>
                               <span className="font-bold text-slate-900">{curSym}{tech.fiftyTwoWeekHigh.toFixed(2)}</span>
                             </div>
 
                             {/* 200 DMA */}
-                            <div className="text-xs mt-0.5 text-slate-700 flex items-center gap-1">
+                            <div className="text-xs mt-1 text-slate-700 flex items-center gap-1.5">
                               <span className="text-[10px] text-slate-400 uppercase font-sans">200 DMA:</span>
-                              <span className="font-bold text-slate-900">{curSym}{tech.twoHundredDayAverage.toFixed(2)}</span>
+                              <span className="font-bold font-mono-code text-slate-900">{curSym}{tech.twoHundredDayAverage.toFixed(2)}</span>
+                              <span className={`text-[9px] px-1 py-0.2 rounded font-mono-code font-bold ${
+                                tech.isLiveDma 
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {tech.isLiveDma ? 'LIVE YAHOO' : 'EST'}
+                              </span>
                             </div>
 
                             {/* Technical Status Button / Warning Alert */}
-                            <div className="mt-1">
+                            <div className="mt-1.5">
                               {tech.belowTwoHundredDayAverage ? (
                                 <button
                                   onClick={() => onTriggerTechnicalAlert?.(
@@ -531,15 +546,15 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                                     tech.fiftyTwoWeekHigh, 
                                     tech.fiftyTwoWeekLow
                                   )}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition cursor-pointer shadow-2xs"
-                                  title={`Warning: ${asset.ticker} ($${asset.price.toFixed(2)}) is below its 200 DMA ($${tech.twoHundredDayAverage.toFixed(2)}). Click to trigger institutional alert.`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition cursor-pointer shadow-2xs"
+                                  title={`Warning: ${asset.ticker} (${curSym}${asset.price.toFixed(2)}) is below its 200 DMA (${curSym}${tech.twoHundredDayAverage.toFixed(2)}). Click to trigger institutional alert.`}
                                 >
                                   <AlertTriangle className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                   <span>BELOW 200 DMA ({tech.distanceFromTwoHundredDayPercent}%)</span>
                                 </button>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-semibold">
-                                  <span>Above 200 DMA (+{tech.distanceFromTwoHundredDayPercent}%)</span>
+                                  <span>▲ Above 200 DMA (+{tech.distanceFromTwoHundredDayPercent}%)</span>
                                 </span>
                               )}
                             </div>
@@ -710,30 +725,42 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                             })()}
                           </td>
 
-                          {/* Column 3: 52-Week High / Low & 200-Day Moving Average */}
-                          <td className="hidden sm:table-cell py-3.5 px-4 border-r border-slate-200 text-right align-middle font-mono-code">
+                          {/* Column 3: 52-Week High / Low & 200-Day Moving Average - ALWAYS VISIBLE */}
+                          <td className="py-3 px-3 sm:px-4 border-r border-slate-200 text-right align-middle font-mono-code bg-slate-50/20">
                             {(() => {
                               const curSym = getCurrencySymbol(asset.currency);
                               const tech = getStockTechnicalMetrics(asset.ticker, asset.price, quotes[asset.ticker]);
 
                               return (
                                 <div className="flex flex-col items-end">
-                                  {/* 52W Range */}
-                                  <div className="text-xs text-slate-800 flex items-center gap-1 font-medium">
+                                  {/* 52W Range Visual Track */}
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-800 font-medium">
                                     <span className="text-[10px] text-slate-400 uppercase font-sans">52W:</span>
                                     <span className="font-bold text-slate-900">{curSym}{tech.fiftyTwoWeekLow.toFixed(2)}</span>
-                                    <span className="text-slate-300">-</span>
+                                    <div className="w-12 sm:w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden relative mx-0.5" title={`Position in 52W range: ${tech.rangePositionPercent}%`}>
+                                      <div 
+                                        className="bg-blue-600 h-full rounded-full transition-all"
+                                        style={{ width: `${tech.rangePositionPercent}%` }}
+                                      />
+                                    </div>
                                     <span className="font-bold text-slate-900">{curSym}{tech.fiftyTwoWeekHigh.toFixed(2)}</span>
                                   </div>
 
                                   {/* 200 DMA */}
-                                  <div className="text-xs mt-0.5 text-slate-700 flex items-center gap-1">
+                                  <div className="text-xs mt-1 text-slate-700 flex items-center gap-1.5">
                                     <span className="text-[10px] text-slate-400 uppercase font-sans">200 DMA:</span>
-                                    <span className="font-bold text-slate-900">{curSym}{tech.twoHundredDayAverage.toFixed(2)}</span>
+                                    <span className="font-bold font-mono-code text-slate-900">{curSym}{tech.twoHundredDayAverage.toFixed(2)}</span>
+                                    <span className={`text-[9px] px-1 py-0.2 rounded font-mono-code font-bold ${
+                                      tech.isLiveDma 
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                        : 'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      {tech.isLiveDma ? 'LIVE YAHOO' : 'EST'}
+                                    </span>
                                   </div>
 
                                   {/* Technical Status Button / Warning Alert */}
-                                  <div className="mt-1">
+                                  <div className="mt-1.5">
                                     {tech.belowTwoHundredDayAverage ? (
                                       <button
                                         onClick={() => onTriggerTechnicalAlert?.(
@@ -743,15 +770,15 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                                           tech.fiftyTwoWeekHigh, 
                                           tech.fiftyTwoWeekLow
                                         )}
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition cursor-pointer shadow-2xs"
-                                        title={`Warning: ${asset.ticker} ($${asset.price.toFixed(2)}) is below its 200 DMA ($${tech.twoHundredDayAverage.toFixed(2)}). Click to trigger institutional alert.`}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition cursor-pointer shadow-2xs"
+                                        title={`Warning: ${asset.ticker} (${curSym}${asset.price.toFixed(2)}) is below its 200 DMA (${curSym}${tech.twoHundredDayAverage.toFixed(2)}). Click to trigger institutional alert.`}
                                       >
                                         <AlertTriangle className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                         <span>BELOW 200 DMA ({tech.distanceFromTwoHundredDayPercent}%)</span>
                                       </button>
                                     ) : (
                                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-semibold">
-                                        <span>Above 200 DMA (+{tech.distanceFromTwoHundredDayPercent}%)</span>
+                                        <span>▲ Above 200 DMA (+{tech.distanceFromTwoHundredDayPercent}%)</span>
                                       </span>
                                     )}
                                   </div>

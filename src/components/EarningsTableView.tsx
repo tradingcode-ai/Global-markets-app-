@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { TECH_COMPANIES } from '../data/earningsData';
 import { StockLogo } from './StockLogo';
+import { getStockTechnicalMetrics } from '../data/technicalData';
+import { getMarketSessionInfo } from '../utils/marketSession';
 
 interface EarningsTableViewProps {
   results: QuarterlyResult[];
@@ -290,31 +292,77 @@ export const EarningsTableView: React.FC<EarningsTableViewProps> = ({
 
                   {/* Real-Time Price & Intraday Range */}
                   <td className="py-3 px-3 whitespace-nowrap">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold font-mono-code text-slate-900 tabular-nums">
-                          {cur}{livePrice.toFixed(2)}
-                        </span>
-                        <span className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold font-mono-code ${
-                          isPricePositive 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}>
-                          {isPricePositive ? '+' : ''}{liveChangePct.toFixed(2)}%
-                        </span>
-                      </div>
-                      {/* Range slider */}
-                      <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-400 font-mono-code">
-                        <span>L {cur}{dayLow.toFixed(1)}</span>
-                        <div className="w-12 bg-slate-200 h-1 rounded-full overflow-hidden relative">
-                          <div 
-                            className="bg-slate-600 h-full rounded-full" 
-                            style={{ width: `${rangePct}%` }}
-                          />
+                    {(() => {
+                      const session = getMarketSessionInfo(item.ticker, quote);
+                      const showPrePost = !session.isMarketOpen && session.prePostChangePercent !== undefined;
+
+                      return (
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold font-mono-code text-slate-900 tabular-nums">
+                              {cur}{livePrice.toFixed(2)}
+                            </span>
+                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold font-mono-code ${
+                              isPricePositive 
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              {isPricePositive ? '+' : ''}{liveChangePct.toFixed(2)}%
+                            </span>
+
+                            {/* Pre/After-Market Rate (Disappears when the market of that stock is open) */}
+                            {showPrePost && (
+                              <span 
+                                className={`inline-flex items-center gap-0.5 text-[9px] font-mono-code font-semibold px-1 py-0.2 rounded border ${
+                                  session.prePostChangePercent! >= 0 
+                                    ? 'bg-emerald-50/70 text-emerald-700 border-emerald-200' 
+                                    : 'bg-rose-50/70 text-rose-700 border-rose-200'
+                                }`}
+                                title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${cur}${session.prePostPrice?.toFixed(2)})`}
+                              >
+                                <span className="text-[8px] uppercase text-slate-400 font-bold">
+                                  {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                                </span>
+                                <span>
+                                  {session.prePostChangePercent! >= 0 ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                          {/* Range slider */}
+                          <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-400 font-mono-code">
+                            <span>L {cur}{dayLow.toFixed(1)}</span>
+                            <div className="w-12 bg-slate-200 h-1 rounded-full overflow-hidden relative">
+                              <div 
+                                className="bg-slate-600 h-full rounded-full" 
+                                style={{ width: `${rangePct}%` }}
+                              />
+                            </div>
+                            <span>H {cur}{dayHigh.toFixed(1)}</span>
+                          </div>
+
+                          {/* 52W Range & 200 DMA Technical Metrics */}
+                          {(() => {
+                            const tech = getStockTechnicalMetrics(item.ticker, livePrice, quote);
+                            return (
+                              <div className="flex items-center gap-1.5 mt-1 text-[9px] font-mono-code">
+                                <span className="text-slate-500" title={`52-Week Range: ${cur}${tech.fiftyTwoWeekLow.toFixed(1)} - ${cur}${tech.fiftyTwoWeekHigh.toFixed(1)}`}>
+                                  52W: {cur}{tech.fiftyTwoWeekLow.toFixed(0)}-{cur}{tech.fiftyTwoWeekHigh.toFixed(0)}
+                                </span>
+                                <span className="text-slate-300">•</span>
+                                <span 
+                                  className={`font-semibold ${tech.belowTwoHundredDayAverage ? 'text-amber-700 font-bold' : 'text-slate-600'}`}
+                                  title={`200-Day Moving Average (${tech.provider}): ${cur}${tech.twoHundredDayAverage.toFixed(2)}`}
+                                >
+                                  200D: {cur}{tech.twoHundredDayAverage.toFixed(1)}
+                                  {tech.belowTwoHundredDayAverage && ' ⚠️'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
-                        <span>H {cur}{dayHigh.toFixed(1)}</span>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Report Date & Timing */}
