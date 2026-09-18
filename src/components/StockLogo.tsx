@@ -8,7 +8,7 @@ interface StockLogoProps {
 
 export const StockLogo: React.FC<StockLogoProps> = ({ 
   ticker, 
-  size = 'sm', 
+  size = 'sm',  
   className = '' 
 }) => {
   const cleanTicker = ticker.toUpperCase().trim();
