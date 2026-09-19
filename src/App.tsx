@@ -19,7 +19,7 @@ import {
   dispatchPushNotification, 
   playCorporateChime 
 } from './services/notificationService';
-import { fetchLiveMarketQuotes } from './services/marketDataService';
+import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar } from './services/marketDataService';
 import { CorporateHeader } from './components/CorporateHeader';
 import { RealTimeTrackerBar } from './components/RealTimeTrackerBar';
 import { MetricCards } from './components/MetricCards';
@@ -116,10 +116,37 @@ export default function App() {
     }
   }, []);
 
+  // Fetch Live Real-Time Earnings Reporting Dates from Yahoo Finance & SEC EDGAR Keyless Feeds
+  const loadEarningsCalendar = useCallback(async () => {
+    try {
+      const calData = await fetchLiveEarningsCalendar();
+      if (calData && Object.keys(calData).length > 0) {
+        setResults(prevResults => prevResults.map(r => {
+          const live = calData[r.ticker] || calData[r.ticker.toUpperCase()];
+          if (live) {
+            return {
+              ...r,
+              reportDate: live.reportDate || r.reportDate,
+              reportTime: live.reportTime || r.reportTime,
+              isDateConfirmed: live.isConfirmed,
+              liveDateProvider: live.provider,
+              epsEstimate: live.epsEstimate ?? r.epsEstimate,
+              revenueEstimate: live.revenueEstimate ?? r.revenueEstimate
+            };
+          }
+          return r;
+        }));
+      }
+    } catch (err) {
+      console.warn('Could not sync live earnings calendar:', err);
+    }
+  }, []);
+
   // Initial fetch and 8-second interval polling
   useEffect(() => {
     loadMarketQuotes(true);
-  }, [loadMarketQuotes]);
+    loadEarningsCalendar();
+  }, [loadMarketQuotes, loadEarningsCalendar]);
 
   useEffect(() => {
     if (!isStreaming) return;

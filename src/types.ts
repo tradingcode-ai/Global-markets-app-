@@ -37,7 +37,14 @@ export type Sector =
   | 'Industrial Tech & Energy'
   | 'Fintech & Digital Payments'
   | 'U.S. Financials'
-  | 'European Financials';
+  | 'European Financials'
+  | 'The Shovel Sellers';
+
+export type ShovelSubSector = 
+  | 'Semiconductor Equipment & Materials'
+  | 'Communication Equipment'
+  | 'Computer Hardware & storage'
+  | 'Semiconductors';
 
 export type CommodityCategory = 'Energy & Natural Gas' | 'Crude Oil & Refined' | 'Precious Metals' | 'Industrial & Battery Metals' | 'Agricultural & Softs';
 
@@ -190,6 +197,21 @@ export interface QuarterlyResult {
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
   twoHundredDayAverage?: number;
+  subSector?: ShovelSubSector | string;
+  liveDateProvider?: string;
+  isDateConfirmed?: boolean;
+}
+
+export interface LiveEarningsDate {
+  symbol: string;
+  reportDate: string; // YYYY-MM-DD
+  reportTime?: ReportTiming;
+  fiscalQuarter?: string;
+  epsEstimate?: number;
+  revenueEstimate?: number;
+  isConfirmed: boolean;
+  provider: string;
+  lastUpdated: string;
 }
 
 export interface CompanyMeta {
@@ -208,6 +230,7 @@ export interface CompanyMeta {
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
   twoHundredDayAverage?: number;
+  subSector?: ShovelSubSector | string;
 }
 
 export interface PushNotificationItem {

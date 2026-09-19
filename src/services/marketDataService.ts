@@ -1,10 +1,17 @@
-import { LiveQuote } from '../types';
+import { LiveQuote, LiveEarningsDate } from '../types';
 
 export interface MarketQuotesResponse {
   success: boolean;
   timestamp: string;
   quotes: Record<string, LiveQuote>;
   symbols: string[];
+}
+
+export interface EarningsCalendarResponse {
+  success: boolean;
+  timestamp: string;
+  provider: string;
+  calendar: Record<string, LiveEarningsDate>;
 }
 
 export async function fetchLiveMarketQuotes(symbols?: string[]): Promise<Record<string, LiveQuote>> {
@@ -36,3 +43,34 @@ export async function fetchSingleQuote(symbol: string): Promise<LiveQuote | null
     return null;
   }
 }
+
+export async function fetchLiveEarningsCalendar(symbols?: string[]): Promise<Record<string, LiveEarningsDate>> {
+  try {
+    const url = symbols && symbols.length > 0
+      ? `/api/earnings-calendar?symbols=${encodeURIComponent(symbols.join(','))}`
+      : '/api/earnings-calendar';
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Earnings calendar API returned status ${res.status}`);
+    }
+    const data: EarningsCalendarResponse = await res.json();
+    return data.calendar || {};
+  } catch (err) {
+    console.warn('Failed to fetch live earnings calendar from server:', err);
+    return {};
+  }
+}
+
+export async function fetchSingleEarningsDate(symbol: string): Promise<LiveEarningsDate | null> {
+  try {
+    const res = await fetch(`/api/earnings-calendar/${encodeURIComponent(symbol)}`);
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    const data = await res.json();
+    return data.earningsDate || null;
+  } catch (err) {
+    console.warn(`Failed to fetch earnings date for ${symbol}:`, err);
+    return null;
+  }
+}
+

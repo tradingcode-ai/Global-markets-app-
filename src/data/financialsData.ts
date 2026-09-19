@@ -348,7 +348,7 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$44.5B',
         thesis: 'Fortress balance sheet, peer-leading ROTCE (21%), and structural market share gains in advisory and trading cement JPM as the premier global banking franchise.',
         catalysts: ['Accelerating corporate M&A fee realization', 'Lower-than-guided deposit beta', 'Capital return accretion via buybacks'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
       },
       {
         bankName: 'Morgan Stanley',
@@ -361,7 +361,20 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$44.1B',
         thesis: 'Jamie Dimon execution consistency and superior cost-of-funds provide durable upside through any interest rate recalibration cycle.',
         catalysts: ['Rebounding debt underwriting', 'Strong credit card spending resilience', 'Commercial loan growth inflection'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Bank of America',
+        logoColor: '#002B49',
+        targetPrice: '$385.00',
+        targetPriceNumeric: 385.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$4.92',
+        nextQuarterRevEst: '$44.3B',
+        thesis: 'Exceptional net interest margin management and multi-asset trading market leadership drive compounding EPS growth.',
+        catalysts: ['Private equity sponsor liquidity events', 'Wealth management net new asset expansion', 'Consistently low net charge-off ratios'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -407,7 +420,7 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$26.9B',
         thesis: 'BofA is the most asset-sensitive beneficiary of yield curve steepening. HTM paper runoff will power a multi-year NII acceleration.',
         catalysts: ['Securities portfolio duration rollover', 'Consumer credit normalization', 'Merrill advisor net new asset inflows'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
       },
       {
         bankName: 'Goldman Sachs',
@@ -420,7 +433,20 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$26.6B',
         thesis: 'Digital banking scale and operating leverage will expand ROTCE towards 15.5%, narrowing the valuation discount to JPM.',
         catalysts: ['Digital customer adoption', 'Controlled non-interest expense growth', 'Dividend hike'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$64.50',
+        targetPriceNumeric: 64.50,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$0.97',
+        nextQuarterRevEst: '$26.8B',
+        thesis: 'Stable deposit betas and strong middle-market commercial loan pipeline support double-digit earnings growth into 2027.',
+        catalysts: ['Global Banking underwriting fee momentum', 'Credit card loss stabilization', 'Ongoing share repurchases'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -466,7 +492,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$21.2B',
         thesis: 'Citi trades at a significant discount to Tangible Book Value despite owning the unrivaled global cross-border payments moat (TTS). Turnaround milestones are bearing fruit.',
         catalysts: ['Operational simplicity unlocking capital return', 'Consent order remediation progress', 'TTS float margins'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$148.00',
+        targetPriceNumeric: 148.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.72',
+        nextQuarterRevEst: '$21.0B',
+        thesis: 'Aggressive headcount rationalization and legacy exit execution allow operating margins to expand toward industry median levels.',
+        catalysts: ['Headcount rationalization cost takeout', 'Banamex IPO timeline clarity', 'Tangible book value compounding'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Barclays',
+        logoColor: '#00AEEF',
+        targetPrice: '$146.00',
+        targetPriceNumeric: 146.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$1.70',
+        nextQuarterRevEst: '$20.9B',
+        thesis: 'Treasury & Trade Solutions remains the gold standard in multinational cross-border liquidity management with recurring, sticky fee streams.',
+        catalysts: ['Cross-border corporate transaction volume', 'Investment banking fee recovery', 'Capital return acceleration'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -512,7 +564,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$21.5B',
         thesis: 'Asset cap lifting remains the biggest organic multiple expansion catalyst across large-cap US banks, unlocking pent-up commercial balance sheet expansion.',
         catalysts: ['Fed asset cap resolution timeline', 'Expense run-rate discipline', 'Share buyback acceleration'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$95.00',
+        targetPriceNumeric: 95.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$1.45',
+        nextQuarterRevEst: '$21.4B',
+        thesis: 'Charlie Scharf operational revamp is turning Wells Fargo into a disciplined domestic retail and wealth management powerhouse.',
+        catalysts: ['Asset cap milestone approvals', 'Non-interest expense discipline', 'Credit card market share gains'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$96.00',
+        targetPriceNumeric: 96.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.46',
+        nextQuarterRevEst: '$21.3B',
+        thesis: 'Significant excess capital and high ROTCE trajectory unlock industry-topping share repurchase yields.',
+        catalysts: ['Regulatory consent order termination', 'Commercial middle market expansion', 'CRE reserve release potential'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -557,7 +635,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$16.9B',
         thesis: 'Morgan Stanley stands apart as a high-margin compounding machine. Wealth and Asset Management generate 55%+ of firm revenues with low capital intensity.',
         catalysts: ['Advisory and equity underwriting rebound', 'Net new asset acceleration', 'Higher wealth sweep deposit yield capture'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$220.00',
+        targetPriceNumeric: 220.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$2.20',
+        nextQuarterRevEst: '$16.8B',
+        thesis: 'Institutional equity franchise and premier global wealth network offer unmatched fee durability and return on tangible common equity.',
+        catalysts: ['Tech and sponsor M&A pipeline conversion', 'E*TRADE client asset cross-sell', 'Expanding pre-tax wealth margins'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Citi Research',
+        logoColor: '#003B70',
+        targetPrice: '$218.00',
+        targetPriceNumeric: 218.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$2.18',
+        nextQuarterRevEst: '$16.7B',
+        thesis: 'Diversified wealth fee engine reduces balance sheet cyclicality compared to traditional commercial banks, supporting multiple expansion.',
+        catalysts: ['Fixed income trading market share', 'International wealth expansion', 'Consistent dividend increases'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -602,7 +706,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$14.3B',
         thesis: 'Goldman Sachs is the pure-play beneficiary of the global capital markets recovery. Strategic divestment of consumer experiments leaves a leaner, 16%+ ROE machine.',
         catalysts: ['Sponsor dealmaking monetization', 'Financing revenue stability', 'Asset management management-fee compounding'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$1,020.00',
+        targetPriceNumeric: 1020.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$10.65',
+        nextQuarterRevEst: '$14.1B',
+        thesis: 'Dominant global advisory franchise and secular growth in FICC & Equities financing provide both cyclical upside and structural baseline earnings power.',
+        catalysts: ['Global IPO and debt issuance wave', 'Private credit fund deployment', 'Consumer exit cost finalization'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Barclays',
+        logoColor: '#00AEEF',
+        targetPrice: '$1,040.00',
+        targetPriceNumeric: 1040.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$10.75',
+        nextQuarterRevEst: '$14.2B',
+        thesis: 'Refocused strategy on high-return wholesale banking and alternatives fundraising targets record ROE milestones over the next 24 months.',
+        catalysts: ['Record private wealth asset inflows', 'Advisory backlog realization', 'Robust dividend and buyback yield'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -650,7 +780,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$3.25B',
         thesis: 'Unmatched brand equity, wealth channel distribution leadership (BXPE and BCRED), and data center AI compute infrastructure ownership position BX for superior FRE multiples.',
         catalysts: ['Q3/Q4 realizations and performance fee pickup', 'BREIT redemptions fully normalized', 'Private wealth product expansion'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$140.00',
+        targetPriceNumeric: 140.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$1.32',
+        nextQuarterRevEst: '$3.20B',
+        thesis: 'Blackstone dominance in digital infrastructure, energy transition real estate, and private wealth capital inflows cements multi-year fee earnings visibility.',
+        catalysts: ['Q3/Q4 private equity monetization', 'QTS data center pipeline leasing', 'Dividend payout growth'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$145.00',
+        targetPriceNumeric: 145.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.36',
+        nextQuarterRevEst: '$3.28B',
+        thesis: 'Institutional dry powder deployment into high-conviction thematic themes generates accelerating performance fees as M&A exits resume.',
+        catalysts: ['Accelerating PE realizations', 'BCRED net asset growth', 'Permanent capital asset expansion'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -695,7 +851,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$1.52B',
         thesis: 'KKR possesses the most potent operating leverage among alternative asset managers due to its in-house capital markets syndication desk and Global Atlantic annuity spread capture.',
         catalysts: ['Capital Markets fee inflection', 'S&P 500 index inclusion liquidity', 'Global infrastructure fund closing'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$118.00',
+        targetPriceNumeric: 118.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.24',
+        nextQuarterRevEst: '$1.55B',
+        thesis: 'Global Atlantic insurance integration offers continuous permanent capital replenishment while Asia private equity portfolio sets benchmark return records.',
+        catalysts: ['Insurance net investment income spread', 'Capital markets syndication volume', 'Strategic fund closes'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Citi Research',
+        logoColor: '#003B70',
+        targetPrice: '$114.00',
+        targetPriceNumeric: 114.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.20',
+        nextQuarterRevEst: '$1.50B',
+        thesis: 'Strategic positioning across real assets and infrastructure ensures stable fee-related earnings across varying macroeconomic regimes.',
+        catalysts: ['Infrastructure asset fundraising', 'Europe & Asia credit growth', 'Realization velocity increase'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -740,7 +922,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$1.32B',
         thesis: 'Apollo is structurally reinventing fixed income asset management through Athene. Its investment-grade origination engine provides a non-correlated yield spread that banks cannot match.',
         catalysts: ['Athene retirement asset inflows', 'Corporate hybrid financing design wins', 'Capital return'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$145.00',
+        targetPriceNumeric: 145.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$2.15',
+        nextQuarterRevEst: '$1.30B',
+        thesis: 'Proprietary debt origination platforms allow Apollo to capture superior risk-adjusted yields at investment-grade ratings, building a resilient compounding engine.',
+        catalysts: ['Origination platform expansion', 'Third-party insurance asset management mandates', 'Spread-related earnings upside'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$150.00',
+        targetPriceNumeric: 150.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$2.22',
+        nextQuarterRevEst: '$1.35B',
+        thesis: 'Industry-leading 56% FRE margins and growing global wealth retail channel adoption drive sustained multi-year earnings multiple re-rating.',
+        catalysts: ['Global wealth retail fundraising', 'Large corporate bespoke credit solutions', 'Performance fee realization surge'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -785,7 +993,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$1.15B',
         thesis: 'Ares is the purest vehicle to gain exposure to secular growth in private direct lending. Its senior secured underwriting record and sticky European presence justify a premium valuation.',
         catalysts: ['Private credit fund closes', 'Low non-accrual credit metrics', 'Dividend increase'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$148.00',
+        targetPriceNumeric: 148.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.30',
+        nextQuarterRevEst: '$1.18B',
+        thesis: 'Over 85% perpetual/long-dated capital locks in predictable fee revenue, shielding Ares from typical market volatility and redemption risks.',
+        catalysts: ['New direct lending vehicle deployment', 'Secondaries platform outperformance', 'Credit quality stability'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$144.00',
+        targetPriceNumeric: 144.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$1.26',
+        nextQuarterRevEst: '$1.14B',
+        thesis: 'Market leadership in European senior secured loans and Asia-Pacific private debt provides geographical diversification and strong pricing power.',
+        catalysts: ['European M&A sponsor activity rebound', 'APAC private credit deployment', 'Incentive fee generation pickup'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -833,7 +1067,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '£7.0B',
         thesis: 'Barclays structural rate hedge rollout provides clear multi-year earnings visibility, while its disciplined capital return program yields ~11% total payout.',
         catalysts: ['UK structural hedge reinvestment tailwind', 'FICC market share stabilization', 'Ongoing share repurchases'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$30.50 (500p)',
+        targetPriceNumeric: 30.50,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '£0.25',
+        nextQuarterRevEst: '£6.9B',
+        thesis: 'Targeted risk-weighted asset reductions in the Investment Bank are unlocking billions in capital to distribute to shareholders via buybacks.',
+        catalysts: ['US consumer credit normalization', 'Tesco Bank integration synergies', 'Operating cost target execution'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$31.00 (510p)',
+        targetPriceNumeric: 31.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '£0.25',
+        nextQuarterRevEst: '£6.95B',
+        thesis: 'Barclays UK retail deposit franchise maintains strong margins while corporate advisory pipelines are rebuilding quickly.',
+        catalysts: ['UK interest rate hedge repricing', 'Debt capital markets fee recovery', 'Return on tangible equity (RoTE) expansion above 12%'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -878,7 +1138,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$16.6B',
         thesis: 'HSBC offers the highest dividend yield and share buyback total distribution yield in global mega-cap banking (~12%), supported by deep Hong Kong CASA deposit moats.',
         catalysts: ['Asian wealth fee compounding', 'Special dividend distributions', 'Net interest margin resilience'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$115.00 (760p)',
+        targetPriceNumeric: 115.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$1.92',
+        nextQuarterRevEst: '$16.4B',
+        thesis: 'Strategic pivot toward Asia wealth management and wholesale transaction banking creates structural margin defense against Western rate volatility.',
+        catalysts: ['Cross-boundary wealth management connect volumes', 'Middle East trade finance expansion', 'Disciplined quarterly buybacks'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$112.00 (745p)',
+        targetPriceNumeric: 112.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$1.90',
+        nextQuarterRevEst: '$16.3B',
+        thesis: 'Leaner organizational hierarchy and geographic exits from non-core operations boost capital efficiency and RoTE above peer averages.',
+        catalysts: ['Cost reduction roadmap milestone delivery', 'Mainland China commercial real estate loss abatement', 'Quarterly dividend enhancements'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -923,7 +1209,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€2.30B',
         thesis: 'ABN AMRO is one of Europe most overcapitalized banks. Excess capital above 13.5% CET1 provides headroom for massive recurring share repurchases.',
         catalysts: ['Dutch government sell-down absorbed smoothly', 'Substantial buyback tranches', 'Mortgage loan margin uptick'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '€48.00',
+        targetPriceNumeric: 48.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€0.96',
+        nextQuarterRevEst: '€2.28B',
+        thesis: 'Robust Dutch household balance sheets and virtually zero credit losses provide defensive profitability and sustained capital returns.',
+        catalysts: ['New annual share buyback announcements', 'Wealth management cross-sell across NW Europe', 'Stable net interest margins'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'BNP Paribas Exane',
+        logoColor: '#00915A',
+        targetPrice: '€47.50',
+        targetPriceNumeric: 47.50,
+        timeHorizon: '12 Months',
+        rating: 'Outperform',
+        nextQuarterEpsEst: '€0.95',
+        nextQuarterRevEst: '€2.26B',
+        thesis: 'Disciplined domestic commercial focus and cost containment protect return on equity even in an ECB easing cycle.',
+        catalysts: ['Favorable Dutch mortgage re-pricing spread', 'Operational cost-to-income improvement', 'High dividend yield payout'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -968,7 +1280,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€5.85B',
         thesis: 'ING pan-European digital retail model produces the lowest cost-to-income ratio among major European peers (~51%), driving industry-leading free cash flow generation.',
         catalysts: ['Accelerating non-interest fee growth', 'Wholesale banking syndicated loan margins', 'Capital return yield >10%'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '€44.00',
+        targetPriceNumeric: 44.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '€0.66',
+        nextQuarterRevEst: '€5.90B',
+        thesis: 'Fastest growing cross-border retail bank in Europe with digital moat in Germany and Poland driving fee income diversification.',
+        catalysts: ['Mobile-first brokerage and insurance cross-sell', 'Wholesale syndicated sustainability loans', 'Ongoing multi-billion euro buybacks'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '€41.50',
+        targetPriceNumeric: 41.50,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€0.64',
+        nextQuarterRevEst: '€5.80B',
+        thesis: 'Superior asset quality and deposit stickiness allow ING to maintain a 14%+ RoE across European interest rate cycles.',
+        catalysts: ['Strong Benelux corporate lending', 'Low loan-loss provisioning', 'Total capital return yield >11%'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -1013,7 +1351,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€3.50B',
         thesis: 'Rabobank Member Certificates offer one of Europe safest fixed-income-like coupon yield profiles (~6.5%), anchored by triple-A domestic mortgage and sovereign risk buffers.',
         catalysts: ['Resilient Dutch employment and house prices', 'Agri commodity price recovery', 'High cooperative capital retention'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Rabobank Global Research',
+        logoColor: '#001D70',
+        targetPrice: '€118.00',
+        targetPriceNumeric: 118.00,
+        timeHorizon: '12 Months',
+        rating: 'Outperform',
+        nextQuarterEpsEst: '€2.92',
+        nextQuarterRevEst: '€3.52B',
+        thesis: 'World leader in Food & Agribusiness wholesale finance with a dominant ~34% share of the prime Dutch residential mortgage market.',
+        catalysts: ['Global Food & Agri trade financing margins', 'DLL asset finance growth', 'Top-tier balance sheet strength (CET1 16.5%)'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'ABN AMRO Oddo BHF',
+        logoColor: '#002D62',
+        targetPrice: '€115.00',
+        targetPriceNumeric: 115.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '€2.88',
+        nextQuarterRevEst: '€3.48B',
+        thesis: 'Unrivaled Dutch retail franchise credit rating and conservative risk profile make certificate distribution yields highly dependable.',
+        catalysts: ['Steady quarterly certificate coupons', 'Low credit impairment run-rate', 'Domestic mortgage portfolio stability'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -1059,7 +1423,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€13.1B',
         thesis: 'BNP Paribas is undisputed as the "JPMorgan of Europe" — combining the scale, diversified CIB leadership, and capital strength to take share from retrenching rivals.',
         catalysts: ['European equity derivatives and prime services share gains', 'Arval fleet mobility margins', 'Disciplined buybacks'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '€122.00',
+        targetPriceNumeric: 122.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '€2.82',
+        nextQuarterRevEst: '$13.2B',
+        thesis: 'Global Markets prime brokerage and FICC trading franchise consolidate leadership across continental Europe with operating leverage accelerating.',
+        catalysts: ['Continental European equity trading market share', 'Arval electric fleet transitions', 'Sustained 50%+ payout ratio'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '€118.00',
+        targetPriceNumeric: 118.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€2.78',
+        nextQuarterRevEst: '€13.0B',
+        thesis: 'Reinvestment of US subsidiary sale proceeds into high-return European corporate and institutional banking positions BNP for double-digit EPS expansion.',
+        catalysts: ['CIB advisory league table dominance', 'Boutique asset management inflows', 'Excess capital distribution'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -1104,7 +1494,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€6.8B',
         thesis: 'SocGen is executing on its transformation roadmap with substantial cost rationalization and French retail margin recovery. Trades at an attractive multiple discount.',
         catalysts: ['French retail NII recovery inflection', 'BoursoBank fee monetization', 'Capital distribution clarity'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '€85.00',
+        targetPriceNumeric: 85.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€1.52',
+        nextQuarterRevEst: '€6.7B',
+        thesis: 'Deep value rerating candidate as French retail hedges roll off and BoursoBank transforms from customer acquisition vehicle to high-margin profit contributor.',
+        catalysts: ['BoursoBank net profit acceleration', 'Equity derivatives franchise outperformance', 'Cost reductions delivering on targets'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'BNP Paribas Exane',
+        logoColor: '#00915A',
+        targetPrice: '€84.00',
+        targetPriceNumeric: 84.00,
+        timeHorizon: '12 Months',
+        rating: 'Outperform',
+        nextQuarterEpsEst: '€1.50',
+        nextQuarterRevEst: '€6.65B',
+        thesis: 'Non-core asset disposals and strict capital discipline bolster CET1 ratio and establish clear framework for enhanced shareholder returns.',
+        catalysts: ['Completion of non-core African divestments', 'French mortgage margin normalization', 'Buyback resumption'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -1150,7 +1566,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '$12.6B',
         thesis: 'UBS stands as an unrivaled global wealth management juggernaut. Credit Suisse cost synergy extraction will generate extraordinary capital return flexibility by 2026-2027.',
         catalysts: ['Accelerated CS IT migration milestones', 'Resumption of aggressive share buybacks', 'Americas wealth margin expansion'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$62.00 (CHF 54.00)',
+        targetPriceNumeric: 62.00,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$0.76',
+        nextQuarterRevEst: '$12.8B',
+        thesis: 'With over $5.5T in invested assets, UBS is the sole global wealth manager matching Morgan Stanley in scale with greater Asia & LatAm growth upside.',
+        catalysts: ['APAC wealth net new money surges', 'CS Non-Core portfolio wind-down ahead of timeline', 'Capital return acceleration'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$59.00 (CHF 51.00)',
+        targetPriceNumeric: 59.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$0.72',
+        nextQuarterRevEst: '$12.5B',
+        thesis: 'Synergy execution de-risks the merger case while Swiss domestic banking franchise generates virtually impenetrable retail cash flows.',
+        catalysts: ['Swiss client account retention rate >95%', 'Credit risk release in acquired CS assets', 'Dividend increase of 15%+'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -1196,7 +1638,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€15.9B',
         thesis: 'Santander structural diversification across Europe and Latin America generates high RoTE resilience. Openbank US rollout unlocks low-cost consumer deposits for its auto business.',
         catalysts: ['Latin American loan growth recovery', 'Openbank US deposit growth', 'Share buyback yield >10%'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        logoColor: '#7399C6',
+        targetPrice: '$18.20 (€5.70)',
+        targetPriceNumeric: 18.20,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '€0.25',
+        nextQuarterRevEst: '€16.0B',
+        thesis: 'Global commercial scale and top-tier consumer auto finance presence yield double-digit earnings growth with record shareholder distribution yields.',
+        catalysts: ['Brazil and Mexico macroeconomic recovery', 'Auto finance credit margin stabilization', 'Enhanced buyback tranches'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$17.00 (€5.40)',
+        targetPriceNumeric: 17.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€0.23',
+        nextQuarterRevEst: '€15.8B',
+        thesis: 'Operational efficiency and the rollout of the global core banking platform (Gravity) drive substantial structural cost reduction across all regions.',
+        catalysts: ['Gravity software migration savings', 'UK mortgage margin improvement', 'High dividend yield reliability'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },
@@ -1242,7 +1710,33 @@ export const INITIAL_FINANCIAL_RESULTS: QuarterlyResult[] = [
         nextQuarterRevEst: '€9.1B',
         thesis: 'BBVA boasts the highest return on tangible equity (RoTE ~19%) in European banking, powered by its market-dominant Mexican banking jewel and superior digital acquisition efficiency.',
         catalysts: ['Nearshoring investment tailwinds in Mexico', 'Solid Spanish credit margins', 'Special capital return payouts'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'JPMorgan Equity Research',
+        logoColor: '#002D62',
+        targetPrice: '$32.00 (€11.20)',
+        targetPriceNumeric: 32.00,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€0.46',
+        nextQuarterRevEst: '€9.0B',
+        thesis: 'Leading franchise profitability in Mexico and Spain provides unparalleled organic capital generation and defensive buffer against emerging market noise.',
+        catalysts: ['Mexico consumer credit volume growth', 'Turkish economic normalization and hyperinflation accounting stabilization', 'Substantial share buybacks'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        logoColor: '#002B49',
+        targetPrice: '$31.50 (€11.00)',
+        targetPriceNumeric: 31.50,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '€0.45',
+        nextQuarterRevEst: '€8.95B',
+        thesis: 'Industry-best digital adoption rates (>75% of unit sales conducted via mobile) maintain the lowest cost-to-income ratio among southern European lenders.',
+        catalysts: ['Digital customer acquisition scale', 'Commercial loan repricing in Spain', 'Capital return accretion'],
+        lastUpdated: 'Updated Q3 2026'
       }
     ]
   },

@@ -1,5 +1,6 @@
 import { QuarterlyResult, CompanyMeta } from '../types';
 import { FINANCIAL_COMPANIES, INITIAL_FINANCIAL_RESULTS } from './financialsData';
+import { SHOVEL_SELLERS_COMPANIES, SHOVEL_SELLERS_RESULTS } from './shovelSellersData';
 
 const BASE_TECH_COMPANIES: Record<string, CompanyMeta> = {
   NVDA: {
@@ -282,7 +283,8 @@ const BASE_TECH_COMPANIES: Record<string, CompanyMeta> = {
 
 export const TECH_COMPANIES: Record<string, CompanyMeta> = {
   ...BASE_TECH_COMPANIES,
-  ...FINANCIAL_COMPANIES
+  ...FINANCIAL_COMPANIES,
+  ...SHOVEL_SELLERS_COMPANIES
 };
 
 export const INITIAL_EARNINGS_RESULTS: QuarterlyResult[] = [
@@ -703,43 +705,6 @@ export const INITIAL_EARNINGS_RESULTS: QuarterlyResult[] = [
   // TOP 10 EUROPEAN TECH MEGACAPS RESULTS
   // ==========================================
   {
-    id: 'asml-q2-2026',
-    ticker: 'ASML',
-    companyName: 'ASML Holding N.V.',
-    sector: 'Semiconductors & AI',
-    region: 'Europe',
-    country: 'Netherlands',
-    quarter: 'Q2 2026',
-    fiscalYear: 2026,
-    reportDate: '2026-07-17',
-    reportTime: 'BMO',
-    status: 'reported',
-    epsEstimate: 3.70,
-    epsActual: 4.01,
-    epsSurprisePercent: 8.38,
-    revenueEstimate: 6.03,
-    revenueActual: 6.24,
-    revenueSurprisePercent: 3.48,
-    revenueYoY: -9.5,
-    priceReactionPercent: 2.8,
-    nextDayMove: 3.1,
-    isImportant: true,
-    guidanceRating: 'raised',
-    guidanceSummary: 'Reaffirmed FY2026 as a transition year and FY2027 as a massive growth cycle driven by High-NA EUV adoption at TSMC, Intel, and Samsung.',
-    aiCapexHighlight: 'Shipped second High-NA EUV tool (EXE:5000) with €5.6B in total net bookings during the quarter, with EUV orders representing 51%.',
-    keyHighlights: [
-      'Net bookings surged to €5.6B, up 54% sequentially vs €3.6B in Q1',
-      'Gross margin reached 51.5% due to favorable product mix and DUV sales',
-      'Installed Base Management sales contributed €1.5B with high recurring margins'
-    ],
-    segments: [
-      { name: 'EUV Lithography Systems', revenue: '€2.41B', growthYoY: '+12%', beatExpectation: true, notes: '0.33 NA and 0.55 High-NA systems' },
-      { name: 'DUV Systems (ArFi & KrF)', revenue: '€2.33B', growthYoY: '-18%', notes: 'Strong Chinese legacy trailing node shipments' },
-      { name: 'Installed Base Management', revenue: '€1.50B', growthYoY: '+8%', beatExpectation: true, notes: 'Service, field upgrades & software' }
-    ],
-    conferenceCallTime: '9:00 AM CET / 3:00 AM ET'
-  },
-  {
     id: 'sap-q2-2026',
     ticker: 'SAP',
     companyName: 'SAP SE',
@@ -1056,7 +1021,8 @@ export const INITIAL_EARNINGS_RESULTS: QuarterlyResult[] = [
     ],
     conferenceCallTime: '9:30 AM CET / 3:30 AM ET'
   },
-  ...INITIAL_FINANCIAL_RESULTS
+  ...INITIAL_FINANCIAL_RESULTS,
+  ...SHOVEL_SELLERS_RESULTS
 ];
 
 export const INITIAL_PUSH_NOTIFICATIONS = [

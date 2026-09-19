@@ -173,9 +173,10 @@ export const CorporateHeader: React.FC<CorporateHeaderProps> = ({
             id="select-sector-filter"
             value={selectedSector}
             onChange={(e) => onSectorChange(e.target.value)}
-            className="bg-slate-50 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition cursor-pointer"
+            className="bg-slate-50 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition cursor-pointer font-medium"
           >
             <option value="ALL">All Sectors & Asset Classes</option>
+            <option value="The Shovel Sellers">⛏️ The Shovel Sellers (AI Hardware, Equipment, Comms)</option>
             <option value="U.S. Financials">U.S. Financials (Big 6 & Alts)</option>
             <option value="European Financials">European Financials & STOXX</option>
             <option value="Semiconductors & AI">Semiconductors & AI</option>

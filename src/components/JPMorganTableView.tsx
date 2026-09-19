@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { QuarterlyResult, LiveQuote } from '../types';
+import { QuarterlyResult, LiveQuote, ShovelSubSector } from '../types';
 import { COMMODITIES_DATA } from '../data/commoditiesData';
 import { TECH_COMPANIES } from '../data/earningsData';
+import { SHOVEL_SELLERS_COMPANIES, SHOVEL_SUB_SECTORS } from '../data/shovelSellersData';
 import { StockLogo } from './StockLogo';
 import { 
   Menu, 
@@ -66,6 +67,7 @@ interface UnifiedAsset {
   commodityData?: typeof COMMODITIES_DATA[0];
   statusText?: string;
   exchange: string;
+  subSector?: string;
 }
 
 export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
@@ -83,6 +85,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
   const [sortField, setSortField] = useState<SortField>('aum');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedAssetClassFilter, setSelectedAssetClassFilter] = useState<string>('ALL');
+  const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string>('ALL');
   const [tableSearch, setTableSearch] = useState<string>('');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -90,17 +93,81 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
   const allAssets: UnifiedAsset[] = useMemo(() => {
     const list: UnifiedAsset[] = [];
 
-    // Equities
+    const SHOVEL_SELLER_TICKERS = new Set([
+      'NVDA', 'AMD', 'AVGO', 'INTC', 'HXSCF', '000660', 'SSNLF', '005930', 'MU', 'MRVL',
+      'CXMT', 'SMICY', 'SMIC', 'ARM', 'TXN', 'KIOXIA', 'ASML', 'LRCX', 'KLAC', 'AMAT',
+      'TER', 'NXPI', 'CBRS', 'TOELY', 'ATEYY', 'WDC', 'STX', 'DELL', 'SMCI', 'IONQ',
+      'QBTS', 'LITE', 'COHR', 'CSCO', 'SCSO', 'HPE', 'ASTS', 'CIEN'
+    ]);
+
+    const SHOVEL_SUB_SECTOR_MAP: Record<string, string> = {
+      // 1. Semiconductor Equipment & Materials (7)
+      ASML: 'Semiconductor Equipment & Materials',
+      AMAT: 'Semiconductor Equipment & Materials',
+      LRCX: 'Semiconductor Equipment & Materials',
+      KLAC: 'Semiconductor Equipment & Materials',
+      TOELY: 'Semiconductor Equipment & Materials',
+      ATEYY: 'Semiconductor Equipment & Materials',
+      TER: 'Semiconductor Equipment & Materials',
+
+      // 2. Communication Equipment (5)
+      COHR: 'Communication Equipment',
+      LITE: 'Communication Equipment',
+      CSCO: 'Communication Equipment',
+      SCSO: 'Communication Equipment',
+      CIEN: 'Communication Equipment',
+      ASTS: 'Communication Equipment',
+
+      // 3. Computer Hardware & storage (7)
+      WDC: 'Computer Hardware & storage',
+      STX: 'Computer Hardware & storage',
+      DELL: 'Computer Hardware & storage',
+      SMCI: 'Computer Hardware & storage',
+      HPE: 'Computer Hardware & storage',
+      IONQ: 'Computer Hardware & storage',
+      QBTS: 'Computer Hardware & storage',
+
+      // 4. Semiconductors (15)
+      NVDA: 'Semiconductors',
+      AMD: 'Semiconductors',
+      AVGO: 'Semiconductors',
+      INTC: 'Semiconductors',
+      SSNLF: 'Semiconductors',
+      '005930': 'Semiconductors',
+      HXSCF: 'Semiconductors',
+      '000660': 'Semiconductors',
+      MU: 'Semiconductors',
+      MRVL: 'Semiconductors',
+      CXMT: 'Semiconductors',
+      SMICY: 'Semiconductors',
+      SMIC: 'Semiconductors',
+      ARM: 'Semiconductors',
+      TXN: 'Semiconductors',
+      KIOXIA: 'Semiconductors',
+      NXPI: 'Semiconductors',
+      CBRS: 'Semiconductors',
+    };
+
+    // Equities - deduplicate by ticker to guarantee unique keys and records
+    const seenTickers = new Set<string>();
     results.forEach((r) => {
+      if (seenTickers.has(r.ticker)) return;
+      seenTickers.add(r.ticker);
+
       const meta = TECH_COMPANIES[r.ticker];
       const q = quotes[r.ticker];
       const price = q ? q.price : (meta?.currentPrice || 0);
       const chg = q ? q.change : (meta ? (meta.currentPrice * meta.dayChangePercent) / 100 : 0);
       const chgPct = q ? q.changePercent : (meta?.dayChangePercent || 0);
-      const isEU = ['ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM'].includes(r.ticker);
+      const isEU = ['SAP', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM'].includes(r.ticker);
       
       let assetClass = 'US Mega-Cap Technology';
-      if (r.sector === 'U.S. Financials' || meta?.sector === 'U.S. Financials') {
+      let subSector: string | undefined = undefined;
+
+      if (r.sector === 'The Shovel Sellers' || meta?.sector === 'The Shovel Sellers' || SHOVEL_SELLER_TICKERS.has(r.ticker)) {
+        assetClass = 'The Shovel Sellers';
+        subSector = r.subSector || meta?.subSector || SHOVEL_SUB_SECTOR_MAP[r.ticker] || 'Semiconductors';
+      } else if (r.sector === 'U.S. Financials' || meta?.sector === 'U.S. Financials') {
         assetClass = 'U.S. Financials';
       } else if (r.sector === 'European Financials' || meta?.sector === 'European Financials') {
         assetClass = 'European Financials';
@@ -133,11 +200,41 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
         currency,
         asOfDate: '09/15/2026',
         aumOrMarketCap: meta?.marketCap || '$100B+',
-        aumNumeric: parseFloat((meta?.marketCap || '100').replace(/[^0-9.]/g, '')) * (meta?.marketCap.includes('T') ? 1000 : 1),
+        aumNumeric: parseFloat((meta?.marketCap || '100').replace(/[^0-9.]/g, '')) * ((meta?.marketCap || '').includes('T') ? 1000 : 1),
         noteBadge: note,
         quarterlyResult: r,
+        subSector,
         exchange: meta?.exchange || 'NASDAQ'
       });
+    });
+
+    // Ensure all 34 Shovel Sellers are represented
+    Object.values(SHOVEL_SELLERS_COMPANIES).forEach((meta) => {
+      if (!list.some(item => item.ticker === meta.ticker)) {
+        const q = quotes[meta.ticker] || quotes[meta.ticker.toUpperCase()];
+        const price = q ? q.price : meta.currentPrice;
+        const chg = q ? q.change : (meta.currentPrice * meta.dayChangePercent) / 100;
+        const chgPct = q ? q.changePercent : meta.dayChangePercent;
+        const subSector = meta.subSector || SHOVEL_SUB_SECTOR_MAP[meta.ticker] || 'Semiconductors';
+        
+        list.push({
+          id: `shovel-${meta.ticker}`,
+          ticker: meta.ticker,
+          name: meta.name,
+          assetClass: 'The Shovel Sellers',
+          assetType: 'equity',
+          price,
+          change: chg,
+          changePercent: chgPct,
+          currency: meta.country === 'Netherlands' ? 'EUR' : 'USD',
+          asOfDate: '09/15/2026',
+          aumOrMarketCap: meta.marketCap,
+          aumNumeric: parseFloat((meta.marketCap || '100').replace(/[^0-9.]/g, '')) * ((meta.marketCap || '').includes('T') ? 1000 : 1),
+          noteBadge: 'SHOVEL',
+          subSector,
+          exchange: meta.exchange || 'NASDAQ'
+        });
+      }
     });
 
     // Commodities
@@ -177,13 +274,18 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
   const filteredAssets = useMemo(() => {
     return allAssets.filter((item) => {
       const matchesClass = selectedAssetClassFilter === 'ALL' || item.assetClass === selectedAssetClassFilter;
+      const matchesSubSector = 
+        selectedAssetClassFilter !== 'The Shovel Sellers' || 
+        selectedSubSectorFilter === 'ALL' || 
+        item.subSector === selectedSubSectorFilter;
       const matchesSearch = tableSearch.trim() === '' ||
         item.ticker.toLowerCase().includes(tableSearch.toLowerCase()) ||
         item.name.toLowerCase().includes(tableSearch.toLowerCase()) ||
-        item.assetClass.toLowerCase().includes(tableSearch.toLowerCase());
-      return matchesClass && matchesSearch;
+        item.assetClass.toLowerCase().includes(tableSearch.toLowerCase()) ||
+        (item.subSector && item.subSector.toLowerCase().includes(tableSearch.toLowerCase()));
+      return matchesClass && matchesSubSector && matchesSearch;
     });
-  }, [allAssets, selectedAssetClassFilter, tableSearch]);
+  }, [allAssets, selectedAssetClassFilter, selectedSubSectorFilter, tableSearch]);
 
   // Sorted Assets
   const sortedAssets = useMemo(() => {
@@ -321,8 +423,14 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
           </div>
 
           <select
+            id="select-asset-class-filter"
             value={selectedAssetClassFilter}
-            onChange={(e) => setSelectedAssetClassFilter(e.target.value)}
+            onChange={(e) => {
+              setSelectedAssetClassFilter(e.target.value);
+              if (e.target.value !== 'The Shovel Sellers') {
+                setSelectedSubSectorFilter('ALL');
+              }
+            }}
             className="border border-slate-200 rounded-md py-1 px-2 text-xs bg-slate-50 text-slate-700 focus:outline-none cursor-pointer"
           >
             <option value="ALL">All Asset Classes ({allAssets.length})</option>
@@ -330,8 +438,67 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
               <option key={ac} value={ac}>{ac}</option>
             ))}
           </select>
+
+          {/* Sub-Sector Dropdown for The Shovel Sellers */}
+          {selectedAssetClassFilter === 'The Shovel Sellers' && (
+            <select
+              id="select-shovel-subsector"
+              value={selectedSubSectorFilter}
+              onChange={(e) => setSelectedSubSectorFilter(e.target.value)}
+              className="border border-[#005a9c] bg-blue-50/70 text-[#005a9c] font-semibold rounded-md py-1 px-2.5 text-xs focus:outline-none cursor-pointer transition"
+            >
+              <option value="ALL">All 4 Sub-Sectors (34)</option>
+              <option value="Semiconductor Equipment & Materials">Semiconductor Equipment & Materials</option>
+              <option value="Computer Hardware & storage">Computer Hardware & storage</option>
+              <option value="Communication Equipment">Communication Equipment</option>
+              <option value="Semiconductors">Semiconductors</option>
+            </select>
+          )}
         </div>
       </div>
+
+      {/* Sub-Sector Interactive Pill Banner for The Shovel Sellers */}
+      {selectedAssetClassFilter === 'The Shovel Sellers' && (
+        <div id="shovel-subsector-pill-bar" className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code mr-1">
+              SUB-SECTOR:
+            </span>
+            {[
+              { id: 'ALL', label: 'All Sub-Sectors', count: 34 },
+              { id: 'Semiconductor Equipment & Materials', label: 'Semiconductor Equipment & Materials', count: 7 },
+              { id: 'Computer Hardware & storage', label: 'Computer Hardware & storage', count: 7 },
+              { id: 'Communication Equipment', label: 'Communication Equipment', count: 6 },
+              { id: 'Semiconductors', label: 'Semiconductors', count: 14 }
+            ].map(sub => {
+              const isActive = selectedSubSectorFilter === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  onClick={() => setSelectedSubSectorFilter(sub.id)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
+                    isActive 
+                      ? 'bg-[#005a9c] text-white shadow-2xs' 
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
+                >
+                  <span>{sub.label}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono-code ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {sub.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-[11px] text-slate-500 font-mono-code flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Yahoo Finance & SEC EDGAR Aligned Data (100% Free & Keyless)</span>
+          </div>
+        </div>
+      )}
 
       {/* 3. Subheader: "78 Available Shareclasses" (Screenshot 1 Authentic Styling) */}
       <div className="px-4 py-3 bg-white text-xs font-medium text-slate-500 flex items-center justify-between border-b border-slate-100">
@@ -474,8 +641,19 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                         {asset.name}
                       </button>
 
-                      <div className="text-[11px] text-slate-400 font-sans mt-0.5">
-                        {asset.exchange} • {asset.aumOrMarketCap}
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-400 font-sans mt-0.5">
+                        <span>{asset.exchange} • {asset.aumOrMarketCap}</span>
+                        {asset.subSector && (
+                          <span className="px-1.5 py-0.2 rounded bg-blue-50 text-[#005a9c] font-mono-code text-[10px] border border-blue-100 font-semibold">
+                            {asset.subSector}
+                          </span>
+                        )}
+                        {asset.quarterlyResult?.reportDate && (
+                          <span className="text-[10px] text-emerald-700 font-mono-code flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span>Rep: {asset.quarterlyResult.reportDate}</span>
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -580,9 +758,15 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                       <span className="text-xs font-medium text-slate-700 block truncate">
                         {asset.assetClass}
                       </span>
-                      <span className="text-[10px] text-slate-400 uppercase font-mono-code">
-                        {asset.assetType}
-                      </span>
+                      {asset.subSector ? (
+                        <span className="text-[10px] text-[#005a9c] font-semibold block truncate">
+                          {asset.subSector}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 uppercase font-mono-code">
+                          {asset.assetType}
+                        </span>
+                      )}
                     </td>
 
                     {/* Column 5: Research Action */}
