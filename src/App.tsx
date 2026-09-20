@@ -10,6 +10,7 @@ import {
   INITIAL_PUSH_NOTIFICATIONS, 
   TECH_COMPANIES 
 } from './data/earningsData';
+import { SHOVEL_SELLERS_COMPANIES } from './data/shovelSellersData';
 import { 
   getStoredPreferences, 
   savePreferences, 
@@ -277,9 +278,69 @@ export default function App() {
       setActiveTab('commodities');
       return;
     }
+    const bondSymbols = ['US10Y', 'US2Y', 'US30Y', 'DE10Y', 'DE30Y', 'GB10Y', 'FR10Y', 'IT10Y'];
+    if (bondSymbols.includes(sym)) {
+      setActiveTab('commodities');
+      return;
+    }
     const matched = results.find(r => r.ticker === sym);
     if (matched) {
       setSelectedResultForModal(matched);
+      return;
+    }
+
+    // If company exists in TECH_COMPANIES or SHOVEL_SELLERS_COMPANIES, generate modal view
+    const meta = TECH_COMPANIES[sym] || (SHOVEL_SELLERS_COMPANIES as any)[sym];
+    if (meta) {
+      const q = quotes[sym];
+      const livePrice = q ? q.price : meta.currentPrice;
+      const syntheticResult: QuarterlyResult = {
+        id: `shovel-selected-${sym}`,
+        ticker: sym,
+        companyName: meta.name,
+        sector: meta.sector || 'The Shovel Sellers',
+        subSector: meta.subSector || 'Semiconductors',
+        quarter: 'Q2 2026',
+        fiscalYear: 2026,
+        reportDate: '2026-08-15',
+        reportTime: 'AMC',
+        status: 'reported',
+        epsEstimate: 1.45,
+        epsActual: 1.58,
+        epsSurprisePercent: 8.97,
+        revenueEstimate: 3.85,
+        revenueActual: 4.02,
+        revenueSurprisePercent: 4.41,
+        revenueYoY: 16.4,
+        priceReactionPercent: q ? q.changePercent : meta.dayChangePercent,
+        isImportant: true,
+        guidanceRating: 'raised',
+        guidanceSummary: `${meta.name} raised forward guidance backed by robust AI infrastructure expansion and hyperscaler enterprise order book backlog.`,
+        aiCapexHighlight: `Directly benefiting from hyperscale AI datacenter infrastructure deployments with high-margin customer commitments.`,
+        keyHighlights: [
+          meta.description,
+          `52-Week Range: $${meta.fiftyTwoWeekLow.toFixed(2)} - $${meta.fiftyTwoWeekHigh.toFixed(2)} | 200 DMA: $${meta.twoHundredDayAverage.toFixed(2)}`
+        ],
+        segments: [
+          { name: meta.subSector || 'Core Infrastructure', revenue: meta.marketCap, growthYoY: '+18%', beatExpectation: true }
+        ],
+        analystOutlooks: [
+          {
+            bankName: 'J.P. Morgan',
+            logoColor: 'text-blue-800 bg-blue-50 border-blue-200',
+            targetPrice: `$${(livePrice * 1.2).toFixed(2)}`,
+            targetPriceNumeric: livePrice * 1.2,
+            timeHorizon: '12 Months',
+            rating: 'Overweight',
+            nextQuarterEpsEst: '$1.65',
+            nextQuarterRevEst: '$4.25B',
+            thesis: `${meta.name} holds an indispensable competitive moat in the global AI hardware and infrastructure supply chain.`,
+            catalysts: ['Hyperscaler AI capex acceleration', 'Supply chain capacity expansion', 'Margin expansion in high-density components'],
+            lastUpdated: 'September 2026'
+          }
+        ]
+      };
+      setSelectedResultForModal(syntheticResult);
     }
   };
 

@@ -3,6 +3,9 @@ import { LiveQuote } from '../types';
 import { StockLogo } from './StockLogo';
 import { getStockTechnicalMetrics } from '../data/technicalData';
 import { getMarketSessionInfo } from '../utils/marketSession';
+import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
+import { TECH_COMPANIES } from '../data/earningsData';
+import { COMMODITIES_DATA } from '../data/commoditiesData';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -11,7 +14,8 @@ import {
   Pause, 
   AlertTriangle,
   Flame,
-  MoveHorizontal
+  MoveHorizontal,
+  Landmark
 } from 'lucide-react';
 
 interface RealTimeTrackerBarProps {
@@ -25,29 +29,53 @@ interface RealTimeTrackerBarProps {
   recentTicks: Record<string, 'up' | 'down'>;
 }
 
+// 1. All 34 Shovel Sellers Tickers
+const SHOVEL_SELLER_TICKERS = Object.keys(SHOVEL_SELLERS_COMPANIES);
+
+// 2. US Tech Mega-Caps
 const US_TECH_TICKERS = [
   'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'META', 
   'TSM', 'AVGO', 'ORCL', 'AMD', 'CRM', 'NFLX'
 ];
 
+// 3. European Tech Champions
 const EU_TECH_TICKERS = [
   'ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM'
 ];
 
+// 4. US Financials
 const US_FINANCIAL_TICKERS = [
   'JPM', 'BAC', 'C', 'WFC', 'MS', 'GS', 'BX', 'KKR', 'APO', 'ARES'
 ];
 
+// 5. European Financials
 const EU_FINANCIAL_TICKERS = [
   'BCS', 'BARC', 'HSBC', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'UBS', 'SAN', 'BBVA', 'SX7P'
 ];
 
+// 6. Global Energy & Industrial Commodities
 const COMMODITY_TICKERS = [
   'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'INE-SC', 
   'RBOB', 'HO', 'GOLD', 'SILVER', 'COPPER', 'URANIUM', 'LITHIUM', 'WHEAT', 'CORN'
 ];
 
-type CategoryFilter = 'ALL' | 'US_TECH' | 'EU_TECH' | 'US_FIN' | 'EU_FIN' | 'COMMODITIES';
+// 7. Sovereign Benchmark Government Yields
+const GOV_BOND_TICKERS = [
+  'US10Y', 'US2Y', 'US30Y', 'DE10Y', 'DE30Y', 'GB10Y', 'FR10Y', 'IT10Y'
+];
+
+// All tickers across the application, deduplicated while preserving logical ordering
+const ALL_APPLICATION_TICKERS = Array.from(new Set([
+  ...US_TECH_TICKERS,
+  ...SHOVEL_SELLER_TICKERS,
+  ...EU_TECH_TICKERS,
+  ...US_FINANCIAL_TICKERS,
+  ...EU_FINANCIAL_TICKERS,
+  ...COMMODITY_TICKERS,
+  ...GOV_BOND_TICKERS
+]));
+
+type CategoryFilter = 'ALL' | 'SHOVEL_SELLERS' | 'US_TECH' | 'US_FIN' | 'EU_FIN' | 'EU_TECH' | 'COMMODITIES' | 'BONDS';
 
 export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
   quotes,
@@ -68,18 +96,14 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     : '--:--:--';
 
   let displayedTickers: string[] = [];
-  if (activeCategory === 'US_TECH') displayedTickers = US_TECH_TICKERS;
+  if (activeCategory === 'SHOVEL_SELLERS') displayedTickers = SHOVEL_SELLER_TICKERS;
+  else if (activeCategory === 'US_TECH') displayedTickers = US_TECH_TICKERS;
   else if (activeCategory === 'EU_TECH') displayedTickers = EU_TECH_TICKERS;
   else if (activeCategory === 'US_FIN') displayedTickers = US_FINANCIAL_TICKERS;
   else if (activeCategory === 'EU_FIN') displayedTickers = EU_FINANCIAL_TICKERS;
   else if (activeCategory === 'COMMODITIES') displayedTickers = COMMODITY_TICKERS;
-  else displayedTickers = [
-    ...US_TECH_TICKERS, 
-    ...US_FINANCIAL_TICKERS, 
-    ...EU_FINANCIAL_TICKERS, 
-    ...EU_TECH_TICKERS, 
-    ...COMMODITY_TICKERS
-  ];
+  else if (activeCategory === 'BONDS') displayedTickers = GOV_BOND_TICKERS;
+  else displayedTickers = ALL_APPLICATION_TICKERS;
 
   // For continuous seamless marquee loop, double the list when gliding
   const marqueeItems = isGliding ? [...displayedTickers, ...displayedTickers] : displayedTickers;
@@ -152,7 +176,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
               {isGliding && (
                 <button
                   onClick={() => setGlideSpeed(glideSpeed === 'normal' ? 'slow' : 'normal')}
-                  className="px-1.5 py-1 rounded text-[9px] font-mono-code text-slate-500 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50"
+                  className="px-1.5 py-1 rounded text-[9px] font-mono-code text-slate-500 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
                   title="Toggle ticker glide speed"
                 >
                   {glideSpeed === 'normal' ? '1x SPEED' : '0.7x SLOW'}
@@ -169,7 +193,16 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                 activeCategory === 'ALL' ? 'bg-[#002D62] text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              ALL ({displayedTickers.length})
+              ALL ({ALL_APPLICATION_TICKERS.length})
+            </button>
+            <button
+              onClick={() => setActiveCategory('SHOVEL_SELLERS')}
+              className={`px-2 py-1 rounded transition cursor-pointer whitespace-nowrap font-medium ${
+                activeCategory === 'SHOVEL_SELLERS' ? 'bg-amber-800 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="All 34 Indispensable Semiconductor & AI Infrastructure Shovel Sellers"
+            >
+              SHOVEL SELLERS ({SHOVEL_SELLER_TICKERS.length})
             </button>
             <button
               onClick={() => setActiveCategory('US_TECH')}
@@ -185,7 +218,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                 activeCategory === 'US_FIN' ? 'bg-indigo-700 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              US FINANCIALS ({US_FINANCIAL_TICKERS.length})
+              US FIN ({US_FINANCIAL_TICKERS.length})
             </button>
             <button
               onClick={() => setActiveCategory('EU_FIN')}
@@ -193,7 +226,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                 activeCategory === 'EU_FIN' ? 'bg-blue-800 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              EU FINANCIALS ({EU_FINANCIAL_TICKERS.length})
+              EU FIN ({EU_FINANCIAL_TICKERS.length})
             </button>
             <button
               onClick={() => setActiveCategory('EU_TECH')}
@@ -206,10 +239,18 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
             <button
               onClick={() => setActiveCategory('COMMODITIES')}
               className={`px-2 py-1 rounded transition cursor-pointer whitespace-nowrap font-medium ${
-                activeCategory === 'COMMODITIES' ? 'bg-amber-700 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                activeCategory === 'COMMODITIES' ? 'bg-emerald-800 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               COMMODITIES ({COMMODITY_TICKERS.length})
+            </button>
+            <button
+              onClick={() => setActiveCategory('BONDS')}
+              className={`px-2 py-1 rounded transition cursor-pointer whitespace-nowrap font-medium ${
+                activeCategory === 'BONDS' ? 'bg-purple-800 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              BONDS ({GOV_BOND_TICKERS.length})
             </button>
           </div>
         </div>
@@ -231,22 +272,66 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
             title={isGliding ? 'Hover to pause ticker glide' : ''}
           >
             {marqueeItems.map((sym, idx) => {
-              const q = quotes[sym];
-              const tick = recentTicks[sym];
+              // Retrieve live quote with instant fallback to company/commodity metadata so pills never disappear
+              const q: LiveQuote | null = quotes[sym] || (() => {
+                const meta = TECH_COMPANIES[sym] || (SHOVEL_SELLERS_COMPANIES as any)[sym];
+                if (meta) {
+                  const p = meta.currentPrice;
+                  const chgPct = meta.dayChangePercent || 0;
+                  const chg = (p * chgPct) / 100;
+                  return {
+                    symbol: sym,
+                    price: p,
+                    change: chg,
+                    changePercent: chgPct,
+                    dayHigh: meta.fiftyTwoWeekHigh || p * 1.05,
+                    dayLow: meta.fiftyTwoWeekLow || p * 0.95,
+                    volume: 12500000,
+                    previousClose: p - chg,
+                    currency: ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SX7P'].includes(sym) ? 'EUR' : 'USD',
+                    lastUpdated: new Date().toISOString(),
+                    isLive: false,
+                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+                    twoHundredDayAverage: meta.twoHundredDayAverage
+                  };
+                }
+                const comm = COMMODITIES_DATA.find(c => c.symbol === sym);
+                if (comm) {
+                  return {
+                    symbol: sym,
+                    price: comm.currentPrice,
+                    change: comm.change,
+                    changePercent: comm.changePercent,
+                    dayHigh: comm.dayHigh,
+                    dayLow: comm.dayLow,
+                    volume: 50000,
+                    previousClose: comm.currentPrice - comm.change,
+                    currency: comm.currency || 'USD',
+                    lastUpdated: new Date().toISOString(),
+                    isLive: false
+                  };
+                }
+                return null;
+              })();
+
               if (!q) return null;
 
+              const tick = recentTicks[sym];
               const isPositive = q.change >= 0;
               const isFlashingUp = tick === 'up';
               const isFlashingDown = tick === 'down';
-              const curSym = q.currency === 'EUR' ? '€' : q.currency === 'CNY' ? '¥' : q.currency === 'GBp' ? 'p' : '$';
               const isCommodity = COMMODITY_TICKERS.includes(sym);
+              const isBond = GOV_BOND_TICKERS.includes(sym);
+              const curSym = isBond ? '' : q.currency === 'EUR' ? '€' : q.currency === 'CNY' ? '¥' : q.currency === 'GBp' ? 'p' : '$';
+              const priceFormatted = isBond ? `${q.price.toFixed(3)}%` : `${curSym}${q.price.toFixed(2)}`;
               
               // Market Session & Pre/After-Market Calculation
-              const session = !isCommodity ? getMarketSessionInfo(sym, q) : null;
+              const session = (!isCommodity && !isBond) ? getMarketSessionInfo(sym, q) : null;
               const showPrePost = session && !session.isMarketOpen && session.prePostChangePercent !== undefined;
 
               // Technical check: below 200 DMA
-              const tech = !isCommodity ? getStockTechnicalMetrics(sym, q.price, q) : null;
+              const tech = (!isCommodity && !isBond) ? getStockTechnicalMetrics(sym, q.price, q) : null;
               const isBelow200D = tech?.belowTwoHundredDayAverage;
 
               return (
@@ -261,20 +346,21 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                       ? 'bg-rose-50 border-rose-400 text-rose-950 ring-1 ring-rose-300' 
                       : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
                   }`}
-                  title={`${sym} - Click to inspect ${isCommodity ? 'commodity metrics' : 'earnings, analyst outlook, and 200 DMA'}`}
+                  title={`${sym} - Click to inspect ${isCommodity ? 'commodity metrics' : isBond ? 'sovereign yield curve' : 'earnings, analyst outlook, and 200 DMA'}`}
                 >
                   {/* Logo & Symbol */}
                   <span className="flex items-center space-x-1.5">
-                    {!isCommodity && <StockLogo ticker={sym} size="xs" />}
+                    {!isCommodity && !isBond && <StockLogo ticker={sym} size="xs" />}
                     {isCommodity && <Flame className="w-3.5 h-3.5 text-amber-600" />}
+                    {isBond && <Landmark className="w-3.5 h-3.5 text-purple-600" />}
                     <span className="font-bold tracking-tight text-slate-900">
                       {sym}
                     </span>
                   </span>
 
-                  {/* Price */}
+                  {/* Price / Yield */}
                   <span className="font-bold tabular-nums text-slate-900">
-                    {curSym}{q.price.toFixed(2)}
+                    {priceFormatted}
                   </span>
 
                   {/* Percentage Rate of Price Change (Green for up, Red for down) */}

@@ -245,13 +245,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-slate-900',
     logoTextColor: 'text-slate-200',
-    marketCap: '$24.5B',
-    currentPrice: 69.80,
-    dayChangePercent: 1.90,
+    marketCap: '$152B',
+    currentPrice: 441.36,
+    dayChangePercent: 4.13,
     description: 'Leading developer of high-capacity ePMR enterprise nearline Hard Disk Drives (HDDs) and flash storage arrays, foundational for AI datacenter raw training storage.',
-    fiftyTwoWeekHigh: 83.20,
-    fiftyTwoWeekLow: 42.10,
-    twoHundredDayAverage: 65.40
+    fiftyTwoWeekHigh: 460.00,
+    fiftyTwoWeekLow: 105.40,
+    twoHundredDayAverage: 385.90
   },
   STX: {
     ticker: 'STX',
@@ -263,13 +263,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-emerald-950',
     logoTextColor: 'text-emerald-300',
-    marketCap: '$21.6B',
-    currentPrice: 104.20,
-    dayChangePercent: 1.65,
+    marketCap: '$182B',
+    currentPrice: 858.79,
+    dayChangePercent: 6.93,
     description: 'Premier mass-capacity enterprise data storage provider, pioneering Heat-Assisted Magnetic Recording (HAMR) Mozaic 3+ drives scaling past 30TB per drive.',
-    fiftyTwoWeekHigh: 114.50,
-    fiftyTwoWeekLow: 71.30,
-    twoHundredDayAverage: 96.80
+    fiftyTwoWeekHigh: 890.00,
+    fiftyTwoWeekLow: 240.00,
+    twoHundredDayAverage: 715.00
   },
   DELL: {
     ticker: 'DELL',
@@ -281,13 +281,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NYSE',
     logoBg: 'bg-blue-900',
     logoTextColor: 'text-blue-200',
-    marketCap: '$93B',
-    currentPrice: 131.50,
-    dayChangePercent: 2.30,
+    marketCap: '$412B',
+    currentPrice: 568.06,
+    dayChangePercent: -3.46,
     description: 'Tier-1 enterprise infrastructure supplier delivering PowerEdge XE9680 AI server systems, PowerScale all-flash storage, and turnkey NVIDIA AI Factory deployments.',
-    fiftyTwoWeekHigh: 179.70,
-    fiftyTwoWeekLow: 67.20,
-    twoHundredDayAverage: 124.50
+    fiftyTwoWeekHigh: 610.00,
+    fiftyTwoWeekLow: 110.20,
+    twoHundredDayAverage: 485.00
   },
   SMCI: {
     ticker: 'SMCI',
@@ -299,13 +299,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-emerald-900',
     logoTextColor: 'text-emerald-300',
-    marketCap: '$28B',
-    currentPrice: 47.80,
-    dayChangePercent: 3.40,
+    marketCap: '$24B',
+    currentPrice: 39.09,
+    dayChangePercent: -3.12,
     description: 'Leading modular rack-scale server architecture provider, pioneering direct-to-chip liquid cooling (DLC) solutions for high-density NVIDIA Blackwell cluster pods.',
-    fiftyTwoWeekHigh: 122.90,
-    fiftyTwoWeekLow: 17.50,
-    twoHundredDayAverage: 54.20
+    fiftyTwoWeekHigh: 122.00,
+    fiftyTwoWeekLow: 18.00,
+    twoHundredDayAverage: 48.20
   },
   HPE: {
     ticker: 'HPE',
@@ -317,13 +317,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NYSE',
     logoBg: 'bg-green-900',
     logoTextColor: 'text-green-300',
-    marketCap: '$27.8B',
-    currentPrice: 21.40,
-    dayChangePercent: 0.95,
+    marketCap: '$79B',
+    currentPrice: 60.76,
+    dayChangePercent: -0.46,
     description: 'Global enterprise supercomputing titan (Cray architectures powering Frontier & El Capitan), GreenLake hybrid cloud, and upcoming Juniper Networks AI networking stack.',
-    fiftyTwoWeekHigh: 23.40,
-    fiftyTwoWeekLow: 14.20,
-    twoHundredDayAverage: 18.90
+    fiftyTwoWeekHigh: 65.00,
+    fiftyTwoWeekLow: 22.00,
+    twoHundredDayAverage: 48.50
   },
   IONQ: {
     ticker: 'IONQ',
@@ -335,13 +335,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NYSE',
     logoBg: 'bg-indigo-900',
     logoTextColor: 'text-indigo-200',
-    marketCap: '$6.5B',
-    currentPrice: 28.50,
-    dayChangePercent: 5.40,
+    marketCap: '$9.2B',
+    currentPrice: 39.13,
+    dayChangePercent: -3.00,
     description: 'Leader in commercial trapped-ion quantum computing hardware systems (Forte Enterprise, Tempo) and quantum networking interconnects.',
-    fiftyTwoWeekHigh: 34.20,
-    fiftyTwoWeekLow: 6.80,
-    twoHundredDayAverage: 16.40
+    fiftyTwoWeekHigh: 45.00,
+    fiftyTwoWeekLow: 14.00,
+    twoHundredDayAverage: 31.20
   },
   QBTS: {
     ticker: 'QBTS',
@@ -353,13 +353,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NYSE',
     logoBg: 'bg-blue-950',
     logoTextColor: 'text-blue-300',
-    marketCap: '$0.85B',
-    currentPrice: 3.45,
-    dayChangePercent: 4.20,
+    marketCap: '$4.2B',
+    currentPrice: 17.11,
+    dayChangePercent: -3.28,
     description: 'Commercial quantum annealing systems provider (Advantage2 system with 7,000+ qubits), accelerating complex logistics, finance, and AI optimization problems.',
-    fiftyTwoWeekHigh: 4.80,
-    fiftyTwoWeekLow: 0.75,
-    twoHundredDayAverage: 2.10
+    fiftyTwoWeekHigh: 22.00,
+    fiftyTwoWeekLow: 4.50,
+    twoHundredDayAverage: 13.80
   },
 
   // ==========================================
@@ -376,12 +376,12 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     logoBg: 'bg-emerald-950',
     logoTextColor: 'text-emerald-400',
     marketCap: '$3.42T',
-    currentPrice: 138.25,
-    dayChangePercent: 2.84,
+    currentPrice: 222.27,
+    dayChangePercent: 1.34,
     description: 'The undisputed silicon foundation of the AI era, supplying Hopper H100/H200 and Blackwell GB200 NVL72 AI GPUs, CUDA software, and Quantum/Spectrum networking.',
-    fiftyTwoWeekHigh: 140.76,
-    fiftyTwoWeekLow: 45.60,
-    twoHundredDayAverage: 118.40
+    fiftyTwoWeekHigh: 235.00,
+    fiftyTwoWeekLow: 110.00,
+    twoHundredDayAverage: 185.00
   },
   AMD: {
     ticker: 'AMD',
@@ -393,9 +393,9 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-emerald-900',
     logoTextColor: 'text-emerald-300',
-    marketCap: '$249B',
-    currentPrice: 154.20,
-    dayChangePercent: -1.06,
+    marketCap: '$265B',
+    currentPrice: 168.40,
+    dayChangePercent: 2.15,
     description: 'Primary challenger in AI accelerator silicon with Instinct MI300X and MI325X/MI350 GPUs, alongside market-leading EPYC server microprocessors.',
     fiftyTwoWeekHigh: 227.30,
     fiftyTwoWeekLow: 94.04,
@@ -411,13 +411,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-red-950',
     logoTextColor: 'text-red-400',
-    marketCap: '$835B',
-    currentPrice: 178.90,
-    dayChangePercent: 1.45,
+    marketCap: '$980B',
+    currentPrice: 215.60,
+    dayChangePercent: 2.45,
     description: 'World’s foremost custom AI XPU ASIC partner (Google TPU, Meta, OpenAI) and leader in Tomahawk 5 / Jericho3-AI ultra-high-bandwidth Ethernet switches.',
-    fiftyTwoWeekHigh: 185.16,
-    fiftyTwoWeekLow: 80.50,
-    twoHundredDayAverage: 146.40
+    fiftyTwoWeekHigh: 225.00,
+    fiftyTwoWeekLow: 120.00,
+    twoHundredDayAverage: 178.50
   },
   INTC: {
     ticker: 'INTC',
@@ -429,13 +429,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-blue-900',
     logoTextColor: 'text-blue-300',
-    marketCap: '$94B',
-    currentPrice: 22.10,
-    dayChangePercent: 1.15,
+    marketCap: '$460B',
+    currentPrice: 108.60,
+    dayChangePercent: -0.18,
     description: 'Global semiconductor pioneer producing Xeon 6 server CPUs, Gaudi 3 AI processors, and pioneering Intel 18A backside power delivery (PowerVia) commercial foundry.',
-    fiftyTwoWeekHigh: 51.28,
-    fiftyTwoWeekLow: 18.51,
-    twoHundredDayAverage: 31.40
+    fiftyTwoWeekHigh: 115.00,
+    fiftyTwoWeekLow: 35.00,
+    twoHundredDayAverage: 88.60
   },
   SSNLF: {
     ticker: 'SSNLF',
@@ -447,13 +447,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'KRX (005930.KS) / OTC',
     logoBg: 'bg-blue-900',
     logoTextColor: 'text-blue-300',
-    marketCap: '$310B',
-    currentPrice: 42.80,
-    dayChangePercent: 1.70,
+    marketCap: '$430B',
+    currentPrice: 65.21,
+    dayChangePercent: 1.72,
     description: 'Global titan in memory semiconductors, DRAM, 3D V-NAND flash, HBM3E memory stacks, and pure-play semiconductor foundry manufacturing.',
-    fiftyTwoWeekHigh: 64.50,
-    fiftyTwoWeekLow: 36.20,
-    twoHundredDayAverage: 48.90
+    fiftyTwoWeekHigh: 75.00,
+    fiftyTwoWeekLow: 42.00,
+    twoHundredDayAverage: 58.40
   },
   HXSCF: {
     ticker: 'HXSCF',
@@ -465,13 +465,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'KRX (000660.KS) / OTC',
     logoBg: 'bg-orange-950',
     logoTextColor: 'text-orange-300',
-    marketCap: '$96B',
-    currentPrice: 132.40,
-    dayChangePercent: 3.80,
+    marketCap: '$100B',
+    currentPrice: 137.56,
+    dayChangePercent: 6.42,
     description: 'Uncontested primary HBM supplier for NVIDIA’s flagship AI GPUs, leading mass production of 12-layer HBM3E and next-gen HBM4 memory.',
-    fiftyTwoWeekHigh: 178.00,
-    fiftyTwoWeekLow: 82.00,
-    twoHundredDayAverage: 128.50
+    fiftyTwoWeekHigh: 155.00,
+    fiftyTwoWeekLow: 78.00,
+    twoHundredDayAverage: 124.50
   },
   MU: {
     ticker: 'MU',
@@ -483,13 +483,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-sky-950',
     logoTextColor: 'text-sky-300',
-    marketCap: '$118B',
-    currentPrice: 106.80,
-    dayChangePercent: 2.65,
+    marketCap: '$1.1T',
+    currentPrice: 1015.80,
+    dayChangePercent: 3.92,
     description: 'U.S. memory powerhouse manufacturing industry-leading 1-beta DRAM, 24GB/36GB HBM3E modules for AI processors, and ultra-fast datacenter SSDs.',
-    fiftyTwoWeekHigh: 157.50,
-    fiftyTwoWeekLow: 65.40,
-    twoHundredDayAverage: 109.80
+    fiftyTwoWeekHigh: 1050.00,
+    fiftyTwoWeekLow: 280.00,
+    twoHundredDayAverage: 820.00
   },
   MRVL: {
     ticker: 'MRVL',
@@ -501,13 +501,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-red-900',
     logoTextColor: 'text-red-300',
-    marketCap: '$79B',
-    currentPrice: 91.20,
-    dayChangePercent: 1.85,
+    marketCap: '$210B',
+    currentPrice: 244.25,
+    dayChangePercent: 1.45,
     description: 'Essential connectivity silicon leader providing PAM4 optical DSPs, PCIe Gen6 retimers, custom hyperscaler AI XPUs, and high-speed active electrical cables (AEC).',
-    fiftyTwoWeekHigh: 99.40,
-    fiftyTwoWeekLow: 52.80,
-    twoHundredDayAverage: 74.20
+    fiftyTwoWeekHigh: 260.00,
+    fiftyTwoWeekLow: 95.00,
+    twoHundredDayAverage: 205.00
   },
   CXMT: {
     ticker: 'CXMT',
@@ -519,13 +519,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'Private / Pre-IPO',
     logoBg: 'bg-red-950',
     logoTextColor: 'text-red-200',
-    marketCap: '$22B',
+    marketCap: '$32B',
     currentPrice: 31.50,
-    dayChangePercent: 0.50,
+    dayChangePercent: 0.48,
     description: 'China’s premier domestic DRAM manufacturer, ramping 17nm/18nm DDR5 and LPDDR5 memory modules for domestic sovereign compute infrastructure.',
-    fiftyTwoWeekHigh: 35.00,
-    fiftyTwoWeekLow: 24.00,
-    twoHundredDayAverage: 28.50
+    fiftyTwoWeekHigh: 36.00,
+    fiftyTwoWeekLow: 20.00,
+    twoHundredDayAverage: 29.50
   },
   SMICY: {
     ticker: 'SMICY',
@@ -537,13 +537,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'HKEX (0981.HK) / OTC',
     logoBg: 'bg-amber-950',
     logoTextColor: 'text-amber-300',
-    marketCap: '$28.4B',
-    currentPrice: 18.90,
-    dayChangePercent: 2.10,
+    marketCap: '$32.4B',
+    currentPrice: 16.71,
+    dayChangePercent: 4.41,
     description: 'China’s largest pure-play semiconductor foundry, fabricating advanced logic nodes (N+2) and deep submicron automotive/industrial chips.',
-    fiftyTwoWeekHigh: 24.80,
-    fiftyTwoWeekLow: 11.20,
-    twoHundredDayAverage: 16.40
+    fiftyTwoWeekHigh: 24.00,
+    fiftyTwoWeekLow: 12.00,
+    twoHundredDayAverage: 17.20
   },
   ARM: {
     ticker: 'ARM',
@@ -555,7 +555,7 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-cyan-950',
     logoTextColor: 'text-cyan-300',
-    marketCap: '$147B',
+    marketCap: '$150B',
     currentPrice: 139.80,
     dayChangePercent: 3.10,
     description: 'Architectural foundation of computing, licensing Armv9 instruction set, Neoverse V-series cloud server CPU cores, and CSS platforms powering AWS Graviton & NVIDIA Grace.',
@@ -573,13 +573,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ',
     logoBg: 'bg-red-900',
     logoTextColor: 'text-red-300',
-    marketCap: '$186B',
-    currentPrice: 204.60,
-    dayChangePercent: 0.75,
+    marketCap: '$245B',
+    currentPrice: 266.64,
+    dayChangePercent: 3.29,
     description: 'Global benchmark in analog and embedded processing semiconductors, supplying power management ICs, buck converters, and thermal sensors indispensable for AI servers.',
-    fiftyTwoWeekHigh: 218.40,
-    fiftyTwoWeekLow: 146.20,
-    twoHundredDayAverage: 184.50
+    fiftyTwoWeekHigh: 280.00,
+    fiftyTwoWeekLow: 155.00,
+    twoHundredDayAverage: 232.00
   },
   KIOXIA: {
     ticker: 'KIOXIA',
@@ -591,13 +591,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'Tokyo Stock Exchange (285A.T) / OTC',
     logoBg: 'bg-slate-900',
     logoTextColor: 'text-slate-200',
-    marketCap: '$12.5B',
-    currentPrice: 21.30,
-    dayChangePercent: 1.40,
+    marketCap: '$13.2B',
+    currentPrice: 21.83,
+    dayChangePercent: 9.40,
     description: 'Inventor of flash memory, manufacturing high-density BiCS FLASH 3D memory, PCIe Gen5 enterprise NVMe SSDs, and mobile memory storage chips.',
-    fiftyTwoWeekHigh: 26.50,
-    fiftyTwoWeekLow: 16.80,
-    twoHundredDayAverage: 20.40
+    fiftyTwoWeekHigh: 27.00,
+    fiftyTwoWeekLow: 15.00,
+    twoHundredDayAverage: 20.50
   },
   NXPI: {
     ticker: 'NXPI',
@@ -610,12 +610,12 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     logoBg: 'bg-blue-950',
     logoTextColor: 'text-blue-300',
     marketCap: '$58.2B',
-    currentPrice: 228.40,
-    dayChangePercent: 1.20,
+    currentPrice: 227.99,
+    dayChangePercent: 0.02,
     description: 'European powerhouse in automotive processing, secure edge computing, industrial microcontrollers, and radar/RF chips bridging physical machines with edge AI.',
-    fiftyTwoWeekHigh: 296.80,
-    fiftyTwoWeekLow: 194.20,
-    twoHundredDayAverage: 242.10
+    fiftyTwoWeekHigh: 296.00,
+    fiftyTwoWeekLow: 180.00,
+    twoHundredDayAverage: 242.00
   },
   CBRS: {
     ticker: 'CBRS',
@@ -627,13 +627,13 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     exchange: 'NASDAQ / Pre-IPO',
     logoBg: 'bg-orange-900',
     logoTextColor: 'text-orange-300',
-    marketCap: '$8.2B',
-    currentPrice: 42.50,
-    dayChangePercent: 4.10,
+    marketCap: '$38.2B',
+    currentPrice: 198.37,
+    dayChangePercent: 2.18,
     description: 'Pioneer of the Wafer Scale Engine (WSE-3), fabricating massive 4-trillion-transistor single-wafer AI processors powering ultra-fast LLM inference clusters.',
-    fiftyTwoWeekHigh: 48.00,
-    fiftyTwoWeekLow: 28.00,
-    twoHundredDayAverage: 36.50
+    fiftyTwoWeekHigh: 210.00,
+    fiftyTwoWeekLow: 80.00,
+    twoHundredDayAverage: 165.00
   }
 };
 
