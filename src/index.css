@@ -91,11 +91,11 @@
   display: flex;
   width: max-content;
   will-change: transform;
-  animation: tickerGlide 85s linear infinite;
+  animation: tickerGlide 114s linear infinite;
 }
 
 .animate-ticker-glide-slow {
-  animation: tickerGlide 120s linear infinite;
+  animation: tickerGlide 160s linear infinite;
 }
 
 .animate-ticker-glide:hover,

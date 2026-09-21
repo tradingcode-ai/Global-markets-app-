@@ -231,6 +231,7 @@ export interface CompanyMeta {
   fiftyTwoWeekLow?: number;
   twoHundredDayAverage?: number;
   subSector?: ShovelSubSector | string;
+  currency?: string;
 }
 
 export interface PushNotificationItem {
@@ -278,6 +279,33 @@ export interface AiEarningsAnalysis {
   bullCase: string;
   bearCase: string;
   generatedAt: string;
+}
+
+export interface QuarterlyFinancialPoint {
+  quarter: string; // e.g. "Q2 '26", etc.
+  releaseLabel?: string; // e.g. "jul'2026", "apr'2026", etc.
+  fiscalDate: string; // e.g. "2026-07-26"
+  fiscalYear: number;
+  quarterNum: 1 | 2 | 3 | 4;
+  revenue: number; // in Billions
+  freeCashFlow: number; // in Billions
+  eps: number; // in $/€
+  netIncome: number; // in Billions
+  isEstimated?: boolean;
+}
+
+export type FinancialMetricKey = 'revenue' | 'freeCashFlow' | 'eps' | 'netIncome';
+
+export interface CompanyFinancialHistory {
+  symbol: string;
+  currency: string;
+  provider: string;
+  lastUpdated: string;
+  nextMonthlyUpdate: string;
+  isLive: boolean;
+  fiscalNote?: string;
+  calendarType?: string;
+  quarters: QuarterlyFinancialPoint[];
 }
 
 export interface EarningsConsensusData {

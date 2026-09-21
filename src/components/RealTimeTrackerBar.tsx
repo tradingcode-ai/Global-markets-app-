@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { LiveQuote } from '../types';
 import { StockLogo } from './StockLogo';
 import { getStockTechnicalMetrics } from '../data/technicalData';
 import { getMarketSessionInfo } from '../utils/marketSession';
 import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
 import { TECH_COMPANIES } from '../data/earningsData';
+import { FINANCIAL_COMPANIES } from '../data/financialsData';
+import { SOVEREIGN_BONDS_DATA } from '../data/bondsData';
 import { COMMODITIES_DATA } from '../data/commoditiesData';
 import { 
   TrendingUp, 
@@ -75,6 +77,124 @@ const ALL_APPLICATION_TICKERS = Array.from(new Set([
   ...GOV_BOND_TICKERS
 ]));
 
+// Comprehensive Quote Resolver across all asset classes
+export const getQuoteForTicker = (
+  sym: string,
+  quotes: Record<string, LiveQuote>
+): LiveQuote | null => {
+  const live = quotes[sym];
+  if (live) return live;
+
+  // 1. Tech Mega-Caps
+  const tech = TECH_COMPANIES[sym];
+  if (tech) {
+    const p = tech.currentPrice;
+    const chgPct = tech.dayChangePercent || 0;
+    const chg = (p * chgPct) / 100;
+    return {
+      symbol: sym,
+      price: p,
+      change: chg,
+      changePercent: chgPct,
+      dayHigh: tech.fiftyTwoWeekHigh || p * 1.05,
+      dayLow: tech.fiftyTwoWeekLow || p * 0.95,
+      volume: 12500000,
+      previousClose: p - chg,
+      currency: ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(sym) ? 'EUR' : 'USD',
+      lastUpdated: new Date().toISOString(),
+      isLive: false,
+      fiftyTwoWeekHigh: tech.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: tech.fiftyTwoWeekLow,
+      twoHundredDayAverage: tech.twoHundredDayAverage
+    };
+  }
+
+  // 2. Semiconductor & AI Infrastructure Shovel Sellers
+  const shovel = (SHOVEL_SELLERS_COMPANIES as any)[sym];
+  if (shovel) {
+    const p = shovel.currentPrice;
+    const chgPct = shovel.dayChangePercent || 0;
+    const chg = (p * chgPct) / 100;
+    return {
+      symbol: sym,
+      price: p,
+      change: chg,
+      changePercent: chgPct,
+      dayHigh: shovel.fiftyTwoWeekHigh || p * 1.05,
+      dayLow: shovel.fiftyTwoWeekLow || p * 0.95,
+      volume: 12500000,
+      previousClose: p - chg,
+      currency: ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(sym) ? 'EUR' : 'USD',
+      lastUpdated: new Date().toISOString(),
+      isLive: false,
+      fiftyTwoWeekHigh: shovel.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: shovel.fiftyTwoWeekLow,
+      twoHundredDayAverage: shovel.twoHundredDayAverage
+    };
+  }
+
+  // 3. Financial Institutions (US & European Banks)
+  const fin = FINANCIAL_COMPANIES[sym];
+  if (fin) {
+    const p = fin.currentPrice;
+    const chgPct = fin.dayChangePercent || 0;
+    const chg = (p * chgPct) / 100;
+    const isEur = ['ABN', 'ING', 'BNP', 'GLE', 'SAN', 'BBVA', 'SX7P'].includes(sym);
+    const isGbp = ['BCS', 'BARC', 'HSBC'].includes(sym);
+    return {
+      symbol: sym,
+      price: p,
+      change: chg,
+      changePercent: chgPct,
+      dayHigh: p * 1.02,
+      dayLow: p * 0.98,
+      volume: 8500000,
+      previousClose: p - chg,
+      currency: isEur ? 'EUR' : isGbp ? 'GBp' : 'USD',
+      lastUpdated: new Date().toISOString(),
+      isLive: false
+    };
+  }
+
+  // 4. Global Commodities
+  const comm = COMMODITIES_DATA.find(c => c.symbol === sym);
+  if (comm) {
+    return {
+      symbol: sym,
+      price: comm.currentPrice,
+      change: comm.change,
+      changePercent: comm.changePercent,
+      dayHigh: comm.dayHigh,
+      dayLow: comm.dayLow,
+      volume: 50000,
+      previousClose: comm.currentPrice - comm.change,
+      currency: comm.currency || 'USD',
+      lastUpdated: new Date().toISOString(),
+      isLive: false
+    };
+  }
+
+  // 5. Sovereign Benchmark Bonds & Yields
+  const bond = SOVEREIGN_BONDS_DATA.find(b => b.symbol === sym);
+  if (bond) {
+    return {
+      symbol: sym,
+      price: bond.currentYield,
+      change: bond.changeBps / 100,
+      changePercent: bond.changePercent,
+      dayHigh: bond.dayHigh,
+      dayLow: bond.dayLow,
+      volume: 100000,
+      previousClose: bond.previousClose,
+      currency: 'USD',
+      lastUpdated: new Date().toISOString(),
+      isLive: false
+    };
+  }
+
+  return null;
+};
+
 type CategoryFilter = 'ALL' | 'SHOVEL_SELLERS' | 'US_TECH' | 'US_FIN' | 'EU_FIN' | 'EU_TECH' | 'COMMODITIES' | 'BONDS';
 
 export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
@@ -95,18 +215,56 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     ? lastUpdated.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '--:--:--';
 
-  let displayedTickers: string[] = [];
-  if (activeCategory === 'SHOVEL_SELLERS') displayedTickers = SHOVEL_SELLER_TICKERS;
-  else if (activeCategory === 'US_TECH') displayedTickers = US_TECH_TICKERS;
-  else if (activeCategory === 'EU_TECH') displayedTickers = EU_TECH_TICKERS;
-  else if (activeCategory === 'US_FIN') displayedTickers = US_FINANCIAL_TICKERS;
-  else if (activeCategory === 'EU_FIN') displayedTickers = EU_FINANCIAL_TICKERS;
-  else if (activeCategory === 'COMMODITIES') displayedTickers = COMMODITY_TICKERS;
-  else if (activeCategory === 'BONDS') displayedTickers = GOV_BOND_TICKERS;
-  else displayedTickers = ALL_APPLICATION_TICKERS;
+  const rawCategoryTickers = useMemo(() => {
+    if (activeCategory === 'SHOVEL_SELLERS') return SHOVEL_SELLER_TICKERS;
+    if (activeCategory === 'US_TECH') return US_TECH_TICKERS;
+    if (activeCategory === 'EU_TECH') return EU_TECH_TICKERS;
+    if (activeCategory === 'US_FIN') return US_FINANCIAL_TICKERS;
+    if (activeCategory === 'EU_FIN') return EU_FINANCIAL_TICKERS;
+    if (activeCategory === 'COMMODITIES') return COMMODITY_TICKERS;
+    if (activeCategory === 'BONDS') return GOV_BOND_TICKERS;
+    return ALL_APPLICATION_TICKERS;
+  }, [activeCategory]);
 
-  // For continuous seamless marquee loop, double the list when gliding
-  const marqueeItems = isGliding ? [...displayedTickers, ...displayedTickers] : displayedTickers;
+  // USER REQUIREMENT:
+  // "en er voor zorgen dat de aandelen of andere asset classen de volgorde is gebaseerd is op volatiliteit 
+  //  dus meeste percentage omhoog of naar beneden als eerst. 
+  //  Ook moeten de snelheden hetzelfde zijn als ik opeen individuele asset class klik hetzelfde blijven 
+  //  en de volgorde op volatiliteit gebaseerd blijven"
+  const sortedTickers = useMemo(() => {
+    return [...rawCategoryTickers].sort((a, b) => {
+      const qA = getQuoteForTicker(a, quotes);
+      const qB = getQuoteForTicker(b, quotes);
+      const volA = Math.abs(qA?.changePercent ?? 0);
+      const volB = Math.abs(qB?.changePercent ?? 0);
+      // Highest volatility first (meeste percentage omhoog of naar beneden als eerst)
+      if (volB !== volA) {
+        return volB - volA;
+      }
+      return a.localeCompare(b);
+    });
+  }, [rawCategoryTickers, quotes]);
+
+  // SPEED CALIBRATION (25% slower than original 85s for 97 items: 0.876s/item -> 1.17s/item)
+  // Constant scrolling velocity across all categories:
+  const SECONDS_PER_ITEM_NORMAL = 1.17; // 25% slower than original
+  const SECONDS_PER_ITEM_SLOW = 1.65;   // Relaxed ticker speed
+  const secondsPerItem = glideSpeed === 'slow' ? SECONDS_PER_ITEM_SLOW : SECONDS_PER_ITEM_NORMAL;
+
+  // Ensure base set contains at least 28 items so that it completely spans wide monitors (e.g., 2560px) before looping
+  const minBaseItems = 28;
+  const repeatsNeeded = Math.max(1, Math.ceil(minBaseItems / Math.max(1, sortedTickers.length)));
+  const baseItems = useMemo(() => {
+    return Array.from({ length: repeatsNeeded }, () => sortedTickers).flat();
+  }, [sortedTickers, repeatsNeeded]);
+
+  // For continuous seamless marquee (-50% CSS translation), duplicate baseItems:
+  const marqueeItems = isGliding ? [...baseItems, ...baseItems] : sortedTickers;
+
+  // The duration to translate -50% (which equals baseItems.length).
+  // Because baseItems.length / duration is constant (1 / secondsPerItem),
+  // linear speed across the screen is 100% IDENTICAL for ALL, US TECH, BONDS, COMMODITIES, etc.!
+  const animationDurationSec = Number((baseItems.length * secondsPerItem).toFixed(2));
 
   return (
     <div 
@@ -167,21 +325,30 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                     ? 'bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                 }`}
-                title={isGliding ? 'Pause continuous exchange ticker glide' : 'Start smooth continuous exchange ticker glide'}
+                title={isGliding ? 'Pauzeer doorlopende ticker beweging' : 'Start vloeiende ticker beweging'}
               >
                 <MoveHorizontal className={`w-3 h-3 ${isGliding ? 'animate-pulse text-emerald-400' : ''}`} />
-                <span>{isGliding ? 'TICKER MOVING' : 'TICKER STATIC'}</span>
+                <span>{isGliding ? 'TICKER ACTIEF' : 'TICKER STATISCH'}</span>
               </button>
 
               {isGliding && (
                 <button
                   onClick={() => setGlideSpeed(glideSpeed === 'normal' ? 'slow' : 'normal')}
-                  className="px-1.5 py-1 rounded text-[9px] font-mono-code text-slate-500 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
-                  title="Toggle ticker glide speed"
+                  className="px-1.5 py-1 rounded text-[9px] font-mono-code text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  title="Wissel tickersnelheid"
                 >
-                  {glideSpeed === 'normal' ? '1x SPEED' : '0.7x SLOW'}
+                  {glideSpeed === 'normal' ? '0.75x SNELHEID' : '0.5x RUSTIG'}
                 </button>
               )}
+
+              {/* Volatility Indicator Badge */}
+              <div 
+                className="hidden xl:flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono-code bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs"
+                title="Volgorde gebaseerd op volatiliteit: hoogste absolute dagpercentage (winst of verlies) eerst"
+              >
+                <Flame className="w-3 h-3 text-amber-600 shrink-0" />
+                <span className="font-semibold tracking-tight">VOLATILITEIT VOLGORDE (|Δ%|)</span>
+              </div>
             </div>
           </div>
 
@@ -264,57 +431,18 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
 
         <div className="max-w-7xl mx-auto overflow-hidden">
           <div 
+            key={`${activeCategory}-${glideSpeed}-${sortedTickers.length}`}
             className={`flex items-center gap-2.5 ${
               isGliding 
                 ? (glideSpeed === 'slow' ? 'animate-ticker-glide-slow' : 'animate-ticker-glide') 
                 : 'overflow-x-auto no-scrollbar scroll-smooth'
             }`}
-            title={isGliding ? 'Hover to pause ticker glide' : ''}
+            style={isGliding ? { animationDuration: `${animationDurationSec}s` } : undefined}
+            title={isGliding ? 'Hover om de ticker te pauzeren' : ''}
           >
             {marqueeItems.map((sym, idx) => {
-              // Retrieve live quote with instant fallback to company/commodity metadata so pills never disappear
-              const q: LiveQuote | null = quotes[sym] || (() => {
-                const meta = TECH_COMPANIES[sym] || (SHOVEL_SELLERS_COMPANIES as any)[sym];
-                if (meta) {
-                  const p = meta.currentPrice;
-                  const chgPct = meta.dayChangePercent || 0;
-                  const chg = (p * chgPct) / 100;
-                  return {
-                    symbol: sym,
-                    price: p,
-                    change: chg,
-                    changePercent: chgPct,
-                    dayHigh: meta.fiftyTwoWeekHigh || p * 1.05,
-                    dayLow: meta.fiftyTwoWeekLow || p * 0.95,
-                    volume: 12500000,
-                    previousClose: p - chg,
-                    currency: ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SX7P'].includes(sym) ? 'EUR' : 'USD',
-                    lastUpdated: new Date().toISOString(),
-                    isLive: false,
-                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-                    twoHundredDayAverage: meta.twoHundredDayAverage
-                  };
-                }
-                const comm = COMMODITIES_DATA.find(c => c.symbol === sym);
-                if (comm) {
-                  return {
-                    symbol: sym,
-                    price: comm.currentPrice,
-                    change: comm.change,
-                    changePercent: comm.changePercent,
-                    dayHigh: comm.dayHigh,
-                    dayLow: comm.dayLow,
-                    volume: 50000,
-                    previousClose: comm.currentPrice - comm.change,
-                    currency: comm.currency || 'USD',
-                    lastUpdated: new Date().toISOString(),
-                    isLive: false
-                  };
-                }
-                return null;
-              })();
-
+              // Retrieve live quote with instant fallback to all asset classes (Tech, Shovel Sellers, Banks, Commodities, Bonds)
+              const q: LiveQuote | null = getQuoteForTicker(sym, quotes);
               if (!q) return null;
 
               const tick = recentTicks[sym];

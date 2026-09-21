@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { TECH_COMPANIES } from '../data/earningsData';
 import { StockLogo } from './StockLogo';
+import { FinancialHistoryChart } from './FinancialHistoryChart';
 
 interface CompanyDetailModalProps {
   result: QuarterlyResult | null;
@@ -271,6 +272,15 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* 5-Year Quarterly Financial History (Revenue, FCF, EPS, Net Income) with Single-Metric Option Bar */}
+          <div className="border-t border-slate-200 pt-4">
+            <FinancialHistoryChart 
+              ticker={result.ticker} 
+              companyName={result.companyName} 
+              currency={cur} 
+            />
+          </div>
 
           {/* Investment Bank Analyst Outlooks (User-Requested Financial Feature) */}
           {result.analystOutlooks && result.analystOutlooks.length > 0 && (

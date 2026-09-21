@@ -363,8 +363,26 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
   },
 
   // ==========================================
-  // 4. SEMICONDUCTORS (15)
+  // 4. SEMICONDUCTORS (16)
   // ==========================================
+  TSM: {
+    ticker: 'TSM',
+    name: 'Taiwan Semiconductor Manufacturing Co.',
+    sector: 'The Shovel Sellers',
+    subSector: 'Semiconductors',
+    region: 'Europe',
+    country: 'Taiwan',
+    exchange: 'NYSE (TSM)',
+    logoBg: 'bg-emerald-950',
+    logoTextColor: 'text-emerald-300',
+    marketCap: '$980B',
+    currentPrice: 191.45,
+    dayChangePercent: 2.38,
+    description: 'World’s undisputed leader in pure-play semiconductor foundry manufacturing, fabricating over 90% of advanced AI accelerators (NVIDIA Blackwell, AMD Instinct, Apple, Google TPU) with exclusive 3nm/2nm logic and CoWoS advanced packaging.',
+    fiftyTwoWeekHigh: 205.84,
+    fiftyTwoWeekLow: 84.00,
+    twoHundredDayAverage: 172.50
+  },
   NVDA: {
     ticker: 'NVDA',
     name: 'NVIDIA Corporation',
@@ -1364,5 +1382,80 @@ export const SHOVEL_SELLERS_RESULTS: QuarterlyResult[] = [
         lastUpdated: 'Updated Q3 2026'
       }
     ]
+  },
+  // 11. TAIWAN SEMICONDUCTOR MANUFACTURING CO. (TSMC - TSM)
+  {
+    id: 'shovel-tsm-q2-2026',
+    ticker: 'TSM',
+    companyName: 'Taiwan Semiconductor Manufacturing Co.',
+    sector: 'The Shovel Sellers',
+    subSector: 'Semiconductors',
+    quarter: 'Q2 2026',
+    fiscalYear: 2026,
+    reportDate: '2026-07-18',
+    status: 'reported',
+    reportTime: 'BMO',
+    guidanceRating: 'raised',
+    isImportant: true,
+    currency: 'USD',
+    epsEstimate: 1.82,
+    epsActual: 1.94,
+    revenueEstimate: 23.40,
+    revenueActual: 24.12,
+    revenueYoY: 32.8,
+    guidanceSummary: 'Raised FY2026 USD revenue growth forecast to 28%-30% YoY, propelled by insatiable AI accelerator demand, premium 3nm/2nm wafer pricing, and doubling of CoWoS packaging volume.',
+    aiCapexHighlight: 'Affirmed full-year 2026 CapEx budget of $30B–$32B USD with 70%-80% allocated to advanced process technologies (3nm N3P, 2nm N2 GAA) and CoWoS capacity expansion.',
+    keyHighlights: [
+      'High-Performance Computing (HPC/AI) represented 52% of total revenue (+48% YoY)',
+      'Gross margin reached 54.3%, exceeding the high end of guidance despite overseas fab ramp expenses',
+      'Advanced technologies (7nm and below) accounted for 67% of total wafer revenue',
+      'Mass production of 2nm (N2) nanosheet GAA scheduled on track with massive customer pipeline'
+    ],
+    segments: [
+      { name: 'High-Performance Computing (HPC / AI)', revenue: '$12.54B', growthYoY: '+48%', beatExpectation: true },
+      { name: 'Smartphone (3nm / 4nm)', revenue: '$8.20B', growthYoY: '+18%', beatExpectation: true },
+      { name: 'IoT & Edge AI', revenue: '$1.45B', growthYoY: '+8%', beatExpectation: true },
+      { name: 'Automotive Electronics', revenue: '$1.20B', growthYoY: '+5%', beatExpectation: false },
+      { name: 'Digital Consumer Electronics', revenue: '$0.73B', growthYoY: '+2%', beatExpectation: true }
+    ],
+    analystOutlooks: [
+      {
+        bankName: 'J.P. Morgan',
+        targetPrice: '$240.00',
+        targetPriceNumeric: 240,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$2.10',
+        nextQuarterRevEst: '$26.40B',
+        thesis: 'Unassailable competitive moat in 3nm/2nm logic nodes and exclusive CoWoS advanced packaging capacity grants TSMC unrivaled pricing leverage and structural gross margins above 54% through the multi-year AI supercycle.',
+        catalysts: ['2nm N2 customer tape-outs', 'CoWoS capacity doubling in Q4', 'Wafer ASP hikes across tier-1 customers'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Goldman Sachs',
+        targetPrice: '$235.00',
+        targetPriceNumeric: 235,
+        timeHorizon: '12 Months',
+        rating: 'Buy',
+        nextQuarterEpsEst: '$2.06',
+        nextQuarterRevEst: '$25.90B',
+        thesis: 'Accelerating migration of hyperscalers toward bespoke silicon and next-gen NVIDIA GB200/B200 chips solidifies TSMC as the single bottleneck beneficiary of global AI infrastructure capital investment.',
+        catalysts: ['Arizona Fab 1 4nm commercial shipments', 'Kumamoto Fab volume yield beats', 'Stronger iPhone 17 N3P silicon demand'],
+        lastUpdated: 'Updated Q3 2026'
+      },
+      {
+        bankName: 'Morgan Stanley',
+        targetPrice: '$230.00',
+        targetPriceNumeric: 230,
+        timeHorizon: '12 Months',
+        rating: 'Overweight',
+        nextQuarterEpsEst: '$2.02',
+        nextQuarterRevEst: '$25.50B',
+        thesis: 'As the neutral arms merchant to both chip designers and cloud providers, TSMC offers the highest risk-adjusted exposure to generative AI with low customer concentration risk.',
+        catalysts: ['Gross margin expansion from 3nm maturity', 'Higher packaging revenue mix', 'Dividend per share growth'],
+        lastUpdated: 'Updated Q3 2026'
+      }
+    ],
+    priceReactionPercent: 3.4
   }
 ];
