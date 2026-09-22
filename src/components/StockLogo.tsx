@@ -73,8 +73,16 @@ const BRAND_ICONS: Record<string, string> = {
   NXPI: 'nxp',
   SSNLF: 'samsung',
   '005930': 'samsung',
+  '005930.KS': 'samsung',
   HXSCF: 'skhynix',
   '000660': 'skhynix',
+  '000660.KS': 'skhynix',
+  '2330.TW': 'tsmc',
+  '2330': 'tsmc',
+  '0700.HK': 'tencent',
+  '0700': 'tencent',
+  '7974.T': 'nintendo',
+  '7974': 'nintendo',
 };
 
 const OFFICIAL_DOMAINS: Record<string, string> = {
@@ -86,6 +94,12 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
   AMZN: 'amazon.com',
   META: 'meta.com',
   TSM: 'tsmc.com',
+  '2330.TW': 'tsmc.com',
+  '2330': 'tsmc.com',
+  '0700.HK': 'tencent.com',
+  '0700': 'tencent.com',
+  '7974.T': 'nintendo.com',
+  '7974': 'nintendo.com',
   AVGO: 'broadcom.com',
   ORCL: 'oracle.com',
   AMD: 'amd.com',
@@ -110,12 +124,28 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
   // Official company websites used for logo fallback when Simple Icons does not
   // contain the company mark or when a ticker is mapped to a different brand.
   CXMT: 'cxmt.com',
+  CMXT: 'cxmt.com',
+  '688825.SS': 'cxmt.com',
+  '688825': 'cxmt.com',
   SMIC: 'smics.com',
   SMICY: 'smics.com',
+  '0981.HK': 'smics.com',
+  '0981': 'smics.com',
   HXSCF: 'skhynix.com',
   '000660': 'skhynix.com',
+  '000660.KS': 'skhynix.com',
+  SSNLF: 'samsung.com',
   '005930': 'samsung.com',
+  '005930.KS': 'samsung.com',
   KIOXIA: 'kioxia.com',
+  '285A.T': 'kioxia.com',
+  '285A': 'kioxia.com',
+  TOELY: 'tel.co.jp',
+  '8035.T': 'tel.co.jp',
+  '8035': 'tel.co.jp',
+  ATEYY: 'advantest.com',
+  '6857.T': 'advantest.com',
+  '6857': 'advantest.com',
 
   JPM: 'jpmorgan.com',
   BAC: 'bankofamerica.com',
@@ -161,7 +191,6 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
   HPE: 'hpe.com',
   IONQ: 'ionq.com',
   QBTS: 'dwavesys.com',
-  SSNLF: 'samsung.com',
   TXN: 'ti.com',
   NXPI: 'nxp.com',
   CBRS: 'cerebras.net',
@@ -179,15 +208,192 @@ const OFFICIAL_FAVICON_FIRST = new Set([
   'IREN',    // IREN is not in Simple Icons
   'SPCX',    // SpaceX corporate mark
   'CXMT',    // CXMT is not in Simple Icons
+  'CMXT',
+  '688825.SS',
+  '688825',
   'KIOXIA',  // KIOXIA is not in Simple Icons
+  '285A.T',
+  '285A',
   'SMIC',
   'SMICY',
+  '0981.HK',
+  '0981',
   'TOELY',   // Tokyo Electron / TEL
+  '8035.T',
+  '8035',
   'ATEYY',   // Advantest
+  '6857.T',
+  '6857',
   'HXSCF',
   '000660',
+  '000660.KS',
   '005930',
+  '005930.KS',
 ]);
+
+// Dedicated vector logo components for Asian companies ensuring 100% reliable rendering with zero network errors
+const SmicLogo: React.FC<{ className?: string }> = ({ className = 'w-full h-full' }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Clean white backdrop */}
+    <rect width="100" height="100" rx="14" fill="#FFFFFF" />
+    {/* SMIC dynamic orbital semiconductor crescent */}
+    <path
+      d="M71 30C66.5 21 57.5 16 47 16C30 16 16 30 16 47C16 64 30 78 47 78C60 78 71 70 76 58"
+      stroke="#E31B23"
+      strokeWidth="6.5"
+      strokeLinecap="round"
+    />
+    {/* Inner silicon core wafer */}
+    <circle cx="47" cy="47" r="16.5" fill="#003865" />
+    {/* Microchip wafer die alignment guide crosshairs */}
+    <path d="M47 34V39M47 55V60M34 47H39M55 47H60" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" />
+    {/* SMIC institutional bold wordmark */}
+    <text
+      x="50"
+      y="92"
+      textAnchor="middle"
+      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      fontWeight="900"
+      fontSize="17"
+      fill="#003865"
+      letterSpacing="0.8"
+    >
+      SMIC
+    </text>
+  </svg>
+);
+
+const CxmtLogo: React.FC<{ className?: string }> = ({ className = 'w-full h-full' }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Clean white backdrop */}
+    <rect width="100" height="100" rx="14" fill="#FFFFFF" />
+    {/* DRAM memory array matrix blocks */}
+    <g transform="translate(3, 2)">
+      {/* Top memory row */}
+      <path d="M22 18H47L37 38H12L22 18Z" fill="#D32F2F" />
+      <path d="M51 18H76L66 38H41L51 18Z" fill="#1E293B" />
+      <circle cx="30" cy="28" r="2.8" fill="#FFFFFF" />
+      <circle cx="59" cy="28" r="2.8" fill="#FFFFFF" />
+      {/* Bottom memory row */}
+      <path d="M31 42H56L46 62H21L31 42Z" fill="#1E293B" />
+      <path d="M60 42H85L75 62H50L60 42Z" fill="#D32F2F" />
+      <circle cx="39" cy="52" r="2.8" fill="#FFFFFF" />
+      <circle cx="68" cy="52" r="2.8" fill="#FFFFFF" />
+    </g>
+    {/* CXMT corporate typography */}
+    <text
+      x="50"
+      y="92"
+      textAnchor="middle"
+      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      fontWeight="900"
+      fontSize="17"
+      fill="#0F172A"
+      letterSpacing="1"
+    >
+      CXMT
+    </text>
+  </svg>
+);
+
+const KioxiaLogo: React.FC<{ className?: string }> = ({ className = 'w-full h-full' }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <rect width="100" height="100" rx="14" fill="#FFFFFF" />
+    <rect x="18" y="24" width="64" height="9" rx="2.5" fill="#C0C0C0" />
+    <rect x="18" y="37" width="64" height="9" rx="2.5" fill="#8E9EAB" />
+    <rect x="18" y="50" width="64" height="9" rx="2.5" fill="#1E293B" />
+    <circle cx="30" cy="28.5" r="2" fill="#FFFFFF" />
+    <circle cx="50" cy="28.5" r="2" fill="#FFFFFF" />
+    <circle cx="70" cy="28.5" r="2" fill="#FFFFFF" />
+    <circle cx="30" cy="41.5" r="2" fill="#FFFFFF" />
+    <circle cx="50" cy="41.5" r="2" fill="#FFFFFF" />
+    <circle cx="70" cy="41.5" r="2" fill="#FFFFFF" />
+    <circle cx="30" cy="54.5" r="2" fill="#FFFFFF" />
+    <circle cx="50" cy="54.5" r="2" fill="#FFFFFF" />
+    <circle cx="70" cy="54.5" r="2" fill="#FFFFFF" />
+    <text
+      x="50"
+      y="88"
+      textAnchor="middle"
+      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      fontWeight="900"
+      fontSize="15"
+      fill="#0F172A"
+      letterSpacing="1.2"
+    >
+      KIOXIA
+    </text>
+  </svg>
+);
+
+const TelLogo: React.FC<{ className?: string }> = ({ className = 'w-full h-full' }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <rect width="100" height="100" rx="14" fill="#FFFFFF" />
+    <circle cx="50" cy="40" r="26" fill="#00843D" />
+    <path d="M38 30H62M50 30V50" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" />
+    <text
+      x="50"
+      y="88"
+      textAnchor="middle"
+      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      fontWeight="900"
+      fontSize="18"
+      fill="#00843D"
+      letterSpacing="1"
+    >
+      TEL
+    </text>
+  </svg>
+);
+
+const AdvantestLogo: React.FC<{ className?: string }> = ({ className = 'w-full h-full' }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <rect width="100" height="100" rx="14" fill="#FFFFFF" />
+    <path d="M50 16L74 40L50 64L26 40Z" fill="#E4002B" />
+    <circle cx="50" cy="40" r="7" fill="#FFFFFF" />
+    <text
+      x="50"
+      y="88"
+      textAnchor="middle"
+      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      fontWeight="900"
+      fontSize="13"
+      fill="#E4002B"
+      letterSpacing="0.6"
+    >
+      ADVANTEST
+    </text>
+  </svg>
+);
+
+const CUSTOM_INLINE_LOGOS: Record<string, (cls?: string) => React.ReactNode> = {
+  // SMIC
+  SMIC: (cls) => <SmicLogo className={cls} />,
+  SMICY: (cls) => <SmicLogo className={cls} />,
+  '0981.HK': (cls) => <SmicLogo className={cls} />,
+  '0981': (cls) => <SmicLogo className={cls} />,
+
+  // CXMT
+  CXMT: (cls) => <CxmtLogo className={cls} />,
+  CMXT: (cls) => <CxmtLogo className={cls} />,
+  '688825.SS': (cls) => <CxmtLogo className={cls} />,
+  '688825': (cls) => <CxmtLogo className={cls} />,
+
+  // Kioxia
+  KIOXIA: (cls) => <KioxiaLogo className={cls} />,
+  '285A.T': (cls) => <KioxiaLogo className={cls} />,
+  '285A': (cls) => <KioxiaLogo className={cls} />,
+
+  // Tokyo Electron
+  TOELY: (cls) => <TelLogo className={cls} />,
+  '8035.T': (cls) => <TelLogo className={cls} />,
+  '8035': (cls) => <TelLogo className={cls} />,
+
+  // Advantest
+  ATEYY: (cls) => <AdvantestLogo className={cls} />,
+  '6857.T': (cls) => <AdvantestLogo className={cls} />,
+  '6857': (cls) => <AdvantestLogo className={cls} />,
+};
 
 const SIZE_MAP = {
   xs: 'w-3.5 h-3.5',
@@ -204,6 +410,23 @@ export const StockLogo: React.FC<StockLogoProps> = ({
   className = '',
 }) => {
   const cleanTicker = ticker.toUpperCase().trim();
+  const sizeClass = SIZE_MAP[size];
+
+  // If a custom vector logo is defined, render immediately without network dependencies
+  const baseTicker = cleanTicker.replace(/^(HK|SH|SS|TSE|T):/, '');
+  const customRenderer = CUSTOM_INLINE_LOGOS[cleanTicker] || CUSTOM_INLINE_LOGOS[baseTicker];
+  if (customRenderer) {
+    return (
+      <div
+        className={`${sizeClass} rounded-md bg-white border border-slate-200/80 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs ${className}`}
+        title={cleanTicker}
+        aria-label={`${cleanTicker} logo`}
+      >
+        {customRenderer('w-[84%] h-[84%] object-contain')}
+      </div>
+    );
+  }
+
   const [iconFailed, setIconFailed] = useState(false);
   const [faviconFailed, setFaviconFailed] = useState(false);
 
@@ -249,8 +472,6 @@ export const StockLogo: React.FC<StockLogoProps> = ({
       else setFaviconFailed(true);
     }
   };
-
-  const sizeClass = SIZE_MAP[size];
 
   if (!currentSrc) {
     return (

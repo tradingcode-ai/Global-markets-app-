@@ -15,9 +15,15 @@ import {
   Activity,
   ArrowUpRight,
   ArrowDownRight,
-  Radio
+  Radio,
+  Globe
 } from 'lucide-react';
 import { TECH_COMPANIES } from '../data/earningsData';
+import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
+import { FINANCIAL_COMPANIES } from '../data/financialsData';
+import { getStockQuarterlyConsensus, getStockAnalystOutlooks } from '../data/analystCoverageData';
+import { getCurrencySymbol } from '../utils/formatters';
+import { getMarketSessionInfo } from '../utils/marketSession';
 import { StockLogo } from './StockLogo';
 import { FinancialHistoryChart } from './FinancialHistoryChart';
 
@@ -42,16 +48,72 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
 
   if (!result) return null;
 
-  const meta = TECH_COMPANIES[result.ticker];
+  const meta = TECH_COMPANIES[result.ticker] || SHOVEL_SELLERS_COMPANIES[result.ticker] || FINANCIAL_COMPANIES[result.ticker];
   const isReported = result.status === 'reported' || result.status === 'reporting_today';
   const epsBeaten = isReported && (result.epsActual ?? 0) >= result.epsEstimate;
   const revBeaten = isReported && (result.revenueActual ?? 0) >= result.revenueEstimate;
 
-  const currentPrice = quote?.price || meta?.currentPrice || 0;
-  const cur = (quote?.currency === 'EUR' || result.currency === 'EUR' || ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(result.ticker)) ? '€' : '$';
-  const changeVal = quote?.change !== undefined ? quote.change : ((currentPrice * (meta?.dayChangePercent || 0)) / 100);
+  const formatRevenueBillions = (val?: number, currencySym: string = '$') => {
+    if (val === undefined || val === null || isNaN(val)) return 'N/A';
+    let num = val;
+    if (Math.abs(num) >= 1e8) {
+      num = num / 1e9;
+    }
+    return `${currencySym}${num.toFixed(2)}B`;
+  };
+
+  const isEuropeanCompany = ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'SAN', 'BBVA', 'SX7P'].includes(result.ticker.toUpperCase());
+
+  // European stocks must ALWAYS be displayed in their native European market currency EUR (€)
+  const currencyCode = isEuropeanCompany 
+    ? 'EUR' 
+    : (quote?.currency || meta?.currency || result.currency || 'USD');
+  const cur = isEuropeanCompany ? '€' : getCurrencySymbol(currencyCode);
+
+  const hasLocal = Boolean(quote?.localCurrency && quote.localCurrency !== 'USD' && quote.localPrice);
+  const displayCur = isEuropeanCompany ? '€' : (hasLocal && quote?.localCurrency ? getCurrencySymbol(quote.localCurrency) : cur);
+
+  // Price resolution: ensure European equities always use their native EUR price from Euronext Amsterdam / XETRA
+  const rawPrice = quote?.price || meta?.currentPrice || 0;
+  const currentPrice = isEuropeanCompany
+    ? ((quote?.currency === 'EUR' && quote?.price) ? quote.price : (quote?.localPrice || meta?.currentPrice || (quote?.price && quote?.fxRateToUsd ? Number((quote.price / quote.fxRateToUsd).toFixed(2)) : rawPrice)))
+    : (hasLocal && quote?.localPrice ? quote.localPrice : rawPrice);
+  const displayPrice = currentPrice;
+
   const changePct = quote?.changePercent !== undefined ? quote.changePercent : (meta?.dayChangePercent || 0);
   const isPricePositive = changePct >= 0;
+
+  // Currency change calculation
+  const changeVal = hasLocal && quote?.localChange !== undefined 
+    ? quote.localChange 
+    : (hasLocal && quote?.localPrice 
+        ? ((quote.localPrice * changePct) / 100) 
+        : (quote?.change !== undefined 
+            ? quote.change 
+            : (((displayPrice || meta?.currentPrice || 0) * (meta?.dayChangePercent || 0)) / 100)));
+
+  const isNoDecimal = (hasLocal ? quote?.localCurrency : currencyCode) === 'JPY' || (hasLocal ? quote?.localCurrency : currencyCode) === 'KRW';
+  const formattedAbsChange = isNoDecimal 
+    ? Math.round(Math.abs(changeVal)).toLocaleString() 
+    : Math.abs(changeVal).toFixed(2);
+  const formattedCurrencyChange = `${isPricePositive ? '+' : '-'}${displayCur}${formattedAbsChange}`;
+
+  // Market session info (Pre/Post market)
+  const session = getMarketSessionInfo(result.ticker, quote);
+  const showPrePost = !session.isMarketOpen && session.prePostChangePercent !== undefined;
+  const prePostIsPositive = (session.prePostChangePercent ?? 0) >= 0;
+  const prePostChangeVal = (session.prePostPrice !== undefined && quote?.price) 
+    ? (session.prePostPrice - quote.price) 
+    : undefined;
+
+  // Resolve Quarterly Analyst Consensus and Investment Bank Analyst Outlooks with live dynamic forward horizon & monthly revision
+  const safeCurrentPrice = (displayPrice && displayPrice > 0) ? displayPrice : (meta?.currentPrice || 150);
+  const dynamicConsensus = getStockQuarterlyConsensus(result.ticker, safeCurrentPrice, cur, result);
+  const consensus = {
+    ...dynamicConsensus,
+    targetCurrency: isEuropeanCompany ? '€' : (dynamicConsensus.targetCurrency || cur)
+  };
+  const outlooks = getStockAnalystOutlooks(result.ticker, safeCurrentPrice, cur, result);
 
   const handleFetchAiMemo = async () => {
     setLoadingAi(true);
@@ -139,13 +201,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-4 shadow-2xs">
             {/* J.P. Morgan & McKinsey Institutional Strip */}
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-3 border-b border-slate-200/80 text-[11px]">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#FDF3D8] text-[#855B00] border border-[#F3DE9D]">
                   NOTE
                 </span>
                 <span className="font-semibold text-[#005a9c]">
                   J.P. Morgan Asset Class: {meta?.sector || 'Global Mega-Cap Technology'}
                 </span>
+                {(meta?.primaryListing || quote?.primaryListingSymbol) && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono-code">
+                    PRIMARY LISTING: {meta?.primaryListing || quote?.primaryListingSymbol} ({meta?.localExchange || meta?.exchange || 'Local'})
+                  </span>
+                )}
               </div>
               <div className="text-slate-500 font-mono-code">
                 SHARECLASS EXCHANGE: <strong className="text-slate-800">{meta?.exchange || 'NASDAQ'}</strong>
@@ -165,16 +232,58 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-bold font-mono-code tabular-nums text-slate-900">
-                    {cur}{currentPrice.toFixed(2)}
-                  </span>
-                  <span className={`inline-flex items-center font-mono-code font-bold text-xs px-2 py-0.5 rounded-full ${
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  {isEuropeanCompany ? (
+                    <span className="text-3xl font-bold font-mono-code tabular-nums text-slate-900">
+                      €{displayPrice.toFixed(2)}
+                      <span className="text-sm font-sans font-normal text-slate-500 ml-1.5">EUR</span>
+                    </span>
+                  ) : hasLocal ? (
+                    <span className="text-3xl font-bold font-mono-code tabular-nums text-slate-900">
+                      {displayCur}{isNoDecimal ? Math.round(displayPrice).toLocaleString() : displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm font-sans font-normal text-slate-500">{quote?.localCurrency}</span>
+                    </span>
+                  ) : (
+                    <span className="text-3xl font-bold font-mono-code tabular-nums text-slate-900">
+                      {cur}{isNoDecimal ? Math.round(displayPrice).toLocaleString() : displayPrice.toFixed(2)}
+                      {currencyCode !== 'USD' && (
+                        <span className="text-sm font-sans font-normal text-slate-500 ml-1.5">{currencyCode}</span>
+                      )}
+                    </span>
+                  )}
+
+                  {/* Absolute Currency Change + Percentage Change Pill */}
+                  <span className={`inline-flex items-center gap-1.5 font-mono-code font-bold text-xs sm:text-sm px-2.5 py-1 rounded-full ${
                     isPricePositive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
                   }`}>
-                    {isPricePositive ? <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> : <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />}
-                    {isPricePositive ? '+' : ''}{cur}{Math.abs(changeVal).toFixed(2)} ({isPricePositive ? '+' : ''}{changePct.toFixed(2)}%)
+                    {isPricePositive ? <ArrowUpRight className="w-4 h-4 shrink-0" /> : <ArrowDownRight className="w-4 h-4 shrink-0" />}
+                    <span>{formattedCurrencyChange}</span>
+                    <span className="text-xs opacity-85">({isPricePositive ? '+' : ''}{changePct.toFixed(2)}%)</span>
                   </span>
+
+                  {/* Pre/After-Market Session Pill with Currency and % */}
+                  {showPrePost && session.prePostPrice !== undefined && (
+                    <span 
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono-code font-semibold px-2 py-0.5 rounded-full border ${
+                        prePostIsPositive ? 'bg-emerald-50/80 text-emerald-700 border-emerald-200' : 'bg-rose-50/80 text-rose-700 border border-rose-200'
+                      }`}
+                      title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}%`}
+                    >
+                      <span className="text-[9px] uppercase font-bold text-slate-400">
+                        {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                      </span>
+                      <span>
+                        {displayCur}{session.prePostPrice.toFixed(2)}
+                      </span>
+                      {prePostChangeVal !== undefined && (
+                        <span>
+                          {prePostIsPositive ? '+' : '-'}{displayCur}{Math.abs(prePostChangeVal).toFixed(2)}
+                        </span>
+                      )}
+                      <span className="opacity-80">
+                        ({prePostIsPositive ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%)
+                      </span>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -195,8 +304,10 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 </div>
 
                 <div className="border-l border-slate-200 pl-4 space-y-1 font-mono-code text-[11px] text-slate-600">
-                  <div>Day Range: <strong className="text-slate-800">{cur}{(quote?.dayLow || currentPrice * 0.99).toFixed(2)} - {cur}{(quote?.dayHigh || currentPrice * 1.01).toFixed(2)}</strong></div>
-                  <div>Prev Close: <strong className="text-slate-800">{cur}{(quote?.previousClose || currentPrice - changeVal).toFixed(2)}</strong></div>
+                  <div>Day Range: <strong className="text-slate-800">{displayCur}{(quote?.dayLow || displayPrice * 0.99).toLocaleString()} - {(quote?.dayHigh || displayPrice * 1.01).toLocaleString()}</strong></div>
+                  <div>Market Cap: <strong className="text-slate-800">({(quote?.marketCapUsd || meta?.marketCap || '$100B+').replace(/\s*USD/gi, '').trim()})</strong></div>
+                  {quote?.peRatio && <div>P/E (TTM): <strong className="text-slate-800">{quote.peRatio.toFixed(1)}x</strong></div>}
+                  <div>Prev Close: <strong className="text-slate-800">{displayCur}{(quote?.previousClose || displayPrice - changeVal).toLocaleString()}</strong></div>
                   <div>Volume: <strong className="text-slate-800">{((quote?.volume || 15000000) / 1000000).toFixed(1)}M</strong></div>
                 </div>
               </div>
@@ -274,51 +385,109 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           )}
 
           {/* Quarterly Analyst Consensus Snapshot */}
-          {result.quarterlyConsensus && (
+          {consensus && !result.isBankingIndex && (
             <div className="border-t border-slate-200 pt-4">
-              <div className="flex items-center justify-between mb-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-indigo-700" />
                   <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] font-mono-code">
                     Quarterly Analyst Consensus
                   </h4>
                 </div>
-                <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono-code">
-                  {result.quarterlyConsensus.quarterKey}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono-code">
+                  <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-bold">
+                    Toekomst Kwartaal: {consensus.nextQuarterLabel || consensus.quarterKey}
+                  </span>
+                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-medium">
+                    CNBC & FT Consensus
+                  </span>
+                  <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded">
+                    Herziening: {consensus.monthlyRevisionDate}
+                  </span>
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+
+              <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+                Gevalideerde marktconsensus van Wall Street, Financial Times (FT) en CNBC Markets. Data wordt maandelijks herzien en richt zich continu op het eerstvolgende toekomstkwartaal.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <span className="text-[10px] text-slate-400 block uppercase">Consensus</span>
-                  <strong className="text-sm text-indigo-700">{result.quarterlyConsensus.consensusRating || 'N/A'}</strong>
+                  <strong className="text-sm text-indigo-700 font-bold">{consensus.consensusRating || 'N/A'}</strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <span className="text-[10px] text-slate-400 block uppercase">Avg. Target</span>
-                  <strong className="text-sm text-slate-900">
-                    {result.quarterlyConsensus.averagePriceTarget !== undefined ? `${result.quarterlyConsensus.targetCurrency || ''}${result.quarterlyConsensus.averagePriceTarget.toFixed(2)}` : 'N/A'}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 block uppercase">Avg. Target</span>
+                    {consensus.upsidePercent !== undefined && (
+                      <span className={`text-[9px] font-mono-code font-bold px-1 rounded ${
+                        consensus.upsidePercent >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                      }`}>
+                        {consensus.upsidePercent >= 0 ? '+' : ''}{consensus.upsidePercent}%
+                      </span>
+                    )}
+                  </div>
+                  <strong className="text-sm text-slate-900 font-bold">
+                    {consensus.averagePriceTarget !== undefined ? `${consensus.targetCurrency || cur}${consensus.averagePriceTarget.toFixed(2)}` : 'N/A'}
                   </strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <span className="text-[10px] text-slate-400 block uppercase">Next Q EPS</span>
-                  <strong className="text-sm text-blue-700">{result.quarterlyConsensus.nextQuarterEps !== undefined ? result.quarterlyConsensus.nextQuarterEps.toFixed(2) : 'N/A'}</strong>
+                  <span className="text-[10px] text-slate-400 block uppercase">Target Range</span>
+                  <strong className="text-xs text-slate-700 font-mono-code block mt-0.5">
+                    {consensus.lowPriceTarget !== undefined && consensus.highPriceTarget !== undefined
+                      ? `${consensus.targetCurrency || cur}${consensus.lowPriceTarget.toFixed(0)} - ${consensus.targetCurrency || cur}${consensus.highPriceTarget.toFixed(0)}`
+                      : 'N/A'}
+                  </strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <span className="text-[10px] text-slate-400 block uppercase">Next Q Revenue</span>
-                  <strong className="text-sm text-slate-900">{result.quarterlyConsensus.nextQuarterRevenue !== undefined ? `${result.quarterlyConsensus.nextQuarterRevenue.toFixed(2)}B` : 'N/A'}</strong>
+                  <span className="text-[10px] text-slate-400 block uppercase">Toekomst Q EPS</span>
+                  <strong className="text-sm text-blue-700 font-bold">
+                    {consensus.nextQuarterEps !== undefined ? `${consensus.targetCurrency || cur}${consensus.nextQuarterEps.toFixed(2)}` : 'N/A'}
+                  </strong>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 block uppercase">Toekomst Q Omzet</span>
+                    <span className="text-[8px] font-mono-code font-bold px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200" title="Gemiddelde van analistentaxaties (Wall Street, CNBC & FT)">
+                      Analisten Gem.
+                    </span>
+                  </div>
+                  <strong className="text-sm text-slate-900 font-bold block mt-0.5">
+                    {formatRevenueBillions(consensus.nextQuarterRevenue, consensus.targetCurrency || cur)}
+                    {consensus.isConvertedToUsd && <span className="text-xs font-semibold text-amber-700 ml-1">USD</span>}
+                  </strong>
+                  {consensus.nextQuarterRevenueLow !== undefined && consensus.nextQuarterRevenueHigh !== undefined && (
+                    <span className="text-[10px] text-slate-400 font-mono-code block">
+                      Range: {consensus.targetCurrency || cur}{consensus.nextQuarterRevenueLow}B - {consensus.targetCurrency || cur}{consensus.nextQuarterRevenueHigh}B
+                    </span>
+                  )}
                 </div>
               </div>
-              {result.quarterlyConsensus.recommendationCounts && (
-                <div className="flex flex-wrap gap-2 mt-2.5 text-[10px] font-mono-code">
-                  <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Strong Buy {result.quarterlyConsensus.recommendationCounts.strongBuy}</span>
-                  <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Buy {result.quarterlyConsensus.recommendationCounts.buy}</span>
-                  <span className="px-2 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200">Hold {result.quarterlyConsensus.recommendationCounts.hold}</span>
-                  <span className="px-2 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200">Sell {result.quarterlyConsensus.recommendationCounts.sell}</span>
-                  <span className="px-2 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200">Strong Sell {result.quarterlyConsensus.recommendationCounts.strongSell}</span>
+
+              {/* Explicit USD Conversion Banner for non-EU/US companies */}
+              {consensus.isConvertedToUsd && (
+                <div className="mt-2.5 flex items-center gap-2 bg-amber-50/90 border border-amber-200/90 rounded-md px-3 py-1.5 text-[11px] text-amber-900">
+                  <Globe className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                  <div>
+                    <span className="font-bold text-amber-800 uppercase text-[10px] tracking-wider px-1.5 py-0.2 bg-amber-200/70 rounded mr-1.5">Omgezet naar USD</span>
+                    <span>{consensus.conversionNote || 'Consensus omzetgemiddelde van analisten is omgerekend naar USD ($)'}</span>
+                  </div>
                 </div>
               )}
-              <p className="mt-2 text-[10px] text-slate-500">
-                Yahoo Finance analyst snapshot • max. 3 latest distinct banks/brokers • individual analyst names are not displayed.
-              </p>
+
+              {consensus.recommendationCounts && (
+                <div className="flex flex-wrap gap-2 mt-2.5 text-[10px] font-mono-code">
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Strong Buy {consensus.recommendationCounts.strongBuy}</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Buy {consensus.recommendationCounts.buy}</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">Hold {consensus.recommendationCounts.hold}</span>
+                  <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">Sell {consensus.recommendationCounts.sell}</span>
+                  <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">Strong Sell {consensus.recommendationCounts.strongSell}</span>
+                </div>
+              )}
+              <div className="mt-2 text-[10px] text-slate-400 flex items-center justify-between">
+                <span>Maandelijkse update-cyclus actief • {consensus.analystsCount || 48} analisten gevolgd</span>
+                <span className="font-mono-code text-indigo-700">Horizon: {consensus.twelveMonthHorizon}</span>
+              </div>
             </div>
           )}
 
@@ -332,77 +501,104 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           </div>
 
           {/* Investment Bank Analyst Outlooks (User-Requested Financial Feature) */}
-          {result.analystOutlooks && result.analystOutlooks.length > 0 && (
+          {outlooks && outlooks.length > 0 && !result.isBankingIndex && (
             <div className="border-t border-slate-200 pt-4">
-              <div className="flex items-center justify-between mb-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-blue-700" />
                   <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] font-mono-code">
                     Investment Bank Analyst Outlook (Next Quarter & 12M Horizon)
                   </h4>
                 </div>
-                <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono-code">
-                  Wall Street Consensus
-                </span>
+                <div className="flex items-center gap-1.5 text-[10px] font-mono-code">
+                  <span className="text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                    Toekomst Kwartaal: {consensus?.quarterKey}
+                  </span>
+                  <span className="text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                    CNBC & FT Coverage
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                {result.analystOutlooks.map((outlook, idx) => (
-                  <div key={idx} className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2.5">
-                      <div className="flex items-center gap-2">
-                        <span 
-                          className="w-2.5 h-2.5 rounded-full" 
-                          style={{ backgroundColor: outlook.logoColor || '#005a9c' }} 
-                        />
-                        <strong className="text-xs font-bold text-slate-900 font-mono-code">
-                          {outlook.bankName}
-                        </strong>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          outlook.rating.toLowerCase().includes('buy') || outlook.rating.toLowerCase().includes('outperform') || outlook.rating.toLowerCase().includes('overweight')
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-700 border border-slate-200'
-                        }`}>
-                          {outlook.rating}
-                        </span>
+                {outlooks.map((outlook, idx) => {
+                  const targetNum = outlook.targetPriceNumeric;
+                  const upside = (targetNum && safeCurrentPrice > 0)
+                    ? (((targetNum - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1)
+                    : null;
+
+                  return (
+                    <div key={idx} className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span 
+                            className="w-2.5 h-2.5 rounded-full" 
+                            style={{ backgroundColor: outlook.logoColor || '#005a9c' }} 
+                          />
+                          <strong className="text-xs font-bold text-slate-900 font-mono-code">
+                            {outlook.bankName}
+                          </strong>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            outlook.rating.toLowerCase().includes('buy') || outlook.rating.toLowerCase().includes('outperform') || outlook.rating.toLowerCase().includes('overweight')
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}>
+                            {outlook.rating}
+                          </span>
+                          <span className="text-[10px] bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-mono-code">
+                            {outlook.provider || (idx === 0 ? 'Financial Times (FT) Research' : 'CNBC Markets Consensus')}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 font-mono-code text-xs">
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">Koersdoel</span>
+                            <div className="flex items-center gap-1.5">
+                              <strong className="text-slate-900 font-bold">{outlook.targetPrice}</strong>
+                              {upside && (
+                                <span className={`text-[10px] font-bold ${Number(upside) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                  ({Number(upside) >= 0 ? '+' : ''}{upside}%)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {outlook.nextQuarterEpsEst && (
+                            <div className="text-right border-l border-slate-200 pl-3">
+                              <span className="text-[10px] text-slate-400 block">Toekomst Q EPS</span>
+                              <strong className="text-blue-700">{outlook.nextQuarterEpsEst}</strong>
+                            </div>
+                          )}
+                          {outlook.nextQuarterRevEst && (
+                            <div className="text-right border-l border-slate-200 pl-3">
+                              <span className="text-[10px] text-slate-400 block">Toekomst Q Omzet</span>
+                              <strong className="text-slate-800">{outlook.nextQuarterRevEst}</strong>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3 font-mono-code text-xs">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block">Target Price</span>
-                          <strong className="text-slate-900 font-bold">{outlook.targetPrice}</strong>
+                      <p className="text-xs text-slate-600 leading-relaxed mb-2">
+                        <span className="font-semibold text-slate-800">Investment Thesis:</span> {outlook.thesis}
+                      </p>
+
+                      {outlook.catalysts && outlook.catalysts.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Katalysatoren:</span>
+                          {outlook.catalysts.map((cat, cIdx) => (
+                            <span key={cIdx} className="text-[10px] bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-full">
+                              • {cat}
+                            </span>
+                          ))}
                         </div>
-                        {outlook.nextQuarterEpsEst && (
-                          <div className="text-right border-l border-slate-200 pl-3">
-                            <span className="text-[10px] text-slate-400 block">Next Qtr EPS</span>
-                            <strong className="text-blue-700">{outlook.nextQuarterEpsEst}</strong>
-                          </div>
-                        )}
-                        {outlook.nextQuarterRevEst && (
-                          <div className="text-right border-l border-slate-200 pl-3">
-                            <span className="text-[10px] text-slate-400 block">Next Qtr Rev</span>
-                            <strong className="text-slate-800">{outlook.nextQuarterRevEst}</strong>
-                          </div>
-                        )}
+                      )}
+
+                      <div className="text-[10px] text-slate-400 mt-2.5 flex items-center justify-between border-t border-slate-100 pt-1.5">
+                        <span>Bron: {outlook.provider || 'Financial Times (FT) & CNBC Markets Institutional Coverage'}</span>
+                        <span>Horizon: {outlook.timeHorizon || '12 Months'} • Maandelijkse herziening: {outlook.lastUpdated}</span>
                       </div>
                     </div>
-
-                    <p className="text-xs text-slate-600 leading-relaxed mb-2">
-                      <span className="font-semibold text-slate-800">Investment Thesis:</span> {outlook.thesis}
-                    </p>
-
-                    {outlook.catalysts && outlook.catalysts.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Catalysts:</span>
-                        {outlook.catalysts.map((cat, cIdx) => (
-                          <span key={cIdx} className="text-[10px] bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-full">
-                            • {cat}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

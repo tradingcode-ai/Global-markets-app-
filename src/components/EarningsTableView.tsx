@@ -295,6 +295,10 @@ export const EarningsTableView: React.FC<EarningsTableViewProps> = ({
                     {(() => {
                       const session = getMarketSessionInfo(item.ticker, quote);
                       const showPrePost = !session.isMarketOpen && session.prePostChangePercent !== undefined;
+                      const liveChangeVal = quote?.change !== undefined 
+                        ? quote.change 
+                        : ((livePrice * (meta?.dayChangePercent || 0)) / 100);
+                      const formattedCurChg = `${isPricePositive ? '+' : '-'}${cur}${Math.abs(liveChangeVal).toFixed(2)}`;
 
                       return (
                         <div className="flex flex-col">
@@ -302,12 +306,13 @@ export const EarningsTableView: React.FC<EarningsTableViewProps> = ({
                             <span className="font-bold font-mono-code text-slate-900 tabular-nums">
                               {cur}{livePrice.toFixed(2)}
                             </span>
-                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold font-mono-code ${
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold font-mono-code ${
                               isPricePositive 
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                                 : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}>
-                              {isPricePositive ? '+' : ''}{liveChangePct.toFixed(2)}%
+                              <span>{formattedCurChg}</span>
+                              <span className="text-[9px] opacity-80">({isPricePositive ? '+' : ''}{liveChangePct.toFixed(2)}%)</span>
                             </span>
 
                             {/* Pre/After-Market Rate (Disappears when the market of that stock is open) */}

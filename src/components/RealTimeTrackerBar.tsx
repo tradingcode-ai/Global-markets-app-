@@ -9,6 +9,7 @@ import { TECH_COMPANIES } from '../data/earningsData';
 import { FINANCIAL_COMPANIES } from '../data/financialsData';
 import { SOVEREIGN_BONDS_DATA } from '../data/bondsData';
 import { COMMODITIES_DATA } from '../data/commoditiesData';
+import { getCurrencySymbol } from '../utils/formatters';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -18,7 +19,9 @@ import {
   AlertTriangle,
   Flame,
   MoveHorizontal,
-  Landmark
+  Landmark,
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 
 interface RealTimeTrackerBarProps {
@@ -128,7 +131,7 @@ export const getQuoteForTicker = (
       dayLow: shovel.fiftyTwoWeekLow || p * 0.95,
       volume: 12500000,
       previousClose: p - chg,
-      currency: ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(sym) ? 'EUR' : 'USD',
+      currency: shovel.currency || shovel.localCurrency || (['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(sym) ? 'EUR' : 'USD'),
       lastUpdated: new Date().toISOString(),
       isLive: false,
       fiftyTwoWeekHigh: shovel.fiftyTwoWeekHigh,
@@ -154,7 +157,7 @@ export const getQuoteForTicker = (
       dayLow: p * 0.98,
       volume: 8500000,
       previousClose: p - chg,
-      currency: isEur ? 'EUR' : isGbp ? 'GBp' : 'USD',
+      currency: fin.currency || (isEur ? 'EUR' : isGbp ? 'GBp' : 'USD'),
       lastUpdated: new Date().toISOString(),
       isLive: false
     };
@@ -465,16 +468,18 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
               const isFlashingDown = tick === 'down';
               const isCommodity = COMMODITY_TICKERS.includes(sym);
               const isBond = GOV_BOND_TICKERS.includes(sym);
-              const curSym = isBond ? '' : q.currency === 'EUR' ? '€' : q.currency === 'CNY' ? '¥' : q.currency === 'GBp' ? 'p' : '$';
+              const curSym = isBond ? '' : getCurrencySymbol(q.currency);
               const priceFormatted = isBond ? `${q.price.toFixed(3)}%` : `${curSym}${q.price.toFixed(2)}`;
               
               // Market Session & Pre/After-Market Calculation
               const session = (!isCommodity && !isBond) ? getMarketSessionInfo(sym, q) : null;
               const showPrePost = session && !session.isMarketOpen && session.prePostChangePercent !== undefined;
 
-              // Technical check: below 200 DMA
+              // Technical check: 200 DMA and 52-week High/Low
               const tech = (!isCommodity && !isBond) ? getStockTechnicalMetrics(sym, q.price, q) : null;
               const isBelow200D = tech?.belowTwoHundredDayAverage;
+              const is52WHigh = tech?.is52WeekHigh;
+              const is52WLow = tech?.is52WeekLow;
 
               return (
                 <button
@@ -521,7 +526,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                       className={`inline-flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1 py-0.5 rounded bg-slate-100 border border-slate-200 ${
                         session.prePostChangePercent! >= 0 ? 'text-emerald-700' : 'text-rose-700'
                       }`}
-                      title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% ($${session.prePostPrice?.toFixed(2)})`}
+                      title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
                     >
                       <span className="text-[8px] uppercase text-slate-400 font-bold">
                         {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
@@ -535,11 +540,33 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                   {/* 200 DMA Technical Warning Pill */}
                   {isBelow200D && (
                     <span 
-                      title={`Warning: ${sym} ($${q.price.toFixed(2)}) is trading below its 200 DMA ($${tech?.twoHundredDayAverage.toFixed(2)})`}
+                      title={`Warning: ${sym} (${curSym}${q.price.toFixed(2)}) is trading below its 200 DMA (${curSym}${tech?.twoHundredDayAverage.toFixed(2)})`}
                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold"
                     >
                       <AlertTriangle className="w-2.5 h-2.5 text-amber-700" />
                       <span>&lt;200D</span>
+                    </span>
+                  )}
+
+                  {/* 52-Week High Indicator Pill with Icon */}
+                  {is52WHigh && (
+                    <span 
+                      title={`52-Week High: ${sym} (${curSym}${q.price.toFixed(2)}) bereikt 52-weken hoogtepunt (${curSym}${tech?.fiftyTwoWeekHigh.toFixed(2)})`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[9px] font-bold"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-700" />
+                      <span>52W-H</span>
+                    </span>
+                  )}
+
+                  {/* 52-Week Low Indicator Pill with Icon */}
+                  {is52WLow && (
+                    <span 
+                      title={`52-Week Low: ${sym} (${curSym}${q.price.toFixed(2)}) bereikt 52-weken dieptepunt (${curSym}${tech?.fiftyTwoWeekLow.toFixed(2)})`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 text-[9px] font-bold"
+                    >
+                      <AlertCircle className="w-2.5 h-2.5 text-rose-700" />
+                      <span>52W-L</span>
                     </span>
                   )}
                 </button>

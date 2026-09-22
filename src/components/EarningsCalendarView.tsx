@@ -3,6 +3,7 @@ import { QuarterlyResult, LiveQuote } from '../types';
 import { Clock, Bell, BellOff, ArrowUpRight, ArrowDownRight, Sparkles, ChevronRight, Activity } from 'lucide-react';
 import { TECH_COMPANIES } from '../data/earningsData';
 import { StockLogo } from './StockLogo';
+import { MetricCards } from './MetricCards';
 
 interface EarningsCalendarViewProps {
   results: QuarterlyResult[];
@@ -36,8 +37,13 @@ export const EarningsCalendarView: React.FC<EarningsCalendarViewProps> = ({
     const isReported = item.status === 'reported' || item.status === 'reporting_today';
 
     const livePrice = quote?.price || meta?.currentPrice || 0;
+    const curSym = quote?.currency === 'EUR' || item.currency === 'EUR' || ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(item.ticker) ? '€' : '$';
     const liveChangePct = quote?.changePercent !== undefined ? quote.changePercent : (meta?.dayChangePercent || 0);
     const isPricePositive = liveChangePct >= 0;
+    const liveChangeVal = quote?.change !== undefined 
+      ? quote.change 
+      : ((livePrice * (meta?.dayChangePercent || 0)) / 100);
+    const formattedCurChg = `${isPricePositive ? '+' : '-'}${curSym}${Math.abs(liveChangeVal).toFixed(2)}`;
 
     return (
       <div 
@@ -50,15 +56,16 @@ export const EarningsCalendarView: React.FC<EarningsCalendarViewProps> = ({
             <div className="flex items-center gap-2.5">
               <StockLogo ticker={item.ticker} size="lg" className="shrink-0" />
               <div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="font-bold font-mono-code text-slate-900 text-sm">{item.ticker}</span>
                   <span className="text-xs text-slate-700 font-mono-code font-semibold">
-                    ${livePrice.toFixed(2)}
+                    {curSym}{livePrice.toFixed(2)}
                   </span>
-                  <span className={`text-[10px] font-mono-code font-bold px-1.5 py-0.2 rounded-full ${
+                  <span className={`text-[10px] font-mono-code font-bold px-1.5 py-0.2 rounded-full inline-flex items-center gap-1 ${
                     isPricePositive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
                   }`}>
-                    {isPricePositive ? '+' : ''}{liveChangePct.toFixed(2)}%
+                    <span>{formattedCurChg}</span>
+                    <span className="opacity-80">({isPricePositive ? '+' : ''}{liveChangePct.toFixed(2)}%)</span>
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">
@@ -164,6 +171,9 @@ export const EarningsCalendarView: React.FC<EarningsCalendarViewProps> = ({
 
   return (
     <div id="corporate-calendar-view" className="space-y-6 mb-8">
+      {/* 4 KPI Summary Cards (Moved here to the Earnings Calendar) */}
+      <MetricCards results={results} />
+
       {/* Category: Today */}
       {todayResults.length > 0 && (
         <div>

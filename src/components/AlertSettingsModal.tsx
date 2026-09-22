@@ -223,6 +223,38 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
                 />
               </label>
+
+              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 block">52-Week High & Low Alerts</span>
+                  <span className="text-[11px] text-slate-500">Notificatie 1x per marktsessie bij nieuw 52-weken hoogte- of dieptepunt</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={preferences.alertOnFiftyTwoWeekHighLow ?? true}
+                  onChange={(e) => onUpdatePreferences({
+                    ...preferences,
+                    alertOnFiftyTwoWeekHighLow: e.target.checked
+                  })}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 block">Grote Koersbeweging (&gt; 5%)</span>
+                  <span className="text-[11px] text-slate-500">Notificatie 1x per marktsessie wanneer een aandeel of asset &gt; 5% beweegt</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={preferences.alertOnFivePercentMove ?? true}
+                  onChange={(e) => onUpdatePreferences({
+                    ...preferences,
+                    alertOnFivePercentMove: e.target.checked
+                  })}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
+                />
+              </label>
             </div>
           </div>
 

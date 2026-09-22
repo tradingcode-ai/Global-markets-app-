@@ -4,7 +4,7 @@ import { TrendingUp, Award, Activity, Calendar } from 'lucide-react';
 
 interface MetricCardsProps {
   results: QuarterlyResult[];
-  onSelectUpcoming: () => void;
+  onSelectUpcoming?: () => void;
 }
 
 export const MetricCards: React.FC<MetricCardsProps> = ({ results, onSelectUpcoming }) => {

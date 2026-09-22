@@ -4,6 +4,8 @@ import { COMMODITIES_DATA } from '../data/commoditiesData';
 import { TECH_COMPANIES } from '../data/earningsData';
 import { SHOVEL_SELLERS_COMPANIES, SHOVEL_SUB_SECTORS } from '../data/shovelSellersData';
 import { HYPERSCALER_COMPANIES, HYPERSCALER_SUB_SECTORS, HYPERSCALER_TICKERS } from '../data/hyperscalersData';
+import { FINANCIAL_COMPANIES } from '../data/financialsData';
+import { getStockAnalystOutlooks } from '../data/analystCoverageData';
 import { StockLogo } from './StockLogo';
 import { 
   Menu, 
@@ -69,6 +71,11 @@ interface UnifiedAsset {
   statusText?: string;
   exchange: string;
   subSector?: string;
+  primaryListingSymbol?: string;
+  localPrice?: number;
+  localCurrency?: string;
+  fxRateToUsd?: number;
+  priceUsd?: number;
 }
 
 export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
@@ -95,7 +102,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
     const list: UnifiedAsset[] = [];
 
     const SHOVEL_SELLER_TICKERS = new Set([
-      'NVDA', 'AMD', 'AVGO', 'INTC', 'HXSCF', '000660', 'SSNLF', '005930', 'MU', 'MRVL',
+      'NVDA', 'AMD', 'AVGO', 'INTC', 'HXSCF', 'SSNLF', 'MU', 'MRVL',
       'CXMT', 'SMICY', 'SMIC', 'ARM', 'TXN', 'KIOXIA', 'ASML', 'LRCX', 'KLAC', 'AMAT',
       'TER', 'NXPI', 'CBRS', 'TOELY', 'ATEYY', 'WDC', 'STX', 'DELL', 'SMCI', 'IONQ',
       'QBTS', 'LITE', 'COHR', 'CSCO', 'SCSO', 'HPE', 'ASTS', 'CIEN'
@@ -135,9 +142,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
       AVGO: 'Semiconductors',
       INTC: 'Semiconductors',
       SSNLF: 'Semiconductors',
-      '005930': 'Semiconductors',
       HXSCF: 'Semiconductors',
-      '000660': 'Semiconductors',
       MU: 'Semiconductors',
       MRVL: 'Semiconductors',
       CXMT: 'Semiconductors',
@@ -156,16 +161,24 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
     };
 
     // Equities - deduplicate by ticker to guarantee unique keys and records
+    // Exclude numeric ticker aliases for Samsung (005930) and SK Hynix (000660), keeping only letter tickers SSNLF & HXSCF
+    const NUMERIC_DUPLICATE_TICKERS = new Set(['005930', '005930.KS', '000660', '000660.KS']);
     const seenTickers = new Set<string>();
     results.forEach((r) => {
+      if (NUMERIC_DUPLICATE_TICKERS.has(r.ticker)) return;
       if (seenTickers.has(r.ticker)) return;
       seenTickers.add(r.ticker);
 
-      const meta = TECH_COMPANIES[r.ticker];
-      const q = quotes[r.ticker];
-      const price = q ? q.price : (meta?.currentPrice || 0);
-      const chg = q ? q.change : (meta ? (meta.currentPrice * meta.dayChangePercent) / 100 : 0);
+      const meta = TECH_COMPANIES[r.ticker] || SHOVEL_SELLERS_COMPANIES[r.ticker] || FINANCIAL_COMPANIES[r.ticker];
+      const q = quotes[r.ticker] || (meta?.primaryListing ? quotes[meta.primaryListing] : undefined);
+      let price = q ? q.price : (meta?.currentPrice || 0);
+      const chg = q ? q.change : (meta ? (meta.currentPrice * (meta.dayChangePercent || 0)) / 100 : 0);
       const chgPct = q ? q.changePercent : (meta?.dayChangePercent || 0);
+      const primaryListingSymbol = q?.primaryListingSymbol || meta?.primaryListing;
+      const localPrice = q?.localPrice;
+      const localCurrency = q?.localCurrency || meta?.localCurrency;
+      const fxRateToUsd = q?.fxRateToUsd;
+      const marketCapStr = q?.marketCapUsd || meta?.marketCap || '$100B+';
       const isEU = ['SAP', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM', 'ASML'].includes(r.ticker);
       
       let assetClass = 'US Mega-Cap Technology';
@@ -179,17 +192,33 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
         subSector = r.subSector || meta?.subSector || SHOVEL_SUB_SECTOR_MAP[r.ticker] || 'Semiconductors';
       } else if (r.sector === 'U.S. Financials' || meta?.sector === 'U.S. Financials') {
         assetClass = 'U.S. Financials';
+        subSector = r.subSector || meta?.subSector || 'Diversified Financials';
       } else if (r.sector === 'European Financials' || meta?.sector === 'European Financials') {
         assetClass = 'European Financials';
+        subSector = r.subSector || meta?.subSector || 'European Banking';
       } else if (isEU) {
         assetClass = 'European Tech Champions';
       }
 
-      // Explicit user rule: If financial core figures are not in USD or EUR, always normalize to USD
-      let currency = 'USD';
-      if (r.currency === 'EUR' || assetClass === 'European Tech Champions' || ['ABN', 'ING', 'RABO', 'BNP', 'GLE', 'SX7P', 'ASML'].includes(r.ticker)) {
-        currency = 'EUR';
+      // Use instrument natural currency; European equities strictly use EUR from their home market
+      const isEuropeanStock = ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'SAN', 'BBVA', 'SX7P'].includes(r.ticker.toUpperCase()) || assetClass === 'European Tech Champions' || assetClass === 'European Financials';
+      let currency = isEuropeanStock ? 'EUR' : (q?.currency || meta?.currency || r.currency || 'USD');
+      if (r.ticker === 'SMIC' || r.ticker === '0981.HK' || r.ticker === 'SMICY') {
+        currency = 'HKD';
       }
+
+      // Ensure price for European stocks is accurately in EUR from Euronext / XETRA
+      if (isEuropeanStock) {
+        if (q?.currency === 'EUR' && q?.price) {
+          price = q.price;
+        } else if (q?.localCurrency === 'EUR' && q?.localPrice) {
+          price = q.localPrice;
+        } else if (meta?.currentPrice) {
+          price = meta.currentPrice;
+        }
+      }
+
+      const priceUsd = q?.priceUsd || (currency === 'USD' ? price : Number((price * (fxRateToUsd || 1.08)).toFixed(2)));
 
       let note = 'NOTE';
       if (r.status === 'reporting_today') note = 'TODAY';
@@ -206,24 +235,48 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
         changePercent: chgPct,
         currency,
         asOfDate: '09/15/2026',
-        aumOrMarketCap: meta?.marketCap || '$100B+',
-        aumNumeric: parseFloat((meta?.marketCap || '100').replace(/[^0-9.]/g, '')) * ((meta?.marketCap || '').includes('T') ? 1000 : 1),
+        aumOrMarketCap: marketCapStr,
+        aumNumeric: parseFloat(marketCapStr.replace(/[^0-9.]/g, '')) * (marketCapStr.includes('T') ? 1000 : 1),
         noteBadge: note,
         quarterlyResult: r,
         subSector,
-        exchange: meta?.exchange || 'NASDAQ'
+        exchange: meta?.exchange || 'NASDAQ',
+        primaryListingSymbol,
+        localPrice,
+        localCurrency,
+        fxRateToUsd,
+        priceUsd
       });
     });
 
     // Ensure all 35 Shovel Sellers are represented with complete QuarterlyResult (for AI Memo & Financial History)
     Object.values(SHOVEL_SELLERS_COMPANIES).forEach((meta) => {
+      if (NUMERIC_DUPLICATE_TICKERS.has(meta.ticker)) return;
       if (!list.some(item => item.ticker === meta.ticker)) {
-        const q = quotes[meta.ticker] || quotes[meta.ticker.toUpperCase()];
+        const q = quotes[meta.ticker] || (meta.primaryListing ? quotes[meta.primaryListing] : undefined) || quotes[meta.ticker.toUpperCase()];
         const price = q ? q.price : meta.currentPrice;
         const chg = q ? q.change : (meta.currentPrice * meta.dayChangePercent) / 100;
         const chgPct = q ? q.changePercent : meta.dayChangePercent;
         const subSector = meta.subSector || SHOVEL_SUB_SECTOR_MAP[meta.ticker] || 'Semiconductors';
-        const currency = meta.country === 'Netherlands' ? 'EUR' : 'USD';
+        const isEuropeanShovel = ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM'].includes(meta.ticker) || meta.country === 'Netherlands' || meta.region === 'Europe';
+        const currency = isEuropeanShovel ? 'EUR' : (q?.currency || meta.currency || 'USD');
+        const primaryListingSymbol = q?.primaryListingSymbol || meta.primaryListing;
+        const localPrice = q?.localPrice;
+        const localCurrency = q?.localCurrency || meta.localCurrency;
+        const fxRateToUsd = q?.fxRateToUsd;
+        
+        let resolvedPrice = price;
+        if (isEuropeanShovel) {
+          if (q?.currency === 'EUR' && q?.price) {
+            resolvedPrice = q.price;
+          } else if (q?.localCurrency === 'EUR' && q?.localPrice) {
+            resolvedPrice = q.localPrice;
+          } else if (meta.currentPrice) {
+            resolvedPrice = meta.currentPrice;
+          }
+        }
+        const priceUsd = q?.priceUsd || (currency === 'USD' ? resolvedPrice : Number((resolvedPrice * (fxRateToUsd || 1.08)).toFixed(2)));
+        const marketCapStr = q?.marketCapUsd || meta.marketCap;
         
         // Find existing result or generate rich default quarterly result
         const existingResult = results.find(r => r.ticker === meta.ticker);
@@ -254,32 +307,11 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
             { name: `${subSector} Core Systems`, revenue: `$${(price * 0.035).toFixed(2)}B`, growthYoY: '+24%', beatExpectation: true },
             { name: 'Advanced Engineering & Services', revenue: `$${(price * 0.022).toFixed(2)}B`, growthYoY: '+18%', beatExpectation: true }
           ],
-          analystOutlooks: [
-            {
-              bankName: 'J.P. Morgan',
-              targetPrice: `$${(price * 1.25).toFixed(2)}`,
-              targetPriceNumeric: price * 1.25,
-              timeHorizon: '12 Months',
-              rating: 'Overweight',
-              nextQuarterEpsEst: `$${(price * 0.017).toFixed(2)}`,
-              nextQuarterRevEst: `$${(parseFloat((meta.marketCap || '50').replace(/[^0-9.]/g, '')) * 0.082).toFixed(2)}B`,
-              thesis: `Essential structural position within the AI hardware supply chain with strong cash flow generation and durable moat.`,
-              catalysts: ['Enterprise deployment acceleration', 'Gross margin expansion in H2 2026'],
-              lastUpdated: 'Updated Q3 2026'
-            },
-            {
-              bankName: 'Goldman Sachs',
-              targetPrice: `$${(price * 1.22).toFixed(2)}`,
-              targetPriceNumeric: price * 1.22,
-              timeHorizon: '12 Months',
-              rating: 'Buy',
-              nextQuarterEpsEst: `$${(price * 0.0165).toFixed(2)}`,
-              nextQuarterRevEst: `$${(parseFloat((meta.marketCap || '50').replace(/[^0-9.]/g, '')) * 0.080).toFixed(2)}B`,
-              thesis: `High barriers to entry in ${subSector} support sustained pricing leverage through the secular hardware cycle.`,
-              catalysts: ['Hyperscaler CapEx expansion', 'Volume manufacturing ramp'],
-              lastUpdated: 'Updated Q3 2026'
-            }
-          ],
+          analystOutlooks: getStockAnalystOutlooks(
+            meta.ticker, 
+            price, 
+            currency === 'EUR' ? '€' : '$'
+          ),
           priceReactionPercent: 2.1
         };
 
@@ -294,12 +326,17 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
           changePercent: chgPct,
           currency,
           asOfDate: '09/15/2026',
-          aumOrMarketCap: meta.marketCap,
-          aumNumeric: parseFloat((meta.marketCap || '100').replace(/[^0-9.]/g, '')) * ((meta.marketCap || '').includes('T') ? 1000 : 1),
+          aumOrMarketCap: marketCapStr,
+          aumNumeric: parseFloat(marketCapStr.replace(/[^0-9.]/g, '')) * (marketCapStr.includes('T') ? 1000 : 1),
           noteBadge: 'SHOVEL',
           quarterlyResult: resolvedResult,
           subSector,
-          exchange: meta.exchange || 'NASDAQ'
+          exchange: meta.exchange || 'NASDAQ',
+          primaryListingSymbol,
+          localPrice,
+          localCurrency,
+          fxRateToUsd,
+          priceUsd
         });
       }
     });
@@ -325,6 +362,74 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
           aumOrMarketCap: meta.marketCap || '—',
           aumNumeric: parseFloat((meta.marketCap || '0').replace(/[^0-9.]/g, '')) * ((meta.marketCap || '').includes('T') ? 1000 : 1),
           noteBadge: 'LIVE', quarterlyResult: resolvedResult, subSector: meta.subSector || 'Neo Clouds', exchange: meta.exchange || 'NASDAQ'
+        });
+      }
+    });
+
+    // Ensure US and European Financial institutions are fully represented
+    Object.values(FINANCIAL_COMPANIES).forEach((meta) => {
+      if (!list.some(item => item.ticker === meta.ticker)) {
+        const q = quotes[meta.ticker] || (meta.primaryListing ? quotes[meta.primaryListing] : undefined) || quotes[meta.ticker.toUpperCase()];
+        const price = q ? q.price : meta.currentPrice;
+        const chg = q ? q.change : (meta.currentPrice * (meta.dayChangePercent || 0)) / 100;
+        const chgPct = q ? q.changePercent : (meta.dayChangePercent || 0);
+        const currency = q?.currency || meta.currency || (meta.country === 'United Kingdom' ? 'GBp' : meta.region === 'Europe' ? 'EUR' : 'USD');
+        const primaryListingSymbol = q?.primaryListingSymbol || meta.primaryListing;
+        const localPrice = q?.localPrice;
+        const localCurrency = q?.localCurrency || meta.localCurrency;
+        const fxRateToUsd = q?.fxRateToUsd;
+        const priceUsd = q?.priceUsd || price;
+        const marketCapStr = q?.marketCapUsd || meta.marketCap || '—';
+        const assetClass = meta.sector; // 'U.S. Financials' or 'European Financials'
+        const existingResult = results.find(r => r.ticker === meta.ticker);
+        const resolvedResult: QuarterlyResult = existingResult || {
+          id: `financial-${meta.ticker}-q2-2026`,
+          ticker: meta.ticker,
+          companyName: meta.name,
+          sector: assetClass,
+          subSector: meta.subSector || (meta.country === 'United States' ? 'Diversified Financials' : 'European Banking'),
+          quarter: 'Q2 2026',
+          fiscalYear: 2026,
+          reportDate: '2026-07-20',
+          reportTime: 'BMO',
+          status: 'reported',
+          currency,
+          epsEstimate: 1.5,
+          epsActual: 1.6,
+          revenueEstimate: 10,
+          revenueActual: 10.5,
+          revenueYoY: 6.5,
+          isImportant: true,
+          keyHighlights: [meta.description || 'Global Tier-1 Banking Institution'],
+          guidanceSummary: 'Resilient net interest margins and durable capital ratios under Basel III/IV frameworks.',
+          aiCapexHighlight: 'Enterprise technology spending allocated toward digital channels and AI-driven compliance risk modeling.',
+          segments: [
+            { name: 'Commercial & Retail Banking', revenue: `$${(price * 0.05).toFixed(2)}B`, growthYoY: '+5%', beatExpectation: true },
+            { name: 'Global Markets & Investment Banking', revenue: `$${(price * 0.03).toFixed(2)}B`, growthYoY: '+8%', beatExpectation: true }
+          ]
+        };
+        list.push({
+          id: `financial-${meta.ticker}`,
+          ticker: meta.ticker,
+          name: meta.name,
+          assetClass,
+          assetType: 'equity',
+          price,
+          change: chg,
+          changePercent: chgPct,
+          currency,
+          asOfDate: '09/15/2026',
+          aumOrMarketCap: marketCapStr,
+          aumNumeric: parseFloat(marketCapStr.replace(/[^0-9.]/g, '')) * (marketCapStr.includes('T') ? 1000 : 1),
+          noteBadge: 'BANK',
+          quarterlyResult: resolvedResult,
+          subSector: meta.subSector || (meta.country === 'United States' ? 'Diversified Financials' : 'European Banking'),
+          exchange: meta.exchange || (meta.region === 'Europe' ? 'Euronext' : 'NYSE'),
+          primaryListingSymbol,
+          localPrice,
+          localCurrency,
+          fxRateToUsd,
+          priceUsd
         });
       }
     });
@@ -427,8 +532,21 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
   const getCurrencySymbol = (cur: string) => {
     if (cur === 'EUR') return '€';
     if (cur === 'GBp' || cur === 'GBP') return '£';
-    if (cur === 'CNY') return '¥';
+    if (cur === 'CNY' || cur === 'JPY') return '¥';
+    if (cur === 'KRW') return '₩';
+    if (cur === 'HKD') return 'HK$';
+    if (cur === 'TWD') return 'NT$';
     return '$';
+  };
+
+  const formatMarketCapInParens = (capStr?: string) => {
+    if (!capStr || capStr === '—') return '—';
+    let clean = capStr.trim();
+    if (!clean.startsWith('$')) {
+      clean = `$${clean}`;
+    }
+    clean = clean.replace(/\s*USD/gi, '').trim();
+    return `(${clean})`;
   };
 
   const assetClassesList = useMemo(() => {
@@ -551,6 +669,57 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
         </div>
       </div>
 
+      {/* Asset Class Quick Filter Pill Banner */}
+      <div id="jpm-asset-class-pill-bar" className="px-4 py-2 bg-slate-50/80 border-b border-slate-200 flex items-center gap-2 overflow-x-auto no-scrollbar text-xs">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code shrink-0 mr-1">
+          ASSET CLASS:
+        </span>
+        <button
+          onClick={() => {
+            setSelectedAssetClassFilter('ALL');
+            setSelectedSubSectorFilter('ALL');
+          }}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 transition cursor-pointer ${
+            selectedAssetClassFilter === 'ALL'
+              ? 'bg-[#002D62] text-white shadow-2xs'
+              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>All Asset Classes</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono-code ${
+            selectedAssetClassFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {allAssets.length}
+          </span>
+        </button>
+
+        {assetClassesList.map((ac) => {
+          const count = allAssets.filter(a => a.assetClass === ac).length;
+          const isActive = selectedAssetClassFilter === ac;
+          return (
+            <button
+              key={ac}
+              onClick={() => {
+                setSelectedAssetClassFilter(ac);
+                setSelectedSubSectorFilter('ALL');
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 transition cursor-pointer ${
+                isActive
+                  ? 'bg-[#005a9c] text-white shadow-2xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <span>{ac}</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono-code ${
+                isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Sub-Sector Interactive Pill Banner for The Shovel Sellers */}
       {['The Shovel Sellers', 'Hyperscalers & Neo Clouds'].includes(selectedAssetClassFilter) && (
         <div id="shovel-subsector-pill-bar" className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -630,7 +799,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                 className="py-3.5 px-4 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-50 transition select-none w-28 sm:w-36"
               >
                 <div className="flex items-center justify-end gap-1.5 font-bold">
-                  <span>NAV / PRICE ($)</span>
+                  <span>NAV / PRICE</span>
                   {sortField === 'nav' ? (
                     sortOrder === 'desc' ? <ArrowDown className="w-3.5 h-3.5 text-[#005a9c]" /> : <ArrowUp className="w-3.5 h-3.5 text-[#005a9c]" />
                   ) : (
@@ -734,8 +903,13 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                         {asset.name}
                       </button>
 
-                      <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-400 font-sans mt-0.5">
-                        <span>{asset.exchange} • {asset.aumOrMarketCap}</span>
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-500 font-sans mt-0.5">
+                        <span>{asset.exchange} • <span className="font-semibold text-slate-700 font-mono-code">{formatMarketCapInParens(asset.aumOrMarketCap)}</span></span>
+                        {asset.primaryListingSymbol && (
+                          <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-mono-code text-[10px] border border-indigo-200 font-semibold" title="Primary Local Exchange Listing">
+                            Primary: {asset.primaryListingSymbol}
+                          </span>
+                        )}
                         {asset.subSector && (
                           <span className="px-1.5 py-0.2 rounded bg-blue-50 text-[#005a9c] font-mono-code text-[10px] border border-blue-100 font-semibold">
                             {asset.subSector}
@@ -750,10 +924,13 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                       </div>
                     </td>
 
-                    {/* Column 2: NAV ($) (Dual-tier stack) */}
+                    {/* Column 2: NAV / PRICE (Native currency, no USD calculation for daily price) */}
                     <td className="py-3.5 px-4 border-r border-slate-200 text-right align-middle font-mono-code">
                       <div className="text-sm font-bold text-slate-900">
-                        {getCurrencySymbol(asset.currency)}{asset.price.toFixed(asset.price < 10 ? 2 : 2)}
+                        {getCurrencySymbol(asset.currency)}{asset.currency === 'JPY' || asset.currency === 'KRW' ? Math.round(asset.price).toLocaleString() : asset.price.toFixed(2)}
+                        {asset.currency && asset.currency !== 'USD' && (
+                          <span className="text-[10px] text-slate-500 font-sans font-normal ml-1">{asset.currency}</span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-400 font-sans">
                         {asset.asOfDate}
@@ -976,14 +1153,23 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                             >
                               {asset.name}
                             </button>
-                            <div className="text-[11px] text-slate-400">
-                              {asset.exchange} • {asset.aumOrMarketCap}
+                            <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-500 font-sans mt-0.5">
+                              <span>{asset.exchange} • <span className="font-semibold text-slate-700 font-mono-code">{formatMarketCapInParens(asset.aumOrMarketCap)}</span></span>
+                              {asset.primaryListingSymbol && (
+                                <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-mono-code text-[10px] border border-indigo-200 font-semibold" title="Primary Local Exchange Listing">
+                                  Primary: {asset.primaryListingSymbol}
+                                </span>
+                              )}
                             </div>
                           </td>
 
+                          {/* Column 2: NAV / PRICE (Native currency, no USD calculation for daily price) */}
                           <td className="py-3.5 px-4 border-r border-slate-200 text-right align-middle font-mono-code">
                             <div className="text-sm font-bold text-slate-900">
-                              {getCurrencySymbol(asset.currency)}{asset.price.toFixed(asset.price < 10 ? 2 : 2)}
+                              {getCurrencySymbol(asset.currency)}{asset.currency === 'JPY' || asset.currency === 'KRW' ? Math.round(asset.price).toLocaleString() : asset.price.toFixed(2)}
+                              {asset.currency && asset.currency !== 'USD' && (
+                                <span className="text-[10px] text-slate-500 font-sans font-normal ml-1">{asset.currency}</span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-400 font-sans">
                               {asset.asOfDate}
