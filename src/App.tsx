@@ -11,6 +11,7 @@ import {
   TECH_COMPANIES 
 } from './data/earningsData';
 import { SHOVEL_SELLERS_COMPANIES } from './data/shovelSellersData';
+import { HYPERSCALER_COMPANIES, HYPERSCALER_TICKERS } from './data/hyperscalersData';
 import { 
   getStoredPreferences, 
   savePreferences, 
@@ -20,7 +21,7 @@ import {
   dispatchPushNotification, 
   playCorporateChime 
 } from './services/notificationService';
-import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar } from './services/marketDataService';
+import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar, fetchQuarterlyAnalystOutlook } from './services/marketDataService';
 import { CorporateHeader } from './components/CorporateHeader';
 import { RealTimeTrackerBar } from './components/RealTimeTrackerBar';
 import { MetricCards } from './components/MetricCards';
@@ -51,7 +52,10 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [results, setResults] = useState<QuarterlyResult[]>(INITIAL_EARNINGS_RESULTS);
+  const [results, setResults] = useState<QuarterlyResult[]>(() => INITIAL_EARNINGS_RESULTS.map(item => HYPERSCALER_TICKERS.has(item.ticker) ? { ...item, sector: 'Hyperscalers & Neo Clouds', subSector: item.subSector || (['GOOGL','MSFT','AMZN','ORCL','META'].includes(item.ticker) ? 'Hyperscalers' : 'Neo Clouds') } : item));
+  const [quarterlyOutlookLoaded, setQuarterlyOutlookLoaded] = useState(false);
+  const [quarterlySnapshots, setQuarterlySnapshots] = useState<Record<string, any>>({});
+
   const [notifications, setNotifications] = useState<PushNotificationItem[]>(() => {
     const stored = getStoredNotifications();
     return stored.length > 0 ? stored : INITIAL_PUSH_NOTIFICATIONS;
@@ -78,6 +82,100 @@ export default function App() {
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeToast, setActiveToast] = useState<PushNotificationItem | null>(null);
+
+  // Quarterly analyst/consensus snapshots are intentionally not refreshed continuously.
+  // A new snapshot is eligible on 25 Mar/Jun/Sep/Dec; live market quotes remain live.
+  const getQuarterSnapshotKey = useCallback((date = new Date()) => {
+    const month = date.getMonth();
+    const day = date.getDate();
+    let year = date.getFullYear();
+    let quarter = Math.floor(month / 3) + 1;
+    if (month % 3 === 2 && day >= 25) {
+      quarter += 1;
+      if (quarter === 5) { quarter = 1; year += 1; }
+    }
+    return `${year}-Q${quarter}`;
+  }, []);
+
+  const applyQuarterlySnapshot = useCallback((snapshot: Record<string, any>) => {
+    setQuarterlySnapshots(snapshot);
+    setResults(prev => prev.map(item => {
+      const snap = snapshot[item.ticker];
+      if (!snap) return item;
+      const outlooks = (snap.outlooks || []).slice(0, 3).map((o: any) => ({
+        bankName: o.bankName,
+        logoColor: 'text-blue-800 bg-blue-50 border-blue-200',
+        targetPrice: o.targetPrice !== undefined
+          ? `${snap.targetCurrency || ''}${Number(o.targetPrice).toFixed(2)}`.trim()
+          : '—',
+        targetPriceNumeric: o.targetPrice || 0,
+        timeHorizon: snap.nextQuarterLabel || 'Next Quarter',
+        rating: o.rating || 'N/A',
+        nextQuarterEpsEst: snap.nextQuarterEps !== undefined ? `${snap.nextQuarterEps.toFixed(2)}` : '—',
+        nextQuarterRevEst: snap.nextQuarterRevenue !== undefined ? `${snap.nextQuarterRevenue.toFixed(2)}B` : '—',
+        thesis: `Quarterly Yahoo Finance analyst snapshot. Research date: ${o.asOfDate || 'N/A'}.`,
+        catalysts: [],
+        lastUpdated: o.asOfDate || snap.snapshotDate
+      }));
+      return {
+        ...item,
+        analystOutlooks: outlooks.length > 0 ? outlooks : item.analystOutlooks,
+        quarterlyConsensus: snap
+      };
+    }));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadQuarterlySnapshot = async () => {
+      const snapshotKey = getQuarterSnapshotKey();
+      const storageKey = `global_markets_quarterly_snapshot_${snapshotKey}`;
+      try {
+        const storedRaw = localStorage.getItem(storageKey);
+        if (storedRaw) {
+          const stored = JSON.parse(storedRaw);
+          if (!cancelled && stored?.data) {
+            applyQuarterlySnapshot(stored.data);
+            setQuarterlyOutlookLoaded(true);
+            return;
+          }
+        }
+        const allSymbols = Array.from(new Set([
+          ...INITIAL_EARNINGS_RESULTS.map(r => r.ticker),
+          ...Object.keys(TECH_COMPANIES),
+          ...Object.keys(SHOVEL_SELLERS_COMPANIES),
+          ...Object.keys(HYPERSCALER_COMPANIES)
+        ]));
+        const response = await fetchQuarterlyAnalystOutlook(allSymbols);
+        if (cancelled || !response?.data) return;
+        localStorage.setItem(storageKey, JSON.stringify({ quarterKey: snapshotKey, savedAt: new Date().toISOString(), provider: response.provider, data: response.data }));
+        applyQuarterlySnapshot(response.data);
+        const notification: PushNotificationItem = {
+          id: `quarterly-outlook-${snapshotKey}`,
+          ticker: 'MARKET',
+          companyName: 'Global Markets',
+          title: `Quarterly Analyst & Earnings Update — ${snapshotKey}`,
+          body: `Analyst outlooks, consensus targets and next-quarter earnings estimates have been refreshed for ${snapshotKey}.`,
+          timestamp: 'Just now', type: 'breaking', read: false
+        };
+        const existing = getStoredNotifications();
+        if (!existing.some(n => n.id === notification.id)) {
+          const updated = [notification, ...existing];
+          saveNotifications(updated);
+          if (!cancelled) {
+            setNotifications(updated);
+            setActiveToast(notification);
+            if (preferences.soundEnabled) playCorporateChime();
+          }
+        }
+        if (!cancelled) setQuarterlyOutlookLoaded(true);
+      } catch (error) {
+        console.warn('Quarterly analyst snapshot could not be loaded:', error);
+      }
+    };
+    loadQuarterlySnapshot();
+    return () => { cancelled = true; };
+  }, [applyQuarterlySnapshot, getQuarterSnapshotKey, preferences.soundEnabled]);
 
   // Sync notification permission state
   useEffect(() => {
@@ -290,7 +388,7 @@ export default function App() {
     }
 
     // If company exists in TECH_COMPANIES or SHOVEL_SELLERS_COMPANIES, generate modal view
-    const meta = TECH_COMPANIES[sym] || (SHOVEL_SELLERS_COMPANIES as any)[sym];
+    const meta = TECH_COMPANIES[sym] || (SHOVEL_SELLERS_COMPANIES as any)[sym] || (HYPERSCALER_COMPANIES as any)[sym];
     if (meta) {
       const q = quotes[sym];
       const livePrice = q ? q.price : meta.currentPrice;

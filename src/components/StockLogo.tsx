@@ -39,6 +39,12 @@ const BRAND_ICONS: Record<string, string> = {
   SU: 'schneiderelectric',
   SIE: 'siemens',
 
+  // Hyperscalers & Neo Clouds
+  CRWV: 'coreweave',
+  NBIS: 'nebius',
+  IREN: 'iren',
+  SPCX: 'spacex',
+
   // Banking & Financials vector icons available in Simple Icons
   JPM: 'chase',
   BAC: 'bankofamerica',
@@ -96,7 +102,22 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
   SU: 'se.com',
   SIE: 'siemens.com',
 
-  JPM: 'jpmorganchase.com',
+  CRWV: 'coreweave.com',
+  NBIS: 'nebius.com',
+  IREN: 'iren.com',
+  SPCX: 'spacex.com',
+
+  // Official company websites used for logo fallback when Simple Icons does not
+  // contain the company mark or when a ticker is mapped to a different brand.
+  CXMT: 'cxmt.com',
+  SMIC: 'smics.com',
+  SMICY: 'smics.com',
+  HXSCF: 'skhynix.com',
+  '000660': 'skhynix.com',
+  '005930': 'samsung.com',
+  KIOXIA: 'kioxia.com',
+
+  JPM: 'jpmorgan.com',
   BAC: 'bankofamerica.com',
   C: 'citigroup.com',
   WFC: 'wellsfargo.com',
@@ -127,8 +148,6 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
   LRCX: 'lamresearch.com',
   KLAC: 'kla.com',
   TER: 'teradyne.com',
-  TOELY: 'tel.com',
-  ATEYY: 'advantest.com',
   COHR: 'coherent.com',
   LITE: 'lumentum.com',
   CSCO: 'cisco.com',
@@ -143,17 +162,32 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
   IONQ: 'ionq.com',
   QBTS: 'dwavesys.com',
   SSNLF: 'samsung.com',
-  '005930': 'samsung.com',
-  HXSCF: 'skhynix.com',
-  '000660': 'skhynix.com',
-  CXMT: 'cxmt.com',
-  SMICY: 'smics.com',
-  SMIC: 'smics.com',
   TXN: 'ti.com',
-  KIOXIA: 'kioxia.com',
   NXPI: 'nxp.com',
   CBRS: 'cerebras.net',
 };
+
+// Prefer the company's own website mark for tickers where a generic/product
+// brand icon is misleading, or where Simple Icons does not currently have the
+// corporate logo. The favicon is fetched from the official domain, not a
+// third-party logo directory.
+const OFFICIAL_FAVICON_FIRST = new Set([
+  // GOOGL intentionally uses the Google brand logo requested for the app.
+  'JPM',     // J.P. Morgan / JPMorgan Chase corporate mark, not Chase retail
+  'CRWV',    // CoreWeave is not in Simple Icons
+  'NBIS',    // Nebius is not in Simple Icons
+  'IREN',    // IREN is not in Simple Icons
+  'SPCX',    // SpaceX corporate mark
+  'CXMT',    // CXMT is not in Simple Icons
+  'KIOXIA',  // KIOXIA is not in Simple Icons
+  'SMIC',
+  'SMICY',
+  'TOELY',   // Tokyo Electron / TEL
+  'ATEYY',   // Advantest
+  'HXSCF',
+  '000660',
+  '005930',
+]);
 
 const SIZE_MAP = {
   xs: 'w-3.5 h-3.5',
@@ -162,7 +196,7 @@ const SIZE_MAP = {
   lg: 'w-8 h-8',
 } as const;
 
-const SIMPLE_ICONS_VERSION = '16.31.0';
+const SIMPLE_ICONS_VERSION = '16.32.0';
 
 export const StockLogo: React.FC<StockLogoProps> = ({
   ticker,
@@ -193,19 +227,26 @@ export const StockLogo: React.FC<StockLogoProps> = ({
       : null;
   }, [cleanTicker]);
 
-  // Determine current active source with resilient fallbacks
+  // Determine current active source with resilient fallbacks.
+  // For explicitly curated tickers, start with the official company website
+  // favicon because it represents the current first-party brand mark.
+  const preferOfficial = OFFICIAL_FAVICON_FIRST.has(cleanTicker);
   let currentSrc: string | null = null;
-  if (iconUrl && !iconFailed) {
-    currentSrc = iconUrl;
-  } else if (faviconUrl && !faviconFailed) {
-    currentSrc = faviconUrl;
+  if (preferOfficial) {
+    if (faviconUrl && !faviconFailed) currentSrc = faviconUrl;
+    else if (iconUrl && !iconFailed) currentSrc = iconUrl;
+  } else {
+    if (iconUrl && !iconFailed) currentSrc = iconUrl;
+    else if (faviconUrl && !faviconFailed) currentSrc = faviconUrl;
   }
 
   const handleImageError = () => {
-    if (iconUrl && !iconFailed) {
-      setIconFailed(true);
+    if (preferOfficial) {
+      if (faviconUrl && !faviconFailed) setFaviconFailed(true);
+      else setIconFailed(true);
     } else {
-      setFaviconFailed(true);
+      if (iconUrl && !iconFailed) setIconFailed(true);
+      else setFaviconFailed(true);
     }
   };
 

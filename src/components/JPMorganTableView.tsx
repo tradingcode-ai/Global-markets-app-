@@ -3,6 +3,7 @@ import { QuarterlyResult, LiveQuote, ShovelSubSector } from '../types';
 import { COMMODITIES_DATA } from '../data/commoditiesData';
 import { TECH_COMPANIES } from '../data/earningsData';
 import { SHOVEL_SELLERS_COMPANIES, SHOVEL_SUB_SECTORS } from '../data/shovelSellersData';
+import { HYPERSCALER_COMPANIES, HYPERSCALER_SUB_SECTORS, HYPERSCALER_TICKERS } from '../data/hyperscalersData';
 import { StockLogo } from './StockLogo';
 import { 
   Menu, 
@@ -149,6 +150,11 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
       CBRS: 'Semiconductors',
     };
 
+    const HYPERSCALER_SUB_SECTOR_MAP: Record<string, string> = {
+      GOOGL: 'Hyperscalers', MSFT: 'Hyperscalers', AMZN: 'Hyperscalers', ORCL: 'Hyperscalers', META: 'Hyperscalers',
+      SPCX: 'Neo Clouds', NBIS: 'Neo Clouds', CRWV: 'Neo Clouds', IREN: 'Neo Clouds'
+    };
+
     // Equities - deduplicate by ticker to guarantee unique keys and records
     const seenTickers = new Set<string>();
     results.forEach((r) => {
@@ -165,7 +171,10 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
       let assetClass = 'US Mega-Cap Technology';
       let subSector: string | undefined = undefined;
 
-      if (r.sector === 'The Shovel Sellers' || meta?.sector === 'The Shovel Sellers' || SHOVEL_SELLER_TICKERS.has(r.ticker)) {
+      if (HYPERSCALER_TICKERS.has(r.ticker) || r.sector === 'Hyperscalers & Neo Clouds' || meta?.sector === 'Hyperscalers & Neo Clouds') {
+        assetClass = 'Hyperscalers & Neo Clouds';
+        subSector = r.subSector || meta?.subSector || HYPERSCALER_SUB_SECTOR_MAP[r.ticker] || 'Hyperscalers';
+      } else if (r.sector === 'The Shovel Sellers' || meta?.sector === 'The Shovel Sellers' || SHOVEL_SELLER_TICKERS.has(r.ticker)) {
         assetClass = 'The Shovel Sellers';
         subSector = r.subSector || meta?.subSector || SHOVEL_SUB_SECTOR_MAP[r.ticker] || 'Semiconductors';
       } else if (r.sector === 'U.S. Financials' || meta?.sector === 'U.S. Financials') {
@@ -295,6 +304,31 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
       }
     });
 
+    // Ensure newly added Hyperscalers & Neo Clouds are represented even if
+    // a historical earnings row is not present in the initial calendar dataset.
+    Object.values(HYPERSCALER_COMPANIES).forEach((meta) => {
+      if (!list.some(item => item.ticker === meta.ticker)) {
+        const q = quotes[meta.ticker] || quotes[meta.ticker.toUpperCase()];
+        const price = q ? q.price : meta.currentPrice;
+        const resolvedResult: QuarterlyResult = results.find(r => r.ticker === meta.ticker) || {
+          id: `hyperscaler-${meta.ticker}-q2-2026`, ticker: meta.ticker, companyName: meta.name,
+          sector: 'Hyperscalers & Neo Clouds', subSector: meta.subSector || 'Neo Clouds',
+          quarter: 'Q2 2026', fiscalYear: 2026, reportDate: '2026-08-15', reportTime: 'AMC', status: 'reported', currency: 'USD',
+          epsEstimate: 0, revenueEstimate: 0, keyHighlights: [meta.description], guidanceRating: 'pending',
+          guidanceSummary: 'Live Yahoo Finance earnings and analyst estimates are used when available.', aiCapexHighlight: meta.description,
+          segments: [], isImportant: true
+        };
+        list.push({
+          id: `equity-${meta.ticker}`, ticker: meta.ticker, name: meta.name, assetClass: 'Hyperscalers & Neo Clouds', assetType: 'equity',
+          price, change: q?.change || 0, changePercent: q?.changePercent || 0, currency: q?.currency || 'USD',
+          asOfDate: q?.lastUpdated ? new Date(q.lastUpdated).toLocaleDateString('en-US') : 'LIVE',
+          aumOrMarketCap: meta.marketCap || '—',
+          aumNumeric: parseFloat((meta.marketCap || '0').replace(/[^0-9.]/g, '')) * ((meta.marketCap || '').includes('T') ? 1000 : 1),
+          noteBadge: 'LIVE', quarterlyResult: resolvedResult, subSector: meta.subSector || 'Neo Clouds', exchange: meta.exchange || 'NASDAQ'
+        });
+      }
+    });
+
     // Commodities
     COMMODITIES_DATA.forEach((c) => {
       const q = quotes[c.symbol] || quotes[c.id.toUpperCase()];
@@ -332,9 +366,9 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
   const filteredAssets = useMemo(() => {
     return allAssets.filter((item) => {
       const matchesClass = selectedAssetClassFilter === 'ALL' || item.assetClass === selectedAssetClassFilter;
-      const matchesSubSector = 
-        selectedAssetClassFilter !== 'The Shovel Sellers' || 
-        selectedSubSectorFilter === 'ALL' || 
+      const matchesSubSector =
+        !['The Shovel Sellers', 'Hyperscalers & Neo Clouds'].includes(selectedAssetClassFilter) ||
+        selectedSubSectorFilter === 'ALL' ||
         item.subSector === selectedSubSectorFilter;
       const matchesSearch = tableSearch.trim() === '' ||
         item.ticker.toLowerCase().includes(tableSearch.toLowerCase()) ||
@@ -485,7 +519,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
             value={selectedAssetClassFilter}
             onChange={(e) => {
               setSelectedAssetClassFilter(e.target.value);
-              if (e.target.value !== 'The Shovel Sellers') {
+              if (!['The Shovel Sellers', 'Hyperscalers & Neo Clouds'].includes(e.target.value)) {
                 setSelectedSubSectorFilter('ALL');
               }
             }}
@@ -498,36 +532,37 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
           </select>
 
           {/* Sub-Sector Dropdown for The Shovel Sellers */}
-          {selectedAssetClassFilter === 'The Shovel Sellers' && (
+          {['The Shovel Sellers', 'Hyperscalers & Neo Clouds'].includes(selectedAssetClassFilter) && (
             <select
-              id="select-shovel-subsector"
+              id="select-subsector"
               value={selectedSubSectorFilter}
               onChange={(e) => setSelectedSubSectorFilter(e.target.value)}
               className="border border-[#005a9c] bg-blue-50/70 text-[#005a9c] font-semibold rounded-md py-1 px-2.5 text-xs focus:outline-none cursor-pointer transition"
             >
-              <option value="ALL">All 4 Sub-Sectors (34)</option>
-              <option value="Semiconductor Equipment & Materials">Semiconductor Equipment & Materials</option>
-              <option value="Computer Hardware & storage">Computer Hardware & storage</option>
-              <option value="Communication Equipment">Communication Equipment</option>
-              <option value="Semiconductors">Semiconductors</option>
+              <option value="ALL">All Sub-Sectors</option>
+              {(selectedAssetClassFilter === 'The Shovel Sellers'
+                ? SHOVEL_SUB_SECTORS.map(id => ({ id, label: id }))
+                : HYPERSCALER_SUB_SECTORS
+              ).map(sub => (
+                <option key={sub.id} value={sub.id}>{sub.label}</option>
+              ))}
             </select>
           )}
         </div>
       </div>
 
       {/* Sub-Sector Interactive Pill Banner for The Shovel Sellers */}
-      {selectedAssetClassFilter === 'The Shovel Sellers' && (
+      {['The Shovel Sellers', 'Hyperscalers & Neo Clouds'].includes(selectedAssetClassFilter) && (
         <div id="shovel-subsector-pill-bar" className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code mr-1">
               SUB-SECTOR:
             </span>
             {[
-              { id: 'ALL', label: 'All Sub-Sectors', count: 34 },
-              { id: 'Semiconductor Equipment & Materials', label: 'Semiconductor Equipment & Materials', count: 7 },
-              { id: 'Computer Hardware & storage', label: 'Computer Hardware & storage', count: 7 },
-              { id: 'Communication Equipment', label: 'Communication Equipment', count: 6 },
-              { id: 'Semiconductors', label: 'Semiconductors', count: 14 }
+              { id: 'ALL', label: 'All Sub-Sectors', count: allAssets.filter(a => a.assetClass === selectedAssetClassFilter).length },
+              ...(selectedAssetClassFilter === 'The Shovel Sellers'
+                ? SHOVEL_SUB_SECTORS.map(id => ({ id, label: id, count: allAssets.filter(a => a.assetClass === 'The Shovel Sellers' && a.subSector === id).length }))
+                : HYPERSCALER_SUB_SECTORS.map(sub => ({ ...sub, count: allAssets.filter(a => a.assetClass === 'Hyperscalers & Neo Clouds' && a.subSector === sub.id).length })))
             ].map(sub => {
               const isActive = selectedSubSectorFilter === sub.id;
               return (

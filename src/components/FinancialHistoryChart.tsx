@@ -188,13 +188,17 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
   // Calculate key statistics for the active metric
   const stats = useMemo(() => {
     if (filteredQuarters.length === 0) return null;
-    const values = filteredQuarters.map(q => q[activeMetric]);
-    const latestQ = filteredQuarters[filteredQuarters.length - 1];
+    // Pre-public periods are intentionally shown as zeroes in the chart, but
+    // must never contaminate financial statistics such as averages or YoY.
+    const publicQuarters = filteredQuarters.filter(q => !q.isPrePublic);
+    if (publicQuarters.length === 0) return null;
+    const values = publicQuarters.map(q => q[activeMetric]);
+    const latestQ = publicQuarters[publicQuarters.length - 1];
     const latestVal = latestQ[activeMetric];
     
-    // Previous year same quarter (4 quarters back)
-    const prevYearQ = filteredQuarters.length >= 5 
-      ? filteredQuarters[filteredQuarters.length - 5] 
+    // Previous year same quarter (4 public quarters back)
+    const prevYearQ = publicQuarters.length >= 5 
+      ? publicQuarters[publicQuarters.length - 5] 
       : null;
     const yoyChange = prevYearQ && prevYearQ[activeMetric] !== 0
       ? ((latestVal - prevYearQ[activeMetric]) / Math.abs(prevYearQ[activeMetric])) * 100
@@ -290,6 +294,12 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
         </div>
       </div>
 
+      {data?.publicFinancialStartDate && (
+        <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-2">
+          <strong className="text-slate-700">Publieke historie:</strong> financiële kwartaaldata start bij {formatReleaseDateToMonthYear(data.publicFinancialStartDate)}. Periodes vóór de eerste publieke kwartaalcijfers staan in de grafiek bewust op 0 en worden niet meegenomen in gemiddelden of YoY-berekeningen.
+        </div>
+      )}
+
       {/* USER REQUIREMENT:
           "ik wil niet 5 vijf verschillende grafieken met allemaal data zoals omzet, free cash flow, EPS en netto winst/verlies te gelijk zien maar een balk met opties om 1 per keer zien"
           -> PROMINENT SEGMENTED CONTROL OPTION BAR TO SHOW EXACTLY ONE METRIC AT A TIME! */}
@@ -360,7 +370,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
               {activeConfig.formatter(stats.avgVal)}
             </div>
             <span className="text-[10px] text-slate-500 font-mono-code">
-              {filteredQuarters.length} kwartalen
+              {filteredQuarters.filter(q => !q.isPrePublic).length} publieke kwartalen
             </span>
           </div>
 
@@ -374,7 +384,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
               {stats.totalGrowth >= 0 ? '+' : ''}{stats.totalGrowth.toFixed(1)}%
             </div>
             <span className="text-[10px] text-slate-500 font-mono-code">
-              T.o.v. {filteredQuarters[0]?.releaseLabel || filteredQuarters[0]?.quarter}
+              T.o.v. {filteredQuarters.filter(q => !q.isPrePublic)[0]?.releaseLabel || filteredQuarters.filter(q => !q.isPrePublic)[0]?.quarter}
             </span>
           </div>
         </div>
@@ -522,7 +532,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
         >
           <span className="flex items-center gap-1.5">
             <TableIcon className="w-3.5 h-3.5 text-blue-600" />
-            <span>Bekijk Kwartaalcijfers Tabel ({filteredQuarters.length} kwartalen)</span>
+            <span>Bekijk Kwartaalcijfers Tabel ({filteredQuarters.filter(q => !q.isPrePublic).length} publieke kwartalen)</span>
           </span>
           {showTable ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
@@ -541,7 +551,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono-code">
-                {[...filteredQuarters].reverse().map((q, idx) => (
+                {[...filteredQuarters].filter(q => !q.isPrePublic).reverse().map((q, idx) => (
                   <tr key={idx} className="hover:bg-slate-50/70 transition">
                     <td className="py-2 px-3 font-bold text-slate-900">
                       {q.releaseLabel || q.quarter}
@@ -577,6 +587,10 @@ const CustomFinancialTooltip = ({ active, payload, label, activeConfig, currency
           <span className="font-bold text-slate-200">{dataPoint.releaseLabel || dataPoint.quarter}</span>
           <span className="text-[10px] text-slate-400">{dataPoint.fiscalDate}</span>
         </div>
+
+        {dataPoint.isPrePublic && (
+          <div className="text-[10px] text-slate-400 mb-2">Voor beursnotering / geen publieke kwartaalcijfers</div>
+        )}
 
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-3">

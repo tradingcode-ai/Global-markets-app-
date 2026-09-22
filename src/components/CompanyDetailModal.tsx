@@ -273,6 +273,55 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </div>
           )}
 
+          {/* Quarterly Analyst Consensus Snapshot */}
+          {result.quarterlyConsensus && (
+            <div className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-indigo-700" />
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] font-mono-code">
+                    Quarterly Analyst Consensus
+                  </h4>
+                </div>
+                <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono-code">
+                  {result.quarterlyConsensus.quarterKey}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <span className="text-[10px] text-slate-400 block uppercase">Consensus</span>
+                  <strong className="text-sm text-indigo-700">{result.quarterlyConsensus.consensusRating || 'N/A'}</strong>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <span className="text-[10px] text-slate-400 block uppercase">Avg. Target</span>
+                  <strong className="text-sm text-slate-900">
+                    {result.quarterlyConsensus.averagePriceTarget !== undefined ? `${result.quarterlyConsensus.targetCurrency || ''}${result.quarterlyConsensus.averagePriceTarget.toFixed(2)}` : 'N/A'}
+                  </strong>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <span className="text-[10px] text-slate-400 block uppercase">Next Q EPS</span>
+                  <strong className="text-sm text-blue-700">{result.quarterlyConsensus.nextQuarterEps !== undefined ? result.quarterlyConsensus.nextQuarterEps.toFixed(2) : 'N/A'}</strong>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <span className="text-[10px] text-slate-400 block uppercase">Next Q Revenue</span>
+                  <strong className="text-sm text-slate-900">{result.quarterlyConsensus.nextQuarterRevenue !== undefined ? `${result.quarterlyConsensus.nextQuarterRevenue.toFixed(2)}B` : 'N/A'}</strong>
+                </div>
+              </div>
+              {result.quarterlyConsensus.recommendationCounts && (
+                <div className="flex flex-wrap gap-2 mt-2.5 text-[10px] font-mono-code">
+                  <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Strong Buy {result.quarterlyConsensus.recommendationCounts.strongBuy}</span>
+                  <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Buy {result.quarterlyConsensus.recommendationCounts.buy}</span>
+                  <span className="px-2 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200">Hold {result.quarterlyConsensus.recommendationCounts.hold}</span>
+                  <span className="px-2 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200">Sell {result.quarterlyConsensus.recommendationCounts.sell}</span>
+                  <span className="px-2 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200">Strong Sell {result.quarterlyConsensus.recommendationCounts.strongSell}</span>
+                </div>
+              )}
+              <p className="mt-2 text-[10px] text-slate-500">
+                Yahoo Finance analyst snapshot • max. 3 latest distinct banks/brokers • individual analyst names are not displayed.
+              </p>
+            </div>
+          )}
+
           {/* 5-Year Quarterly Financial History (Revenue, FCF, EPS, Net Income) with Single-Metric Option Bar */}
           <div className="border-t border-slate-200 pt-4">
             <FinancialHistoryChart 

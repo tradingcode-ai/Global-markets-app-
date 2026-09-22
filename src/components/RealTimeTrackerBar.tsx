@@ -4,6 +4,7 @@ import { StockLogo } from './StockLogo';
 import { getStockTechnicalMetrics } from '../data/technicalData';
 import { getMarketSessionInfo } from '../utils/marketSession';
 import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
+import { HYPERSCALER_TICKERS } from '../data/hyperscalersData';
 import { TECH_COMPANIES } from '../data/earningsData';
 import { FINANCIAL_COMPANIES } from '../data/financialsData';
 import { SOVEREIGN_BONDS_DATA } from '../data/bondsData';
@@ -41,6 +42,8 @@ const US_TECH_TICKERS = [
 ];
 
 // 3. European Tech Champions
+const HYPERSCALER_TICKERS_LIST = Array.from(HYPERSCALER_TICKERS);
+
 const EU_TECH_TICKERS = [
   'ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM'
 ];
@@ -69,6 +72,7 @@ const GOV_BOND_TICKERS = [
 // All tickers across the application, deduplicated while preserving logical ordering
 const ALL_APPLICATION_TICKERS = Array.from(new Set([
   ...US_TECH_TICKERS,
+  ...HYPERSCALER_TICKERS_LIST,
   ...SHOVEL_SELLER_TICKERS,
   ...EU_TECH_TICKERS,
   ...US_FINANCIAL_TICKERS,
@@ -195,7 +199,7 @@ export const getQuoteForTicker = (
   return null;
 };
 
-type CategoryFilter = 'ALL' | 'SHOVEL_SELLERS' | 'US_TECH' | 'US_FIN' | 'EU_FIN' | 'EU_TECH' | 'COMMODITIES' | 'BONDS';
+type CategoryFilter = 'ALL' | 'SHOVEL_SELLERS' | 'HYPERSCALERS' | 'US_TECH' | 'US_FIN' | 'EU_FIN' | 'EU_TECH' | 'COMMODITIES' | 'BONDS';
 
 export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
   quotes,
@@ -217,6 +221,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
 
   const rawCategoryTickers = useMemo(() => {
     if (activeCategory === 'SHOVEL_SELLERS') return SHOVEL_SELLER_TICKERS;
+    if (activeCategory === 'HYPERSCALERS') return HYPERSCALER_TICKERS_LIST;
     if (activeCategory === 'US_TECH') return US_TECH_TICKERS;
     if (activeCategory === 'EU_TECH') return EU_TECH_TICKERS;
     if (activeCategory === 'US_FIN') return US_FINANCIAL_TICKERS;
@@ -370,6 +375,15 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
               title="All 34 Indispensable Semiconductor & AI Infrastructure Shovel Sellers"
             >
               SHOVEL SELLERS ({SHOVEL_SELLER_TICKERS.length})
+            </button>
+            <button
+              onClick={() => setActiveCategory('HYPERSCALERS')}
+              className={`px-2 py-1 rounded transition cursor-pointer whitespace-nowrap font-medium ${
+                activeCategory === 'HYPERSCALERS' ? 'bg-violet-700 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Hyperscalers & Neo Clouds"
+            >
+              HYPERSCALERS ({HYPERSCALER_TICKERS_LIST.length})
             </button>
             <button
               onClick={() => setActiveCategory('US_TECH')}

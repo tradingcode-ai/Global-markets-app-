@@ -83,6 +83,8 @@ const DEFAULT_EU_FINANCIAL_SYMBOLS = [
   'BCS', 'BARC', 'HSBC', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'UBS', 'SAN', 'BBVA', 'SX7P'
 ];
 
+const DEFAULT_HYPERSCALER_SYMBOLS = ['GOOGL', 'MSFT', 'AMZN', 'SPCX', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'];
+
 const DEFAULT_SHOVEL_SYMBOLS = [
   'TSM', 'AMAT', 'LRCX', 'KLAC', 'TOELY', 'ATEYY', 'TER', 
   'COHR', 'LITE', 'CSCO', 'CIEN', 'ASTS', 'WDC', 'STX', 
@@ -93,6 +95,7 @@ const DEFAULT_SHOVEL_SYMBOLS = [
 
 const DEFAULT_ALL_SYMBOLS = [
   ...DEFAULT_TECH_SYMBOLS,
+  ...DEFAULT_HYPERSCALER_SYMBOLS,
   ...DEFAULT_SHOVEL_SYMBOLS,
   ...DEFAULT_COMMODITY_SYMBOLS,
   ...DEFAULT_BOND_SYMBOLS,
@@ -173,7 +176,12 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   // Shovel Sellers International / OTC Mappings
   'HXSCF': '000660.KS',
   'SMICY': '0981.HK',
-  'KIOXIA': '285A.T'
+  'KIOXIA': '285A.T',
+  // Hyperscalers & Neo Clouds — primary public listings
+  'SPCX': 'SPCX',
+  'CRWV': 'CRWV',
+  'NBIS': 'NBIS',
+  'IREN': 'IREN'
 };
 
 // Baseline fallbacks in case of temporary upstream network limitations
@@ -886,8 +894,228 @@ async function getYahooCrumb(): Promise<{ cookie: string; crumb: string } | null
   return null;
 }
 
+// ==========================================
+// QUARTERLY ANALYST OUTLOOK + CONSENSUS SNAPSHOT
+// Yahoo Finance source. This endpoint is intended to be called only once per
+// quarter by the client; the client stores the returned snapshot locally.
+// ==========================================
+interface QuarterlyAnalystOutlookPayload {
+  ticker: string;
+  quarterKey: string;
+  nextQuarterLabel: string;
+  snapshotDate: string;
+  consensusRating?: string;
+  recommendationCounts?: {
+    strongBuy: number; buy: number; hold: number; sell: number; strongSell: number;
+  };
+  averagePriceTarget?: number;
+  lowPriceTarget?: number;
+  highPriceTarget?: number;
+  targetCurrency?: string;
+  nextQuarterEps?: number;
+  nextQuarterEpsLow?: number;
+  nextQuarterEpsHigh?: number;
+  nextQuarterRevenue?: number;
+  nextQuarterRevenueLow?: number;
+  nextQuarterRevenueHigh?: number;
+  previousQuarterEps?: number;
+  previousQuarterRevenue?: number;
+  yearAgoEps?: number;
+  yearAgoRevenue?: number;
+  analystsCount?: number;
+  outlooks: Array<{
+    bankName: string;
+    rating: string;
+    targetPrice?: number;
+    previousTargetPrice?: number;
+    currency?: string;
+    asOfDate?: string;
+  }>;
+}
+
+function getQuarterKey(date = new Date()): string {
+  const q = Math.floor(date.getUTCMonth() / 3) + 1;
+  return `${date.getUTCFullYear()}-Q${q}`;
+}
+
+function formatQuarterLabel(dateLike: any, fallback: string): string {
+  const raw = dateLike?.fmt || dateLike?.raw;
+  if (!raw) return fallback;
+  const d = typeof raw === 'number' ? new Date(raw * 1000) : new Date(raw);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return `${d.getUTCFullYear()} Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
+}
+
+function rawNumber(v: any): number | undefined {
+  const n = typeof v === 'number' ? v : v?.raw;
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
+}
+
+async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: string): Promise<QuarterlyAnalystOutlookPayload | null> {
+  const session = await getYahooCrumb();
+  if (!session) return null;
+
+  const yahooSymbol = YAHOO_SYMBOL_MAP[normalized] || normalized;
+  const modules = [
+    'upgradeDowngradeHistory',
+    'recommendationTrend',
+    'financialData',
+    'earningsTrend',
+    'defaultKeyStatistics'
+  ].join(',');
+
+  try {
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooSymbol)}?modules=${modules}&crumb=${encodeURIComponent(session.crumb)}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Cookie': session.cookie
+      }
+    });
+    if (!response.ok) return null;
+
+    const json = await response.json();
+    const summary = json?.quoteSummary?.result?.[0];
+    if (!summary) return null;
+
+    const financial = summary.financialData || {};
+    const recommendation = summary.recommendationTrend?.trend || [];
+    const history = summary.upgradeDowngradeHistory?.history || [];
+    const earningsTrend = summary.earningsTrend?.trend || [];
+
+    // Pick the latest recommendation period available.
+    const rec = recommendation.find((r: any) => r.period === '0m') || recommendation[0];
+    const counts = rec ? {
+      strongBuy: rawNumber(rec.strongBuy) || 0,
+      buy: rawNumber(rec.buy) || 0,
+      hold: rawNumber(rec.hold) || 0,
+      sell: rawNumber(rec.sell) || 0,
+      strongSell: rawNumber(rec.strongSell) || 0
+    } : undefined;
+
+    const ratingTotal = counts
+      ? counts.strongBuy + counts.buy + counts.hold + counts.sell + counts.strongSell
+      : 0;
+
+    const consensusRating = counts && ratingTotal > 0
+      ? (
+          ((counts.strongBuy + counts.buy) / ratingTotal) >= 0.6 ? 'Buy' :
+          ((counts.sell + counts.strongSell) / ratingTotal) >= 0.6 ? 'Sell' : 'Hold'
+        )
+      : undefined;
+
+    // Latest distinct bank/broker call. We deliberately do not expose analyst names.
+    const byFirm = new Map<string, any>();
+    for (const item of history) {
+      const firm = String(item.firm || item.organization || '').trim();
+      const grade = String(item.toGrade || item.currentGrade || '').trim();
+      if (!firm || !grade) continue;
+      const stamp = rawNumber(item.epochGradeDate) || 0;
+      const old = byFirm.get(firm);
+      if (!old || stamp > (rawNumber(old.epochGradeDate) || 0)) byFirm.set(firm, item);
+    }
+
+    const outlooks = Array.from(byFirm.values())
+      .sort((a, b) => (rawNumber(b.epochGradeDate) || 0) - (rawNumber(a.epochGradeDate) || 0))
+      .slice(0, 3)
+      .map((item: any) => ({
+        bankName: String(item.firm || item.organization),
+        rating: String(item.toGrade || item.currentGrade),
+        targetPrice: rawNumber(item.currentPriceTarget),
+        previousTargetPrice: rawNumber(item.priorPriceTarget),
+        currency: financial?.financialCurrency || undefined,
+        asOfDate: rawNumber(item.epochGradeDate)
+          ? new Date(rawNumber(item.epochGradeDate)! * 1000).toISOString().slice(0, 10)
+          : undefined
+      }));
+
+    // Prefer +1q (next quarter), then 0q, then the first dated future estimate.
+    const future = earningsTrend.filter((t: any) => ['+1q', '+2q'].includes(t.period));
+    const next = earningsTrend.find((t: any) => t.period === '+1q')
+      || future[0]
+      || earningsTrend.find((t: any) => t.period === '0q')
+      || earningsTrend[0];
+
+    const previous = earningsTrend.find((t: any) => t.period === '-1q');
+    const yearAgo = next?.earningsEstimate?.yearAgoEps !== undefined ? next : undefined;
+
+    const endDate = next?.endDate || next?.period;
+    const nextQuarterLabel = formatQuarterLabel(endDate, 'Next Quarter');
+
+    return {
+      ticker: normalized,
+      quarterKey,
+      nextQuarterLabel,
+      snapshotDate: new Date().toISOString(),
+      consensusRating,
+      recommendationCounts: counts,
+      averagePriceTarget: rawNumber(financial.targetMeanPrice),
+      lowPriceTarget: rawNumber(financial.targetLowPrice),
+      highPriceTarget: rawNumber(financial.targetHighPrice),
+      targetCurrency: financial?.financialCurrency || undefined,
+      nextQuarterEps: rawNumber(next?.earningsEstimate?.avg),
+      nextQuarterEpsLow: rawNumber(next?.earningsEstimate?.low),
+      nextQuarterEpsHigh: rawNumber(next?.earningsEstimate?.high),
+      nextQuarterRevenue: rawNumber(next?.revenueEstimate?.avg),
+      nextQuarterRevenueLow: rawNumber(next?.revenueEstimate?.low),
+      nextQuarterRevenueHigh: rawNumber(next?.revenueEstimate?.high),
+      previousQuarterEps: rawNumber(previous?.earningsEstimate?.avg),
+      previousQuarterRevenue: rawNumber(previous?.revenueEstimate?.avg),
+      yearAgoEps: rawNumber(yearAgo?.earningsEstimate?.yearAgoEps),
+      yearAgoRevenue: rawNumber(yearAgo?.revenueEstimate?.yearAgoRevenue),
+      analystsCount: rawNumber(financial?.numberOfAnalystOpinions),
+      outlooks
+    };
+  } catch (error) {
+    console.warn(`[Yahoo Quarterly Outlook] ${normalized}:`, error);
+    return null;
+  }
+}
+
+app.get('/api/quarterly-analyst-outlook', async (req, res) => {
+  try {
+    const symbolsParam = req.query.symbols as string;
+    const requestedSymbols = symbolsParam
+      ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+      : [...DEFAULT_TECH_SYMBOLS, ...DEFAULT_SHOVEL_SYMBOLS, ...DEFAULT_US_FINANCIAL_SYMBOLS, ...DEFAULT_EU_FINANCIAL_SYMBOLS];
+
+    const quarterKey = getQuarterKey();
+    const data: Record<string, QuarterlyAnalystOutlookPayload> = {};
+    // Keep Yahoo request concurrency modest so a quarterly refresh remains
+    // reliable for the full international universe.
+    const batchSize = 6;
+    for (let i = 0; i < requestedSymbols.length; i += batchSize) {
+      const batch = requestedSymbols.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map(async symbol => [symbol, await fetchYahooQuarterlySnapshot(symbol, quarterKey)] as const)
+      );
+      for (const [symbol, value] of results) {
+        if (value) data[symbol] = value;
+      }
+    }
+
+    return res.json({
+      success: true,
+      quarterKey,
+      snapshotDate: new Date().toISOString(),
+      provider: 'Yahoo Finance Analyst Insights & Earnings Estimates',
+      data
+    });
+  } catch (err: any) {
+    console.error('Quarterly analyst outlook error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Quarterly outlook fetch failed' });
+  }
+});
+
+
 // Fallback registry for verified next earnings dates
 const VERIFIED_EARNINGS_CALENDAR_REGISTRY: Record<string, { date: string; time: 'BMO' | 'AMC'; quarter: string; eps: number; rev: number }> = {
+  // Hyperscalers & Neo Clouds
+  'CRWV': { date: '2026-11-11', time: 'AMC', quarter: 'Q3 2026', eps: -0.80, rev: 3.10 },
+  'NBIS': { date: '2026-11-10', time: 'AMC', quarter: 'Q3 FY2026', eps: -0.45, rev: 0.75 },
+  'IREN': { date: '2026-11-05', time: 'AMC', quarter: 'Q1 FY2027', eps: -0.40, rev: 0.22 },
+  'SPCX': { date: '2026-11-03', time: 'AMC', quarter: 'Q3 2026', eps: -0.95, rev: 6.10 },
+
   // Megacap Tech
   'NVDA': { date: '2026-11-18', time: 'AMC', quarter: 'Q3 FY2027', eps: 2.47, rev: 108.99 },
   'MSFT': { date: '2026-10-27', time: 'AMC', quarter: 'Q1 FY2027', eps: 3.45, rev: 68.20 },
@@ -1491,6 +1719,45 @@ interface CachedFinancialHistory {
 const financialsHistoryCache: Record<string, CachedFinancialHistory> = {};
 const MONTHLY_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
+// For companies that only recently became publicly traded, do not backfill
+// pre-listing periods with synthetic financials. The chart keeps those periods
+// visible as explicit zeroes, while the financial table only shows public periods.
+// Dates below are the first quarter-end for which the company had public-market
+// quarterly financial information in the app's research workflow.
+const PUBLIC_FINANCIAL_START_DATES: Record<string, string> = {
+  NBIS: '2024-09-30',   // Nebius first public quarterly result: Q3 2024
+  CRWV: '2025-03-31',   // CoreWeave first public quarterly result: Q1 2025
+  KIOXIA: '2024-12-31', // First public-company quarter after Dec 2024 TSE listing
+  IREN: '2021-12-31',   // First quarter after its 2021 U.S. IPO
+  CXMT: '2026-06-30',   // First quarterly result after the Jul 2026 Shanghai listing
+  SPCX: '2026-06-30'    // First quarterly result after the Jun 2026 Nasdaq listing
+};
+
+function getPublicFinancialStartDate(ticker: string): string | undefined {
+  return PUBLIC_FINANCIAL_START_DATES[ticker.toUpperCase()];
+}
+
+function applyPublicListingBoundary(ticker: string, quarters: any[]): any[] {
+  const startDate = getPublicFinancialStartDate(ticker);
+  if (!startDate) return quarters;
+
+  const startMs = new Date(startDate).getTime();
+  return quarters.map(q => {
+    const qMs = new Date(q.fiscalDate).getTime();
+    if (!Number.isFinite(qMs) || qMs >= startMs) {
+      return { ...q, isPrePublic: false };
+    }
+    return {
+      ...q,
+      revenue: 0,
+      freeCashFlow: 0,
+      eps: 0,
+      netIncome: 0,
+      isPrePublic: true
+    };
+  });
+}
+
 const DUTCH_MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
 function formatQuarterReleaseLabel(fiscalDateStr: string): string {
@@ -1539,7 +1806,7 @@ async function getYahooAuth(): Promise<{ cookie: string; crumb: string } | null>
 }
 
 // Live Yahoo Finance quarterly financial statements fetcher with USD normalization
-async function fetchLiveYahooQuarterlyFinancials(symbol: string): Promise<any[] | null> {
+async function fetchLiveYahooQuarterlyFinancials(symbol: string, ticker?: string): Promise<any[] | null> {
   try {
     const auth = await getYahooAuth();
     if (!auth) return null;
@@ -1574,10 +1841,14 @@ async function fetchLiveYahooQuarterlyFinancials(symbol: string): Promise<any[] 
       fxToUsdMultiplier = 1.30 / 100; // British Pence to USD
     }
 
+    const publicStartDate = getPublicFinancialStartDate(ticker || symbol.split('.')[0]);
+    const publicStartMs = publicStartDate ? new Date(publicStartDate).getTime() : -Infinity;
+
     return incomeHistory.map((inc: any, idx: number) => {
       const dateStr = inc.endDate?.fmt || '';
       let revRaw = inc.totalRevenue?.raw || 0;
       let netIncRaw = inc.netIncome?.raw || 0;
+      const epsRaw = inc.dilutedEPS?.raw ?? inc.basicEPS?.raw ?? 0;
 
       // Handle extreme non-USD scale if currency was unspecified (e.g. TWD/KRW/JPY figures in hundreds of billions)
       if (fxToUsdMultiplier === 1.0 && (revRaw / 1e9) > 120 && symbol === 'TSM') {
@@ -1595,6 +1866,9 @@ async function fetchLiveYahooQuarterlyFinancials(symbol: string): Promise<any[] 
       const year = d.getUTCFullYear();
       const month = d.getUTCMonth();
       const qNum = Math.floor(month / 3) + 1;
+      const qMs = d.getTime();
+      if (qMs < publicStartMs) return null;
+      const eps = Number((epsRaw * fxToUsdMultiplier).toFixed(2));
 
       return {
         quarter: `Q${qNum} '${String(year).slice(-2)}`,
@@ -1604,10 +1878,11 @@ async function fetchLiveYahooQuarterlyFinancials(symbol: string): Promise<any[] 
         quarterNum: qNum,
         revenue: revB,
         freeCashFlow: fcfB,
-        eps: 0,
-        netIncome: netIncB
+        eps,
+        netIncome: netIncB,
+        isPrePublic: false
       };
-    }).reverse();
+    }).filter(Boolean).reverse();
   } catch (e) {
     console.warn(`[Yahoo Live Financials] Error for ${symbol}:`, e);
     return null;
@@ -1806,6 +2081,11 @@ function generateQuarterlyFinancials(ticker: string, currency: string = 'USD'): 
 
   // Specific corporate financial baseline profiles for Q2 2026 (Levels in Billions)
   const corporateProfiles: Record<string, { rev: number; fcf: number; eps: number; netInc: number }> = {
+    CRWV: { rev: 7.59, fcf: -1.20, eps: -3.55, netInc: -1.93 },
+    NBIS: { rev: 0.582, fcf: -0.90, eps: -0.07, netInc: -0.19 },
+    IREN: { rev: 0.707, fcf: -0.65, eps: -2.39, netInc: -0.703 },
+    SPCX: { rev: 23.04, fcf: -5.50, eps: -1.10, netInc: -8.89 },
+
     GOOGL: { rev: 119.80, fcf: 25.10, eps: 2.85, netInc: 31.20 },
     AMZN:  { rev: 182.50, fcf: 19.80, eps: 1.72, netInc: 18.50 },
     META:  { rev: 60.80,  fcf: 16.50, eps: 6.18, netInc: 19.80 },
@@ -1865,7 +2145,7 @@ function generateQuarterlyFinancials(ticker: string, currency: string = 'USD'): 
   });
 
   return {
-    quarters,
+    quarters: applyPublicListingBoundary(sym, quarters),
     fiscalNote: "",
     calendarType: ""
   };
@@ -1892,11 +2172,11 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
 
     // 1. Generate full 20-quarter (5-year) verified financial timeline
     const { quarters: baseQuarters, fiscalNote, calendarType } = generateQuarterlyFinancials(rawTicker, currency);
-    let quarters = [...baseQuarters];
+    let quarters = applyPublicListingBoundary(rawTicker, [...baseQuarters]);
 
     // 2. Fetch live quarterly financial statements directly from Yahoo Finance
     try {
-      const liveYahooQuarters = await fetchLiveYahooQuarterlyFinancials(yahooSymbol);
+      const liveYahooQuarters = await fetchLiveYahooQuarterlyFinancials(yahooSymbol, rawTicker);
       if (liveYahooQuarters && liveYahooQuarters.length > 0) {
         // Merge or update the latest quarters with exact live Yahoo reported figures
         liveYahooQuarters.forEach(yq => {
@@ -1911,7 +2191,9 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
               revenue: yq.revenue > 0 ? yq.revenue : quarters[existingIdx].revenue,
               netIncome: yq.netIncome !== 0 ? yq.netIncome : quarters[existingIdx].netIncome,
               freeCashFlow: yq.freeCashFlow !== 0 ? yq.freeCashFlow : quarters[existingIdx].freeCashFlow,
-              releaseLabel: yq.releaseLabel || quarters[existingIdx].releaseLabel
+              eps: yq.eps !== 0 ? yq.eps : quarters[existingIdx].eps,
+              releaseLabel: yq.releaseLabel || quarters[existingIdx].releaseLabel,
+              isPrePublic: false
             };
           }
         });
@@ -1920,13 +2202,19 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
       console.warn(`[Yahoo Financials] Live merge note for ${rawTicker}:`, yErr);
     }
 
-    // Ensure all quarters strictly released (no future dates) and have releaseLabel
-    quarters = quarters
+    // Ensure all quarters strictly released (no future dates), keep the pre-public
+    // periods at zero, and ensure every point carries an explicit public/private marker.
+    quarters = applyPublicListingBoundary(rawTicker, quarters)
       .filter(q => !q.isEstimated && (!q.fiscalDate || new Date(q.fiscalDate).getTime() <= now))
       .map(q => ({
         ...q,
         releaseLabel: q.releaseLabel || formatQuarterReleaseLabel(q.fiscalDate)
       }));
+
+    // Recent IPOs may have fewer than 20 public quarters. Preserve the 5Y axis,
+    // but only with zero-value pre-public periods rather than invented financials.
+    const publicStartDate = getPublicFinancialStartDate(rawTicker);
+    const responsePublicStart = publicStartDate || null;
 
     const lastUpdated = new Date().toISOString();
     const nextMonthlyUpdate = new Date(Date.now() + MONTHLY_CACHE_TTL).toISOString();
@@ -1940,6 +2228,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
       isLive: true,
       fiscalNote: '',
       calendarType: '',
+      publicFinancialStartDate: responsePublicStart,
       quarters
     };
 

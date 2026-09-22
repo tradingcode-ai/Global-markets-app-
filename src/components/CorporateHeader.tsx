@@ -86,7 +86,7 @@ export const CorporateHeader: React.FC<CorporateHeaderProps> = ({
           <div className="hidden md:flex items-center space-x-3 text-slate-500 text-[11px]">
             <span>EARNINGS SEASON: <strong className="text-slate-700 font-semibold">Q2/Q3 2026 EARNINGS & MACRO</strong></span>
             <span>•</span>
-            <span>MONITORED: <strong className="text-emerald-700 font-semibold">43 GLOBAL EQUITIES (TECH & FINANCIALS) • 16 COMMODITIES • 9 RATES</strong></span>
+            <span>MONITORED: <strong className="text-emerald-700 font-semibold">47 GLOBAL EQUITIES (TECH, HYPERSCALERS & FINANCIALS) • 16 COMMODITIES • 9 RATES</strong></span>
           </div>
         </div>
 
@@ -177,6 +177,7 @@ export const CorporateHeader: React.FC<CorporateHeaderProps> = ({
           >
             <option value="ALL">All Sectors & Asset Classes</option>
             <option value="The Shovel Sellers">⛏️ The Shovel Sellers (AI Hardware, Equipment, Comms)</option>
+            <option value="Hyperscalers & Neo Clouds">☁️ Hyperscalers & Neo Clouds</option>
             <option value="U.S. Financials">U.S. Financials (Big 6 & Alts)</option>
             <option value="European Financials">European Financials & STOXX</option>
             <option value="Semiconductors & AI">Semiconductors & AI</option>
