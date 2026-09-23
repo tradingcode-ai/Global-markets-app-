@@ -3322,13 +3322,13 @@ EISEN VOOR ANALYST BREAKDOWN:
   }
 });
 
-// Cache for 5-Year Quarterly Financial History (Monthly TTL = 30 days)
+// Cache for live quarterly financial history (6-hour TTL)
 interface CachedFinancialHistory {
   data: any;
   timestamp: number;
 }
 const financialsHistoryCache: Record<string, CachedFinancialHistory> = {};
-const MONTHLY_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours: financial history stays fresh without hammering Yahoo
+const FINANCIAL_HISTORY_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours: financial history stays fresh without hammering Yahoo
 
 // For companies that only recently became publicly traded, do not backfill
 // pre-listing periods with synthetic financials. The chart keeps those periods
@@ -3873,7 +3873,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
 
     if (!forceRefresh && financialsHistoryCache[rawTicker]) {
       const cached = financialsHistoryCache[rawTicker];
-      if (now - cached.timestamp < MONTHLY_CACHE_TTL) {
+      if (now - cached.timestamp < FINANCIAL_HISTORY_CACHE_TTL) {
         return res.json(cached.data);
       }
     }
@@ -3905,7 +3905,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
       sourceCurrency,
       provider: 'Yahoo Finance Fundamentals Time Series',
       lastUpdated: new Date().toISOString(),
-      nextMonthlyUpdate: new Date(Date.now() + MONTHLY_CACHE_TTL).toISOString(),
+      nextMonthlyUpdate: new Date(Date.now() + FINANCIAL_HISTORY_CACHE_TTL).toISOString(),
       isLive: true,
       fiscalNote: 'Reported quarterly financials; non-European companies normalized to USD.',
       calendarType: '',
