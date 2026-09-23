@@ -28,6 +28,7 @@ import {
   Info
 } from 'lucide-react';
 import { CompanyFinancialHistory, QuarterlyFinancialPoint, FinancialMetricKey } from '../types';
+import { getCurrencySymbol } from '../utils/formatters';
 
 interface FinancialHistoryChartProps {
   ticker: string;
@@ -52,7 +53,7 @@ function formatReleaseDateToMonthYear(fiscalDateStr?: string, existingReleaseLab
 export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
   ticker,
   companyName,
-  currency = '$'
+  fallbackCurrency = '$'
 }) => {
   // Active metric toggle - only ONE displayed at a time as strictly requested
   const [activeMetric, setActiveMetric] = useState<FinancialMetricKey>('revenue');
@@ -65,6 +66,9 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showTable, setShowTable] = useState<boolean>(false);
+
+  // Backend response is authoritative for the financial display currency.
+  const currency = data?.currency ? getCurrencySymbol(data.currency) : fallbackCurrency;
 
   // Fetch financial history
   const fetchFinancials = async (force: boolean = false) => {
