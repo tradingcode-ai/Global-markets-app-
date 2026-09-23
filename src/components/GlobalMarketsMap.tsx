@@ -1765,6 +1765,7 @@ export const GlobalMarketsMap: React.FC = () => {
                         );
                       })}
                     </div>
+                    </div>
                   </div>
 
                   {/* Unified live institutional SVG Financial Chart */}
