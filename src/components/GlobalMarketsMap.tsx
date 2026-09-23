@@ -1736,34 +1736,6 @@ export const GlobalMarketsMap: React.FC = () => {
                         <span>Koersgrafiek ({selectedMarket.name})</span>
                       </div>
 
-                      {/* 3 Design Choices Switcher (Bloomberg, ICE, Executive) */}
-                      <div className="inline-flex items-center p-0.5 bg-[#080d1a] border border-slate-800/90 rounded-lg shadow-sm">
-                        {(['bloomberg', 'ice', 'executive'] as const).map(th => {
-                          const themeMeta = {
-                            bloomberg: { label: 'Bloomberg', dot: 'bg-amber-400', active: 'bg-amber-950/80 text-amber-300 border-amber-500/60' },
-                            ice: { label: 'ICE Feed', dot: 'bg-cyan-400', active: 'bg-cyan-950/80 text-cyan-200 border-cyan-500/60' },
-                            executive: { label: 'Executive', dot: 'bg-indigo-400', active: 'bg-indigo-950/80 text-indigo-200 border-indigo-500/60' }
-                          }[th];
-                          const isSelected = chartTheme === th;
-                          return (
-                            <button
-                              key={th}
-                              onClick={() => setChartTheme(th)}
-                              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                                isSelected
-                                  ? `${themeMeta.active} border shadow-sm`
-                                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
-                              }`}
-                              title={`Schakel grafiekdesign om naar ${themeMeta.label}`}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${themeMeta.dot}`} />
-                              <span>{themeMeta.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
                     {/* 8 Timeframe Selector Buttons (24U, 1W, 3M, YTD, 1Y, 5Y, 10Y, ALL) */}
                     <div className="inline-flex flex-wrap items-center p-0.5 bg-[#080d1a] border border-slate-800/90 rounded-lg shadow-sm">
                       {[
