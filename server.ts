@@ -2541,7 +2541,9 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
     'recommendationTrend',
     'financialData',
     'earningsTrend',
-    'defaultKeyStatistics'
+    'defaultKeyStatistics',
+    'price',
+    'quoteType'
   ].join(',');
 
   try {
@@ -2559,11 +2561,12 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
     if (!summary) return null;
 
     const financial = summary.financialData || {};
+    const priceModule = summary.price || {};
     const recommendation = summary.recommendationTrend?.trend || [];
     const history = summary.upgradeDowngradeHistory?.history || [];
     const earningsTrend = summary.earningsTrend?.trend || [];
+    const analystCurrency = normalizeYahooCurrency(priceModule?.currency || financial?.financialCurrency || 'USD');
 
-    // Pick the latest recommendation period available.
     const rec = recommendation.find((r: any) => r.period === '0m') || recommendation[0];
     const counts = rec ? {
       strongBuy: rawNumber(rec.strongBuy) || 0,
@@ -2578,13 +2581,10 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
       : 0;
 
     const consensusRating = counts && ratingTotal > 0
-      ? (
-          ((counts.strongBuy + counts.buy) / ratingTotal) >= 0.6 ? 'Buy' :
-          ((counts.sell + counts.strongSell) / ratingTotal) >= 0.6 ? 'Sell' : 'Hold'
-        )
+      ? (((counts.strongBuy + counts.buy) / ratingTotal) >= 0.6 ? 'Buy'
+        : ((counts.sell + counts.strongSell) / ratingTotal) >= 0.6 ? 'Sell' : 'Hold')
       : undefined;
 
-    // Latest distinct bank/broker call. We deliberately do not expose analyst names.
     const byFirm = new Map<string, any>();
     for (const item of history) {
       const firm = String(item.firm || item.organization || '').trim();
@@ -2603,32 +2603,45 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
         rating: String(item.toGrade || item.currentGrade),
         targetPrice: rawNumber(item.currentPriceTarget),
         previousTargetPrice: rawNumber(item.priorPriceTarget),
-        currency: financial?.financialCurrency || undefined,
+        currency: analystCurrency || undefined,
         asOfDate: rawNumber(item.epochGradeDate)
           ? new Date(rawNumber(item.epochGradeDate)! * 1000).toISOString().slice(0, 10)
           : undefined
       }));
 
-    // Prefer +1q (next quarter), then 0q, then the first dated future estimate.
-    const future = earningsTrend.filter((t: any) => ['+1q', '+2q'].includes(t.period));
-    const next = earningsTrend.find((t: any) => t.period === '+1q')
-      || future[0]
-      || earningsTrend.find((t: any) => t.period === '0q')
+    // Yahoo's 0q is the current reporting quarter. This is intentionally not
+    // hard-coded so the panel rolls forward automatically after every quarter.
+    const next = earningsTrend.find((t: any) => t.period === '0q')
+      || earningsTrend.find((t: any) => t.period === '+1q')
+      || earningsTrend.find((t: any) => ['+2q', '+3q'].includes(t.period))
       || earningsTrend[0];
 
     const previous = earningsTrend.find((t: any) => t.period === '-1q');
     const yearAgo = next?.earningsEstimate?.yearAgoEps !== undefined ? next : undefined;
-
     const endDate = next?.endDate || next?.period;
-    const nextQuarterLabel = formatQuarterLabel(endDate, 'Next Quarter');
+    const nextQuarterLabel = formatQuarterLabel(endDate, 'Current Quarter');
 
-    const normalizeRevB = (val?: number | null): number | undefined => {
-      if (val === undefined || val === null || isNaN(val)) return undefined;
-      if (Math.abs(val) >= 1e8) {
-        return Number((val / 1e9).toFixed(2));
-      }
-      return Number(val.toFixed(2));
+    const rawRev = (value?: number | null) => {
+      if (value === undefined || value === null || Number.isNaN(Number(value))) return undefined;
+      return Number(value);
     };
+    const normalizeRevenueB = (value?: number | null, fromCurrency: string = analystCurrency): number | undefined => {
+      if (value === undefined || value === null || Number.isNaN(Number(value))) return undefined;
+      const numeric = Number(value);
+      const billions = Math.abs(numeric) >= 1e8 ? numeric / 1e9 : numeric;
+      const shouldConvert = !isEuropeanFinancialTicker(normalized) && fromCurrency !== 'USD';
+      const fx = shouldConvert ? await getReliableFxRateToUsd(fromCurrency) : 1;
+      return Number((billions * fx).toFixed(2));
+    };
+    const shouldConvertFinancials = !isEuropeanFinancialTicker(normalized) && analystCurrency !== 'USD';
+    const analystFx = shouldConvertFinancials ? await getReliableFxRateToUsd(analystCurrency) : 1;
+
+    const revenueAvg = await normalizeRevenueB(rawRev(next?.revenueEstimate?.avg));
+    const revenueLow = await normalizeRevenueB(rawRev(next?.revenueEstimate?.low));
+    const revenueHigh = await normalizeRevenueB(rawRev(next?.revenueEstimate?.high));
+    const epsAvg = rawRev(next?.earningsEstimate?.avg);
+    const epsLow = rawRev(next?.earningsEstimate?.low);
+    const epsHigh = rawRev(next?.earningsEstimate?.high);
 
     return {
       ticker: normalized,
@@ -2640,18 +2653,24 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
       averagePriceTarget: rawNumber(financial.targetMeanPrice),
       lowPriceTarget: rawNumber(financial.targetLowPrice),
       highPriceTarget: rawNumber(financial.targetHighPrice),
-      targetCurrency: financial?.financialCurrency || undefined,
-      nextQuarterEps: rawNumber(next?.earningsEstimate?.avg),
-      nextQuarterEpsLow: rawNumber(next?.earningsEstimate?.low),
-      nextQuarterEpsHigh: rawNumber(next?.earningsEstimate?.high),
-      nextQuarterRevenue: normalizeRevB(rawNumber(next?.revenueEstimate?.avg)),
-      nextQuarterRevenueLow: normalizeRevB(rawNumber(next?.revenueEstimate?.low)),
-      nextQuarterRevenueHigh: normalizeRevB(rawNumber(next?.revenueEstimate?.high)),
-      previousQuarterEps: rawNumber(previous?.earningsEstimate?.avg),
-      previousQuarterRevenue: normalizeRevB(rawNumber(previous?.revenueEstimate?.avg)),
-      yearAgoEps: rawNumber(yearAgo?.earningsEstimate?.yearAgoEps),
-      yearAgoRevenue: normalizeRevB(rawNumber(yearAgo?.revenueEstimate?.yearAgoRevenue)),
-      analystsCount: rawNumber(financial?.numberOfAnalystOpinions),
+      targetCurrency: analystCurrency || undefined,
+      nextQuarterEps: epsAvg !== undefined ? Number((epsAvg * analystFx).toFixed(2)) : undefined,
+      nextQuarterEpsLow: epsLow !== undefined ? Number((epsLow * analystFx).toFixed(2)) : undefined,
+      nextQuarterEpsHigh: epsHigh !== undefined ? Number((epsHigh * analystFx).toFixed(2)) : undefined,
+      nextQuarterRevenue: revenueAvg,
+      nextQuarterRevenueLow: revenueLow,
+      nextQuarterRevenueHigh: revenueHigh,
+      previousQuarterEps: previous?.earningsEstimate?.avg !== undefined ? Number((Number(previous.earningsEstimate.avg) * analystFx).toFixed(2)) : undefined,
+      previousQuarterRevenue: await normalizeRevenueB(rawRev(previous?.revenueEstimate?.avg)),
+      yearAgoEps: yearAgo?.earningsEstimate?.yearAgoEps !== undefined ? Number((Number(yearAgo.earningsEstimate.yearAgoEps) * analystFx).toFixed(2)) : undefined,
+      yearAgoRevenue: await normalizeRevenueB(rawRev(yearAgo?.revenueEstimate?.yearAgoRevenue)),
+      analystsCount: rawNumber(next?.revenueEstimate?.numberOfAnalysts) || rawNumber(financial?.numberOfAnalystOpinions),
+      isConvertedToUsd: shouldConvertFinancials,
+      originalCurrency: analystCurrency,
+      revenueIsAnalystConsensus: true,
+      conversionNote: shouldConvertFinancials
+        ? `Yahoo Finance omzet- en EPS-consensus genormaliseerd van ${analystCurrency} naar USD; koersdoelen blijven in ${analystCurrency}.`
+        : undefined,
       outlooks
     };
   } catch (error) {
@@ -2690,7 +2709,7 @@ app.get('/api/quarterly-analyst-outlook', async (req, res) => {
       quarterKey,
       monthlyRevisionDate,
       snapshotDate: now.toISOString(),
-      provider: 'CNBC Markets & Financial Times (FT) Institutional Consensus',
+      provider: 'Yahoo Finance Analyst Consensus',
       data
     });
   } catch (err: any) {
@@ -3303,13 +3322,13 @@ EISEN VOOR ANALYST BREAKDOWN:
   }
 });
 
-// Cache for 5-Year Quarterly Financial History (Monthly TTL = 30 days)
+// Cache for live quarterly financial history (6-hour TTL)
 interface CachedFinancialHistory {
   data: any;
   timestamp: number;
 }
 const financialsHistoryCache: Record<string, CachedFinancialHistory> = {};
-const MONTHLY_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+const FINANCIAL_HISTORY_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours: financial history stays fresh without hammering Yahoo
 
 // For companies that only recently became publicly traded, do not backfill
 // pre-listing periods with synthetic financials. The chart keeps those periods
@@ -3329,6 +3348,45 @@ const PUBLIC_FINANCIAL_START_DATES: Record<string, string> = {
   '688825': '2026-06-30',
   SPCX: '2026-06-30'    // First quarterly result after the Jun 2026 Nasdaq listing
 };
+
+// Financial display-currency policy:
+// - Non-European companies: reported financial statements and analyst revenue/EPS consensus are normalized to USD.
+// - European companies: keep the company's own reporting currency.
+// - Analyst price targets/ranges always remain in Yahoo's native analyst currency.
+const EUROPEAN_FINANCIAL_TICKERS = new Set([
+  'ASML', 'ASML.AS', 'SAP', 'SAP.DE', 'PRX', 'PRX.AS', 'SU', 'SU.PA', 'SIE', 'SIE.DE',
+  'ADYEN', 'ADYEN.AS', 'SPOT', 'IFX', 'IFX.DE', 'STM', 'STMPA.PA', 'BCS', 'BARC', 'BARC.L',
+  'HSBC', 'HSBA.L', 'ABN', 'ABN.AS', 'ING', 'INGA.AS', 'RABO', 'RABO.AS', 'BNP', 'BNP.PA',
+  'GLE', 'GLE.PA', 'SAN', 'ARM', 'SAN.MC', 'BBVA', 'BBVA.MC', 'UBS', 'SX7P', 'EXV1.DE'
+]);
+
+function isEuropeanFinancialTicker(ticker: string): boolean {
+  const up = ticker.toUpperCase();
+  const mapped = (YAHOO_SYMBOL_MAP[up] || '').toUpperCase();
+  return EUROPEAN_FINANCIAL_TICKERS.has(up) || EUROPEAN_FINANCIAL_TICKERS.has(mapped);
+}
+
+function normalizeYahooCurrency(raw?: string): string {
+  const original = String(raw || 'USD').trim();
+  const cur = original.toUpperCase();
+  if (cur === 'GBX' || original === 'GBp') return 'GBP';
+  return cur;
+}
+
+const FALLBACK_FX_TO_USD: Record<string, number> = {
+  EUR: 1.17, GBP: 1.35, CHF: 1.25, JPY: 0.0067, KRW: 0.00067, CNY: 0.145,
+  HKD: 0.128, TWD: 0.0315, INR: 0.0117, AUD: 0.71, CAD: 0.72, SGD: 0.78,
+  SAR: 0.2667, AED: 0.2723, BRL: 0.19, ZAR: 0.058, SEK: 0.105, NOK: 0.098,
+  DKK: 0.157, PLN: 0.275, TRY: 0.0235
+};
+
+async function getReliableFxRateToUsd(currency: string): Promise<number> {
+  const cur = normalizeYahooCurrency(currency);
+  if (cur === 'USD') return 1;
+  const live = await getFxRateToUsd(cur);
+  if (live && live !== 1) return live;
+  return FALLBACK_FX_TO_USD[cur] || 1;
+}
 
 function getPublicFinancialStartDate(ticker: string): string | undefined {
   const up = ticker.toUpperCase();
@@ -3405,78 +3463,107 @@ async function getYahooAuth(): Promise<{ cookie: string; crumb: string } | null>
 }
 
 // Live Yahoo Finance quarterly financial statements fetcher with USD normalization
+// Live Yahoo Finance quarterly financial statements.
+// Uses Yahoo Fundamentals Time Series rather than generated company profiles.
 async function fetchLiveYahooQuarterlyFinancials(symbol: string, ticker?: string): Promise<any[] | null> {
-  try {
-    const session = await getYahooSession();
-    if (!session.crumb || !session.cookies) return null;
-    const resolvedSymbol = YAHOO_SYMBOL_MAP[symbol.toUpperCase()] || symbol;
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(resolvedSymbol)}?modules=incomeStatementHistoryQuarterly,cashflowStatementHistoryQuarterly,financialData&crumb=${encodeURIComponent(session.crumb)}`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Cookie': session.cookies
-      }
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const resultObj = data.quoteSummary?.result?.[0];
-    const incomeHistory = resultObj?.incomeStatementHistoryQuarterly?.incomeStatementHistory;
-    const cashflowHistory = resultObj?.cashflowStatementHistoryQuarterly?.cashflowStatements;
-    const financialCurrency = (resultObj?.financialData?.financialCurrency || 'USD').toUpperCase();
-    if (!Array.isArray(incomeHistory) || incomeHistory.length === 0) return null;
+  const resolvedSymbol = YAHOO_SYMBOL_MAP[symbol.toUpperCase()] || symbol;
+  const requestedTicker = (ticker || symbol).toUpperCase();
+  const types = [
+    'quarterlyTotalRevenue',
+    'quarterlyNetIncome',
+    'quarterlyDilutedEPS',
+    'quarterlyBasicEPS',
+    'quarterlyFreeCashFlow',
+    'quarterlyOperatingCashFlow',
+    'quarterlyCapitalExpenditure'
+  ].join(',');
 
-    // Currency normalization multiplier to USD using live dynamic FX engine
-    let fxToUsdMultiplier = 1.0;
-    if (financialCurrency === 'GBp' || financialCurrency === 'GBX') {
-      fxToUsdMultiplier = (await getFxRateToUsd('GBP')) / 100;
-    } else if (financialCurrency !== 'USD') {
-      fxToUsdMultiplier = await getFxRateToUsd(financialCurrency);
+  const now = new Date();
+  const endMs = now.getTime();
+  const end = Math.floor(endMs / 1000);
+  const starts = [
+    new Date(Date.UTC(now.getUTCFullYear() - 6, now.getUTCMonth(), now.getUTCDate())),
+    new Date(Date.UTC(now.getUTCFullYear() - 4, now.getUTCMonth(), now.getUTCDate())),
+    new Date(Date.UTC(now.getUTCFullYear() - 2, now.getUTCMonth(), now.getUTCDate()))
+  ];
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json'
+  };
+
+  const byDate = new Map<string, any>();
+  try {
+    for (const startDate of starts) {
+      const period1 = Math.floor(startDate.getTime() / 1000);
+      const url = `https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(resolvedSymbol)}?symbol=${encodeURIComponent(resolvedSymbol)}&type=${types}&period1=${period1}&period2=${end}&padTimeSeries=true&merge=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const results = json?.timeseries?.result;
+      if (!Array.isArray(results)) continue;
+
+      for (const series of results) {
+        for (const [key, value] of Object.entries(series)) {
+          if (!key.startsWith('quarterly') || !Array.isArray(value)) continue;
+          for (const item of value as any[]) {
+            const date = item?.asOfDate;
+            if (!date) continue;
+            const existing = byDate.get(date) || { fiscalDate: date };
+            const field = key.replace(/^quarterly/, '').replace(/^([A-Z])/, (_m: string, c: string) => c.toLowerCase());
+            existing[field] = item?.reportedValue?.raw ?? item?.reportedValue ?? null;
+            existing.currencyCode = existing.currencyCode || item?.currencyCode;
+            byDate.set(date, existing);
+          }
+        }
+      }
     }
 
-    const publicStartDate = getPublicFinancialStartDate(ticker || symbol.split('.')[0]);
-    const publicStartMs = publicStartDate ? new Date(publicStartDate).getTime() : -Infinity;
+    if (byDate.size === 0) return null;
 
-    return incomeHistory.map((inc: any, idx: number) => {
-      const dateStr = inc.endDate?.fmt || '';
-      let revRaw = inc.totalRevenue?.raw || 0;
-      let netIncRaw = inc.netIncome?.raw || 0;
-      const epsRaw = inc.dilutedEPS?.raw ?? inc.basicEPS?.raw ?? 0;
+    const firstRow = [...byDate.values()].sort((a, b) => a.fiscalDate.localeCompare(b.fiscalDate))[0];
+    const reportedCurrency = normalizeYahooCurrency(firstRow?.currencyCode || 'USD');
+    const displayCurrency = isEuropeanFinancialTicker(requestedTicker) ? reportedCurrency : 'USD';
+    const fx = displayCurrency === reportedCurrency ? 1 : await getReliableFxRateToUsd(reportedCurrency);
 
-      // Handle extreme non-USD scale if currency was unspecified (e.g. TWD/KRW/JPY figures in hundreds of billions)
-      if (fxToUsdMultiplier === 1.0 && (revRaw / 1e9) > 120 && symbol === 'TSM') {
-        fxToUsdMultiplier = 1 / 32.2;
-      }
+    return [...byDate.values()]
+      .sort((a, b) => a.fiscalDate.localeCompare(b.fiscalDate))
+      .map((row: any) => {
+        const d = new Date(row.fiscalDate);
+        if (!Number.isFinite(d.getTime()) || d.getTime() > endMs) return null;
 
-      const revB = Number(((revRaw * fxToUsdMultiplier) / 1e9).toFixed(2));
-      const netIncB = Number(((netIncRaw * fxToUsdMultiplier) / 1e9).toFixed(2));
+        const year = d.getUTCFullYear();
+        const qNum = Math.floor(d.getUTCMonth() / 3) + 1;
+        const revenueRaw = Number(row.totalRevenue || 0);
+        const netIncomeRaw = Number(row.netIncome || 0);
+        const epsRaw = row.dilutedEPS ?? row.basicEPS ?? 0;
+        const fcfRaw = row.freeCashFlow ?? ((row.operatingCashFlow || 0) - Math.abs(row.capitalExpenditure || 0));
+        const scale = (value: number) => Number(((Number(value || 0) * fx) / 1e9).toFixed(2));
+        const eps = Number((Number(epsRaw || 0) * fx).toFixed(2));
 
-      const cf = cashflowHistory?.find((c: any) => c.endDate?.fmt === dateStr) || cashflowHistory?.[idx];
-      const fcfRaw = cf ? (cf.totalCashFromOperatingActivities?.raw || 0) - (cf.capitalExpenditures?.raw ? Math.abs(cf.capitalExpenditures.raw) : 0) : 0;
-      const fcfB = fcfRaw ? Number(((fcfRaw * fxToUsdMultiplier) / 1e9).toFixed(2)) : Number((netIncB * 0.85).toFixed(2));
-
-      const d = new Date(dateStr);
-      const year = d.getUTCFullYear();
-      const month = d.getUTCMonth();
-      const qNum = Math.floor(month / 3) + 1;
-      const qMs = d.getTime();
-      if (qMs < publicStartMs) return null;
-      const eps = Number((epsRaw * fxToUsdMultiplier).toFixed(2));
-
-      return {
-        quarter: `Q${qNum} '${String(year).slice(-2)}`,
-        releaseLabel: formatQuarterReleaseLabel(dateStr),
-        fiscalDate: dateStr,
-        fiscalYear: year,
-        quarterNum: qNum,
-        revenue: revB,
-        freeCashFlow: fcfB,
-        eps,
-        netIncome: netIncB,
-        isPrePublic: false
-      };
-    }).filter(Boolean).reverse();
+        return {
+          quarter: `Q${qNum} '${String(year).slice(-2)}`,
+          releaseLabel: formatQuarterReleaseLabel(row.fiscalDate),
+          fiscalDate: row.fiscalDate,
+          fiscalYear: year,
+          quarterNum: qNum,
+          revenue: scale(revenueRaw),
+          freeCashFlow: scale(Number(fcfRaw || 0)),
+          eps,
+          netIncome: scale(netIncomeRaw),
+          isPrePublic: false,
+          sourceCurrency: reportedCurrency,
+          currency: displayCurrency
+        };
+      })
+      .filter(Boolean)
+      .map((q: any) => {
+        const startDate = getPublicFinancialStartDate(requestedTicker);
+        if (!startDate || new Date(q.fiscalDate).getTime() >= new Date(startDate).getTime()) return q;
+        return { ...q, revenue: 0, freeCashFlow: 0, eps: 0, netIncome: 0, isPrePublic: true };
+      }) as any[];
   } catch (e) {
-    console.warn(`[Yahoo Live Financials] Error for ${symbol}:`, e);
+    console.warn(`[Yahoo Live Financials] Fundamentals time-series error for ${symbol}:`, e);
     return null;
   }
 }
@@ -3784,86 +3871,49 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
     const forceRefresh = req.query.forceRefresh === 'true';
     const now = Date.now();
 
-    // Check monthly cache first (30 days TTL)
     if (!forceRefresh && financialsHistoryCache[rawTicker]) {
       const cached = financialsHistoryCache[rawTicker];
-      if (now - cached.timestamp < MONTHLY_CACHE_TTL) {
+      if (now - cached.timestamp < FINANCIAL_HISTORY_CACHE_TTL) {
         return res.json(cached.data);
       }
     }
 
     const yahooSymbol = YAHOO_SYMBOL_MAP[rawTicker] || rawTicker;
-    const isEur = ['ASML', 'SAP', 'PRX', 'SU', 'SIE', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SX7P'].includes(rawTicker);
-    const currency = isEur ? 'EUR' : 'USD';
-
-    // 1. Generate full 20-quarter (5-year) verified financial timeline
-    const { quarters: baseQuarters, fiscalNote, calendarType } = generateQuarterlyFinancials(rawTicker, currency);
-    let quarters = applyPublicListingBoundary(rawTicker, [...baseQuarters]);
-
-    // 2. Fetch live quarterly financial statements directly from Yahoo Finance
-    try {
-      const liveYahooQuarters = await fetchLiveYahooQuarterlyFinancials(yahooSymbol, rawTicker);
-      if (liveYahooQuarters && liveYahooQuarters.length > 0) {
-        // Merge or update the latest quarters with exact live Yahoo reported figures
-        liveYahooQuarters.forEach(yq => {
-          if (new Date(yq.fiscalDate).getTime() > now) return; // Never include future/unreleased quarters
-          const existingIdx = quarters.findIndex(q => 
-            q.fiscalDate === yq.fiscalDate || 
-            (q.quarterNum === yq.quarterNum && q.fiscalYear === yq.fiscalYear)
-          );
-          if (existingIdx !== -1) {
-            quarters[existingIdx] = {
-              ...quarters[existingIdx],
-              revenue: yq.revenue > 0 ? yq.revenue : quarters[existingIdx].revenue,
-              netIncome: yq.netIncome !== 0 ? yq.netIncome : quarters[existingIdx].netIncome,
-              freeCashFlow: yq.freeCashFlow !== 0 ? yq.freeCashFlow : quarters[existingIdx].freeCashFlow,
-              eps: yq.eps !== 0 ? yq.eps : quarters[existingIdx].eps,
-              releaseLabel: yq.releaseLabel || quarters[existingIdx].releaseLabel,
-              isPrePublic: false
-            };
-          }
-        });
-      }
-    } catch (yErr) {
-      console.warn(`[Yahoo Financials] Live merge note for ${rawTicker}:`, yErr);
+    const liveYahooQuarters = await fetchLiveYahooQuarterlyFinancials(yahooSymbol, rawTicker);
+    if (!liveYahooQuarters || liveYahooQuarters.length === 0) {
+      return res.status(503).json({
+        success: false,
+        symbol: rawTicker,
+        error: 'Yahoo Finance financial history is temporarily unavailable.'
+      });
     }
 
-    // Ensure all quarters strictly released (no future dates), keep the pre-public
-    // periods at zero, and ensure every point carries an explicit public/private marker.
-    quarters = applyPublicListingBoundary(rawTicker, quarters)
-      .filter(q => !q.isEstimated && (!q.fiscalDate || new Date(q.fiscalDate).getTime() <= now))
+    const quarters = liveYahooQuarters
+      .filter(q => !q.fiscalDate || new Date(q.fiscalDate).getTime() <= now)
       .map(q => ({
         ...q,
         releaseLabel: q.releaseLabel || formatQuarterReleaseLabel(q.fiscalDate)
       }));
 
-    // Recent IPOs may have fewer than 20 public quarters. Preserve the 5Y axis,
-    // but only with zero-value pre-public periods rather than invented financials.
-    const publicStartDate = getPublicFinancialStartDate(rawTicker);
-    const responsePublicStart = publicStartDate || null;
-
-    const lastUpdated = new Date().toISOString();
-    const nextMonthlyUpdate = new Date(Date.now() + MONTHLY_CACHE_TTL).toISOString();
+    const currency = quarters.find(q => q.currency)?.currency || 'USD';
+    const sourceCurrency = quarters.find(q => q.sourceCurrency)?.sourceCurrency || currency;
+    const publicStartDate = getPublicFinancialStartDate(rawTicker) || null;
 
     const responsePayload = {
       symbol: rawTicker,
-      currency: currency,
-      provider: 'Yahoo Finance Live Financial Statements',
-      lastUpdated,
-      nextMonthlyUpdate,
+      currency,
+      sourceCurrency,
+      provider: 'Yahoo Finance Fundamentals Time Series',
+      lastUpdated: new Date().toISOString(),
+      nextMonthlyUpdate: new Date(Date.now() + FINANCIAL_HISTORY_CACHE_TTL).toISOString(),
       isLive: true,
-      fiscalNote: '',
+      fiscalNote: 'Reported quarterly financials; non-European companies normalized to USD.',
       calendarType: '',
-      publicFinancialStartDate: responsePublicStart,
+      publicFinancialStartDate: publicStartDate,
       quarters
     };
 
-    // Store in monthly cache
-    financialsHistoryCache[rawTicker] = {
-      data: responsePayload,
-      timestamp: now
-    };
-
+    financialsHistoryCache[rawTicker] = { data: responsePayload, timestamp: now };
     return res.json(responsePayload);
   } catch (err: any) {
     console.error('Error fetching financial history:', err);

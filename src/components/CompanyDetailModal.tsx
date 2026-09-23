@@ -111,7 +111,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const dynamicConsensus = getStockQuarterlyConsensus(result.ticker, safeCurrentPrice, cur, result);
   const consensus = {
     ...dynamicConsensus,
-    targetCurrency: isEuropeanCompany ? '€' : (dynamicConsensus.targetCurrency || cur)
+    targetCurrency: dynamicConsensus.targetCurrency || cur
   };
   const outlooks = getStockAnalystOutlooks(result.ticker, safeCurrentPrice, cur, result);
 
@@ -442,23 +442,23 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <span className="text-[10px] text-slate-400 block uppercase">Toekomst Q EPS</span>
                   <strong className="text-sm text-blue-700 font-bold">
-                    {consensus.nextQuarterEps !== undefined ? `${consensus.targetCurrency || cur}${consensus.nextQuarterEps.toFixed(2)}` : 'N/A'}
+                    {consensus.nextQuarterEps !== undefined ? `${consensus.isConvertedToUsd ? '$' : (isEuropeanCompany ? cur : consensus.targetCurrency || cur)}${consensus.nextQuarterEps.toFixed(2)}` : 'N/A'}
                   </strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 block uppercase">Toekomst Q Omzet</span>
-                    <span className="text-[8px] font-mono-code font-bold px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200" title="Gemiddelde van analistentaxaties (Wall Street, CNBC & FT)">
-                      Analisten Gem.
+                    <span className="text-[8px] font-mono-code font-bold px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200" title="Gemiddelde van Yahoo Finance analistenconsensus">
+                      Yahoo Analisten Gem.
                     </span>
                   </div>
                   <strong className="text-sm text-slate-900 font-bold block mt-0.5">
-                    {formatRevenueBillions(consensus.nextQuarterRevenue, consensus.targetCurrency || cur)}
+                    {formatRevenueBillions(consensus.nextQuarterRevenue, consensus.isConvertedToUsd ? '$' : (isEuropeanCompany ? cur : consensus.targetCurrency || cur))}
                     {consensus.isConvertedToUsd && <span className="text-xs font-semibold text-amber-700 ml-1">USD</span>}
                   </strong>
                   {consensus.nextQuarterRevenueLow !== undefined && consensus.nextQuarterRevenueHigh !== undefined && (
                     <span className="text-[10px] text-slate-400 font-mono-code block">
-                      Range: {consensus.targetCurrency || cur}{consensus.nextQuarterRevenueLow}B - {consensus.targetCurrency || cur}{consensus.nextQuarterRevenueHigh}B
+                      Range: {consensus.isConvertedToUsd ? '$' : (isEuropeanCompany ? cur : consensus.targetCurrency || cur)}{consensus.nextQuarterRevenueLow}B - {consensus.isConvertedToUsd ? '$' : (isEuropeanCompany ? cur : consensus.targetCurrency || cur)}{consensus.nextQuarterRevenueHigh}B
                     </span>
                   )}
                 </div>
