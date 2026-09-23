@@ -67,9 +67,9 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showTable, setShowTable] = useState<boolean>(false);
 
-  // The backend is authoritative for financial display effectiveCurrency.
-  // Non-European companies are normalized to USD; European companies keep their reporting effectiveCurrency.
-  const effectiveCurrency = data?.effectiveCurrency ? getCurrencySymbol(data.effectiveCurrency) : effectiveCurrency;
+  // The backend is authoritative for financial display currency.
+  // Non-European companies are normalized to USD; European companies keep their reporting currency.
+  const effectiveCurrency = data?.currency ? getCurrencySymbol(data.currency) : currency;
 
   // Fetch financial history
   const fetchFinancials = async (force: boolean = false) => {
