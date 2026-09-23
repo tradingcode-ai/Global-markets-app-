@@ -1150,8 +1150,8 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   const yMax = rawMax + paddingBuffer;
   const yRange = yMax - yMin;
 
-  const width = 600;
-  const height = 155;
+  const width = 720;
+  const height = 320;
   const topPad = 14;
   const bottomPad = 26;
   const leftPad = 8;
@@ -1545,12 +1545,7 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
 };
 
 export const GlobalMarketsMap: React.FC = () => {
-  const [markets, setMarkets] = useState<MarketItem[]>(() => {
-    return DEFAULT_MARKETS.map(m => ({
-      ...m,
-      charts: buildClientMarketCharts(m.price, m.fiftyTwoWeekHigh, m.fiftyTwoWeekLow, m.changePercent, m.id)
-    }));
-  });
+  const [markets, setMarkets] = useState<MarketItem[]>(DEFAULT_MARKETS);
 
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeContinent, setActiveContinent] = useState<string>('world');
@@ -1565,8 +1560,10 @@ export const GlobalMarketsMap: React.FC = () => {
   // Timeframe for the historical chart: '24U' | '1W' | '3M' | 'YTD' | '1Y' | '5Y' | '10Y' | 'ALL'
   const [activeTimeframe, setActiveTimeframe] = useState<ChartTimeframe>('24U');
 
-  // Chart Design Theme: 'bloomberg' | 'ice' | 'executive'
-  const [chartTheme, setChartTheme] = useState<ChartDesignTheme>('bloomberg');
+  // One unified institutional chart design; data is loaded live from Yahoo Finance.
+  const [liveChartData, setLiveChartData] = useState<ChartPoint[]>([]);
+  const [chartProvider, setChartProvider] = useState('Yahoo Finance Historical Chart API');
+  const [chartLoading, setChartLoading] = useState(false);
 
   const [hoveredHub, setHoveredHub] = useState<CityHub | null>(null);
   const [countdown, setCountdown] = useState(30);
@@ -1650,8 +1647,7 @@ export const GlobalMarketsMap: React.FC = () => {
               fiftyTwoWeekHigh: high52,
               fiftyTwoWeekLow: low52,
               volume: m.volume || 150000000,
-              currency: m.currency || 'USD',
-              charts
+              currency: m.currency || 'USD'
             };
           }));
         }
@@ -1907,21 +1903,42 @@ export const GlobalMarketsMap: React.FC = () => {
     return Math.max(0, Math.min(100, ratio));
   }, [selectedMarket]);
 
-  // Chart data for current selection & timeframe
-  const currentChartData = useMemo(() => {
-    if (!selectedMarket) return [];
-    if (selectedMarket.charts && selectedMarket.charts[activeTimeframe]) {
-      return selectedMarket.charts[activeTimeframe];
-    }
-    const generated = buildClientMarketCharts(
-      selectedMarket.price,
-      selectedMarket.fiftyTwoWeekHigh,
-      selectedMarket.fiftyTwoWeekLow,
-      selectedMarket.changePercent,
-      selectedMarket.id
-    );
-    return generated[activeTimeframe];
-  }, [selectedMarket, activeTimeframe]);
+    // Live historical chart data for the selected market/timeframe.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      if (!selectedMarket) {
+        setLiveChartData([]);
+        return;
+      }
+
+      setChartLoading(true);
+      try {
+        const res = await fetch(`/api/global-market-history/${encodeURIComponent(selectedMarket.yahooTicker)}?range=${activeTimeframe}`);
+        if (!res.ok) throw new Error(`History HTTP ${res.status}`);
+        const payload = await res.json();
+        if (!cancelled) {
+          setLiveChartData(Array.isArray(payload.points) ? payload.points : []);
+          setChartProvider(payload.provider || 'Yahoo Finance Historical Chart API');
+        }
+      } catch (err) {
+        if (!cancelled) setLiveChartData([]);
+        console.warn('Failed to load live market history:', err);
+      } finally {
+        if (!cancelled) setChartLoading(false);
+      }
+    };
+
+    loadHistory();
+    const refreshTimer = window.setInterval(loadHistory, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+    };
+  }, [selectedMarket?.yahooTicker, activeTimeframe]);
+
+  const currentChartData = liveChartData;
 
   // Render a compact corporate market card with dynamic borders matching market status
   const renderMarketCard = (m: MarketItem) => {
@@ -2631,15 +2648,21 @@ export const GlobalMarketsMap: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Multi-Design SVG Financial Chart */}
+                  {/* Unified live institutional SVG Financial Chart */}
+                  <div className="w-full max-w-5xl mx-auto">
                   <MarketHistoryChart
                     chartData={currentChartData}
                     currency={selectedMarket.currency}
                     marketName={selectedMarket.name}
                     ticker={selectedMarket.yahooTicker}
                     timeframe={activeTimeframe}
-                    theme={chartTheme}
+                    theme={'ice'}
                   />
+                  <div className="mt-1 flex items-center justify-between text-[9px] text-slate-500 font-mono-code px-1">
+                    <span>{chartLoading ? 'LIVE HISTORY · SYNCING…' : 'LIVE HISTORY'}</span>
+                    <span>{chartProvider}</span>
+                  </div>
+                  </div>
                 </div>
               </div>
             ) : (
