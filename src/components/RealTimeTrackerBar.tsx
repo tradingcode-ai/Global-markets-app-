@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LiveQuote } from '../types';
 import { StockLogo } from './StockLogo';
 import { getStockTechnicalMetrics } from '../data/technicalData';
-import { getMarketSessionInfo } from '../utils/marketSession';
+import { getMarketSessionInfo, isAssetSessionActive, resolveLiveQuote } from '../utils/marketSession';
 import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
 import { HYPERSCALER_TICKERS } from '../data/hyperscalersData';
 import { TECH_COMPANIES } from '../data/earningsData';
@@ -69,7 +69,9 @@ const COMMODITY_TICKERS = [
 
 // 7. Sovereign Benchmark Government Yields
 const GOV_BOND_TICKERS = [
-  'US10Y', 'US2Y', 'US30Y', 'DE10Y', 'DE30Y', 'GB10Y', 'FR10Y', 'IT10Y'
+  'US10Y', 'US2Y', 'US30Y', 'US30YFRM', 'DE10Y', 'DE30Y', 
+  'JP10Y', 'JP30Y', 'GB10Y', 'GB30Y', 'FR10Y', 'FR30Y', 
+  'IT10Y', 'IT30Y', 'ES10Y', 'ES30Y', 'CN10Y', 'CN30Y'
 ];
 
 // All tickers across the application, deduplicated while preserving logical ordering
@@ -89,8 +91,30 @@ export const getQuoteForTicker = (
   sym: string,
   quotes: Record<string, LiveQuote>
 ): LiveQuote | null => {
-  const live = quotes[sym];
+  const live = resolveLiveQuote(sym, quotes);
   if (live) return live;
+  const upper = sym.toUpperCase();
+
+  // Sovereign Mortgage & Yield cross-resolution
+  if ((upper === 'US30YFRM' || upper === 'US30YMORT') && (quotes['US30YFRM'] || quotes['US30YMORT'])) {
+    return quotes['US30YFRM'] || quotes['US30YMORT'];
+  }
+  // Cross-listed & dual-exchange equities
+  if (upper === '2330.TW' && (quotes['2330'] || quotes['TSM'])) return quotes['2330'] || quotes['TSM'];
+  if (upper === 'TSM' && (quotes['2330.TW'] || quotes['2330'])) return quotes['2330.TW'] || quotes['2330'];
+  if (upper === '8035.T' && (quotes['8035'] || quotes['TOELY'])) return quotes['8035'] || quotes['TOELY'];
+  if (upper === 'TOELY' && (quotes['8035.T'] || quotes['8035'])) return quotes['8035.T'] || quotes['8035'];
+  if (upper === '6857.T' && (quotes['6857'] || quotes['ATEYY'])) return quotes['6857'] || quotes['ATEYY'];
+  if (upper === 'ATEYY' && (quotes['6857.T'] || quotes['6857'])) return quotes['6857.T'] || quotes['6857'];
+  if (upper === '0981.HK' && (quotes['0981'] || quotes['SMIC'] || quotes['SMICY'])) return quotes['0981'] || quotes['SMIC'] || quotes['SMICY'];
+  if (upper === '0700.HK' && (quotes['0700'] || quotes['TCEHY'])) return quotes['0700'] || quotes['TCEHY'];
+  if (upper === '7974.T' && (quotes['7974'] || quotes['NTDOY'])) return quotes['7974'] || quotes['NTDOY'];
+  if (upper === '285A.T' && (quotes['285A'] || quotes['KIOXIA'])) return quotes['285A'] || quotes['KIOXIA'];
+  if (upper === 'ASML' && quotes['ASML.AS']) return quotes['ASML.AS'];
+  if (upper === 'ASML.AS' && quotes['ASML']) return quotes['ASML'];
+  if (upper === 'SAP' && quotes['SAP.DE']) return quotes['SAP.DE'];
+  if (upper === 'SAP.DE' && quotes['SAP']) return quotes['SAP'];
+  if (upper === 'STM' && (quotes['STM.PA'] || quotes['STMPA.PA'])) return quotes['STM.PA'] || quotes['STMPA.PA'];
 
   // 1. Tech Mega-Caps
   const tech = TECH_COMPANIES[sym];
@@ -231,23 +255,49 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     if (activeCategory === 'EU_FIN') return EU_FINANCIAL_TICKERS;
     if (activeCategory === 'COMMODITIES') return COMMODITY_TICKERS;
     if (activeCategory === 'BONDS') return GOV_BOND_TICKERS;
-    return ALL_APPLICATION_TICKERS;
-  }, [activeCategory]);
 
-  // USER REQUIREMENT:
+    // USER REQUIREMENT:
+    // "daarnaast moeten bij de live ticker bar als ik all heb aanstaan alleen assets weergeven 
+    //  waarvan de markt open is of pre/after market is. wel nog behouden op basis van prioriteit"
+    const activeAssets = ALL_APPLICATION_TICKERS.filter(sym => {
+      const q = getQuoteForTicker(sym, quotes);
+      return isAssetSessionActive(sym, q);
+    });
+
+    return activeAssets.length > 0 ? activeAssets : ALL_APPLICATION_TICKERS;
+  }, [activeCategory, quotes]);
+
+  // Priority Rank Tier: Tech Mega-Caps -> Hyperscalers -> Shovel Sellers -> Commodities -> Sovereign Yields -> Financials
+  const getAssetPriorityRank = (sym: string): number => {
+    if (US_TECH_TICKERS.includes(sym)) return 1;
+    if (HYPERSCALER_TICKERS_LIST.includes(sym)) return 2;
+    if (SHOVEL_SELLER_TICKERS.includes(sym)) return 3;
+    if (COMMODITY_TICKERS.includes(sym)) return 4;
+    if (GOV_BOND_TICKERS.includes(sym)) return 5;
+    if (US_FINANCIAL_TICKERS.includes(sym)) return 6;
+    if (EU_TECH_TICKERS.includes(sym)) return 7;
+    if (EU_FINANCIAL_TICKERS.includes(sym)) return 8;
+    return 9;
+  };
+
+  // Volatility Sorting with preserved Institutional Tier Priority:
   // "en er voor zorgen dat de aandelen of andere asset classen de volgorde is gebaseerd is op volatiliteit 
-  //  dus meeste percentage omhoog of naar beneden als eerst. 
-  //  Ook moeten de snelheden hetzelfde zijn als ik opeen individuele asset class klik hetzelfde blijven 
-  //  en de volgorde op volatiliteit gebaseerd blijven"
+  //  dus meeste percentage omhoog of naar beneden als eerst... wel nog behouden op basis van prioriteit"
   const sortedTickers = useMemo(() => {
     return [...rawCategoryTickers].sort((a, b) => {
       const qA = getQuoteForTicker(a, quotes);
       const qB = getQuoteForTicker(b, quotes);
       const volA = Math.abs(qA?.changePercent ?? 0);
       const volB = Math.abs(qB?.changePercent ?? 0);
-      // Highest volatility first (meeste percentage omhoog of naar beneden als eerst)
-      if (volB !== volA) {
+      // 1. Highest volatility first (meeste percentage omhoog of naar beneden als eerst)
+      if (Math.abs(volB - volA) > 0.01) {
         return volB - volA;
+      }
+      // 2. Preserved priority tier
+      const rankA = getAssetPriorityRank(a);
+      const rankB = getAssetPriorityRank(b);
+      if (rankA !== rankB) {
+        return rankA - rankB;
       }
       return a.localeCompare(b);
     });
@@ -468,12 +518,13 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
               const isFlashingDown = tick === 'down';
               const isCommodity = COMMODITY_TICKERS.includes(sym);
               const isBond = GOV_BOND_TICKERS.includes(sym);
-              const curSym = isBond ? '' : getCurrencySymbol(q.currency);
+              const isEuropean = ['ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SAN', 'BBVA'].includes(sym.toUpperCase());
+              const curSym = isBond ? '' : (isEuropean && (q.currency === 'EUR' || !q.currency) ? '€' : getCurrencySymbol(q.currency));
               const priceFormatted = isBond ? `${q.price.toFixed(3)}%` : `${curSym}${q.price.toFixed(2)}`;
               
               // Market Session & Pre/After-Market Calculation
               const session = (!isCommodity && !isBond) ? getMarketSessionInfo(sym, q) : null;
-              const showPrePost = session && !session.isMarketOpen && session.prePostChangePercent !== undefined;
+              const showPrePost = session && !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
 
               // Technical check: 200 DMA and 52-week High/Low
               const tech = (!isCommodity && !isBond) ? getStockTechnicalMetrics(sym, q.price, q) : null;
@@ -520,18 +571,21 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                     {isPositive ? `+${q.changePercent.toFixed(2)}%` : `${q.changePercent.toFixed(2)}%`}
                   </span>
 
-                  {/* Pre/After-Market Change (Disappears when the market is open) */}
+                  {/* Pre/After-Market Change (In grey text/background with red or green numbers; disappears when regular market is open!) */}
                   {showPrePost && (
                     <span 
-                      className={`inline-flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1 py-0.5 rounded bg-slate-100 border border-slate-200 ${
-                        session.prePostChangePercent! >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                      }`}
+                      className="inline-flex items-center gap-1 text-[9px] font-mono-code font-medium px-1.5 py-0.5 rounded bg-slate-100/90 border border-slate-200 text-slate-500 shadow-2xs"
                       title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
                     >
-                      <span className="text-[8px] uppercase text-slate-400 font-bold">
+                      <span className="text-[8px] uppercase text-slate-400 font-bold tracking-wider">
                         {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
                       </span>
-                      <span>
+                      {session.prePostPrice !== undefined && (
+                        <span className="text-slate-500 font-normal">
+                          {curSym}{session.prePostPrice.toFixed(2)}
+                        </span>
+                      )}
+                      <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {session.prePostChangePercent! >= 0 ? `+${session.prePostChangePercent!.toFixed(2)}%` : `${session.prePostChangePercent!.toFixed(2)}%`}
                       </span>
                     </span>

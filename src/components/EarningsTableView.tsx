@@ -269,6 +269,32 @@ export const EarningsTableView: React.FC<EarningsTableViewProps> = ({
                           >
                             {item.ticker}
                           </button>
+
+                          {/* Pre/After-Market Indicator in grey with green or red numbers (disappears when regular market opens) */}
+                          {(() => {
+                            const session = getMarketSessionInfo(item.ticker, quote);
+                            const showPrePost = !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
+                            if (!showPrePost) return null;
+                            return (
+                              <span 
+                                className="inline-flex items-center gap-1 text-[9px] font-mono-code font-medium px-1.5 py-0.2 rounded bg-slate-100/90 border border-slate-200 text-slate-500 shadow-2xs"
+                                title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${cur}${session.prePostPrice?.toFixed(2)})`}
+                              >
+                                <span className="text-[8px] uppercase text-slate-400 font-bold tracking-wider">
+                                  {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                                </span>
+                                {session.prePostPrice !== undefined && (
+                                  <span className="text-slate-500 font-normal">
+                                    {cur}{session.prePostPrice.toFixed(2)}
+                                  </span>
+                                )}
+                                <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {session.prePostChangePercent! >= 0 ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%
+                                </span>
+                              </span>
+                            );
+                          })()}
+
                           {meta?.country && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                               {meta.country === 'Netherlands' ? '🇳🇱 NL' :

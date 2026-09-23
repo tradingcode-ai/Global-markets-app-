@@ -1,7 +1,104 @@
 import { SovereignBondItem } from '../types';
+export type { SovereignBondItem };
+
+export interface GlobalEconomyMeta {
+  country: string;
+  flag: string;
+  gdpRank: number;
+  gdpLabel: string;
+  rating: string;
+  centralBank: string;
+  policyRate: string;
+  role: string;
+}
+
+export const GLOBAL_ECONOMIES: GlobalEconomyMeta[] = [
+  {
+    country: 'United States',
+    flag: '🇺🇸',
+    gdpRank: 1,
+    gdpLabel: '$28.8T GDP',
+    rating: 'AA+ / Aaa',
+    centralBank: 'Federal Reserve',
+    policyRate: 'Fed Funds 4.75% - 5.00%',
+    role: 'Global Reserve Currency & World Primary Risk-Free Benchmark'
+  },
+  {
+    country: 'China',
+    flag: '🇨🇳',
+    gdpRank: 2,
+    gdpLabel: '$18.5T GDP',
+    rating: 'A+ / A1',
+    centralBank: "People's Bank of China (PBOC)",
+    policyRate: '7-Day RR: 1.50% • 1Y LPR: 3.10%',
+    role: 'Second Largest Sovereign Debt Market & Asian Manufacturing Superpower'
+  },
+  {
+    country: 'Germany',
+    flag: '🇩🇪',
+    gdpRank: 3,
+    gdpLabel: '$4.6T GDP',
+    rating: 'AAA',
+    centralBank: 'European Central Bank (ECB) / Bundesbank',
+    policyRate: 'ECB Deposit Rate: 3.50%',
+    role: 'Eurozone Baseline Risk-Free Anchor & Continental Collateral Standard'
+  },
+  {
+    country: 'Japan',
+    flag: '🇯🇵',
+    gdpRank: 4,
+    gdpLabel: '$4.1T GDP',
+    rating: 'A+ / A1',
+    centralBank: 'Bank of Japan (BOJ)',
+    policyRate: 'Overnight Call Rate: 0.25% - 0.50%',
+    role: 'World Premier Carry Trade Anchor & JGB Super-Long ALM Reference'
+  },
+  {
+    country: 'United Kingdom',
+    flag: '🇬🇧',
+    gdpRank: 5,
+    gdpLabel: '$3.5T GDP',
+    rating: 'AA',
+    centralBank: 'Bank of England (BOE)',
+    policyRate: 'Official Bank Rate: 5.00%',
+    role: 'Sterling Sovereign Benchmark & UK Institutional Pension Duration Standard'
+  },
+  {
+    country: 'France',
+    flag: '🇫🇷',
+    gdpRank: 6,
+    gdpLabel: '$3.1T GDP',
+    rating: 'AA-',
+    centralBank: 'ECB / Banque de France',
+    policyRate: 'OAT Deficit Premium Monitoring',
+    role: 'French Sovereign Benchmark & Long-Dated Institutional Financing'
+  },
+  {
+    country: 'Italy',
+    flag: '🇮🇹',
+    gdpRank: 7,
+    gdpLabel: '$2.3T GDP',
+    rating: 'BBB',
+    centralBank: 'ECB / Banca d\'Italia',
+    policyRate: 'BTP Peripheral Spread Vigilance',
+    role: 'Southern European Sovereign Benchmark & Eurozone High-Beta Indicator'
+  },
+  {
+    country: 'Spain',
+    flag: '🇪🇸',
+    gdpRank: 8,
+    gdpLabel: '$1.6T GDP',
+    rating: 'A',
+    centralBank: 'ECB / Banco de España',
+    policyRate: 'Spanish GDP Resilience Anchor',
+    role: 'Iberian Peninsula Sovereign Benchmark (Outperforming Core Peers)'
+  }
+];
 
 export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
-  // --- US TREASURIES & MORTGAGE ---
+  // ============================================================================
+  // --- 1. UNITED STATES (TREASURIES & MORTGAGE EXCHANGE FEED) ---
+  // ============================================================================
   {
     id: 'us-2y-treasury',
     symbol: 'US2Y',
@@ -67,9 +164,9 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
   },
   {
     id: 'us-30y-mortgage',
-    symbol: 'US30YMORT',
-    name: 'U.S. 30-Year Fixed Mortgage Rate',
-    issuer: 'Freddie Mac Primary Mortgage Market Survey (PMMS)',
+    symbol: 'US30YFRM',
+    name: 'U.S. 30-Year Fixed Mortgage Benchmark',
+    issuer: 'US30YFRM:Exchange / Freddie Mac PMMS Live Feed',
     country: 'United States',
     flag: '🇺🇸',
     maturity: 'Mortgage 30Y',
@@ -80,14 +177,62 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     dayLow: 6.72,
     previousClose: 6.82,
     sparkline: [6.89, 6.86, 6.82, 6.79, 6.77, 6.76],
-    benchmarkRole: 'Primary U.S. Residential Real Estate & Consumer Debt Benchmark',
+    benchmarkRole: 'Primary U.S. Residential Real Estate & Consumer Debt Benchmark (US30YFRM:Exchange)',
     creditRating: 'MBS Guaranteed (GSE Agency)',
     centralBankPolicyRate: 'Mortgage Spread: +181 bps over 10Y Treasury',
     spreadVsBundBps: 327.0,
-    spreadVsUS10YBps: 181.0 // Mortgage to 10Y Treasury spread
+    spreadVsUS10YBps: 181.0
   },
 
-  // --- 1. GERMANY (BUNDS - EUROPE RISK FREE BENCHMARK) ---
+  // ============================================================================
+  // --- 2. CHINA (PEOPLE'S REPUBLIC OF CHINA - CGB) ---
+  // ============================================================================
+  {
+    id: 'cn-10y-cgb',
+    symbol: 'CN10Y',
+    name: 'China 10-Year Government Bond (CGB)',
+    issuer: 'Ministry of Finance (People’s Republic of China)',
+    country: 'China',
+    flag: '🇨🇳',
+    maturity: '10Y',
+    currentYield: 2.12,
+    changeBps: -1.2,
+    changePercent: -0.56,
+    dayHigh: 2.15,
+    dayLow: 2.10,
+    previousClose: 2.132,
+    sparkline: [2.16, 2.15, 2.14, 2.13, 2.12, 2.12],
+    benchmarkRole: 'World’s 2nd Largest Sovereign Bond Market Reference & PBOC Yield Curve Anchor',
+    creditRating: 'A+ (S&P) / A1 (Moody’s)',
+    centralBankPolicyRate: 'PBOC 7-Day Reverse Repo: 1.50% • 1Y LPR: 3.10%',
+    spreadVsBundBps: -137.0,
+    spreadVsUS10YBps: -283.0
+  },
+  {
+    id: 'cn-30y-cgb',
+    symbol: 'CN30Y',
+    name: 'China 30-Year Government Bond (CGB)',
+    issuer: 'Ministry of Finance (People’s Republic of China)',
+    country: 'China',
+    flag: '🇨🇳',
+    maturity: '30Y',
+    currentYield: 2.38,
+    changeBps: -1.8,
+    changePercent: -0.75,
+    dayHigh: 2.42,
+    dayLow: 2.36,
+    previousClose: 2.398,
+    sparkline: [2.43, 2.41, 2.40, 2.39, 2.38, 2.38],
+    benchmarkRole: 'PBOC Financial Stability Monitoring & Commercial Bank ALM Duration Standard',
+    creditRating: 'A+ (S&P) / A1 (Moody’s)',
+    centralBankPolicyRate: 'PBOC Secondary Market Treasury Trading Operations Active',
+    spreadVsBundBps: -147.0,
+    spreadVsUS10YBps: -293.0
+  },
+
+  // ============================================================================
+  // --- 3. GERMANY (BUNDS - EUROZONE RISK FREE BENCHMARK) ---
+  // ============================================================================
   {
     id: 'de-10y-bund',
     symbol: 'DE10Y',
@@ -127,11 +272,59 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     benchmarkRole: 'Eurozone Long-End Pension & Insurance ALM Duration Standard',
     creditRating: 'AAA',
     centralBankPolicyRate: 'ECB PEPP Reinvestment Tapering',
-    spreadVsBundBps: 36.0, // 30Y - 10Y German curve
+    spreadVsBundBps: 36.0,
     spreadVsUS10YBps: -110.0
   },
 
-  // --- 2. UNITED KINGDOM (GILTS) ---
+  // ============================================================================
+  // --- 4. JAPAN (JGB - JAPANESE GOVERNMENT BONDS) ---
+  // ============================================================================
+  {
+    id: 'jp-10y-jgb',
+    symbol: 'JP10Y',
+    name: 'Japan 10-Year Government Bond (JGB)',
+    issuer: 'Ministry of Finance (Japan)',
+    country: 'Japan',
+    flag: '🇯🇵',
+    maturity: '10Y',
+    currentYield: 1.08,
+    changeBps: +2.1,
+    changePercent: +1.98,
+    dayHigh: 1.10,
+    dayLow: 1.05,
+    previousClose: 1.059,
+    sparkline: [1.04, 1.05, 1.06, 1.07, 1.08, 1.08],
+    benchmarkRole: 'Asian Sovereign Baseline Risk-Free Rate & Yen Carry Trade Macro Anchor',
+    creditRating: 'A+ (S&P) / A1 (Moody’s)',
+    centralBankPolicyRate: 'Bank of Japan Uncollateralized Call: 0.25% - 0.50%',
+    spreadVsBundBps: -241.0,
+    spreadVsUS10YBps: -387.0
+  },
+  {
+    id: 'jp-30y-jgb',
+    symbol: 'JP30Y',
+    name: 'Japan 30-Year Government Bond (JGB)',
+    issuer: 'Ministry of Finance (Japan)',
+    country: 'Japan',
+    flag: '🇯🇵',
+    maturity: '30Y',
+    currentYield: 2.28,
+    changeBps: +3.4,
+    changePercent: +1.51,
+    dayHigh: 2.31,
+    dayLow: 2.24,
+    previousClose: 2.246,
+    sparkline: [2.22, 2.24, 2.25, 2.27, 2.28, 2.28],
+    benchmarkRole: 'Japanese Life Insurance & Pension Asset-Liability Duration Standard',
+    creditRating: 'A+ (S&P) / A1 (Moody’s)',
+    centralBankPolicyRate: 'BoJ Quantitative Tapering: JGB Purchase Reductions',
+    spreadVsBundBps: -157.0,
+    spreadVsUS10YBps: -267.0
+  },
+
+  // ============================================================================
+  // --- 5. UNITED KINGDOM (GILTS) ---
+  // ============================================================================
   {
     id: 'gb-10y-gilt',
     symbol: 'GB10Y',
@@ -150,7 +343,7 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     benchmarkRole: 'Sterling Sovereign Benchmark & UK Mortgage Transmission Rate Anchor',
     creditRating: 'AA (Stable)',
     centralBankPolicyRate: 'Bank of England Bank Rate: 5.00%',
-    spreadVsBundBps: 172.0, // Gilt-Bund spread
+    spreadVsBundBps: 172.0,
     spreadVsUS10YBps: 26.0
   },
   {
@@ -175,7 +368,9 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     spreadVsUS10YBps: 79.0
   },
 
-  // --- 3. FRANCE (OAT - OBLIGATIONS ASSIMILABLES DU TRÉSOR) ---
+  // ============================================================================
+  // --- 6. FRANCE (OAT - OBLIGATIONS ASSIMILABLES DU TRÉSOR) ---
+  // ============================================================================
   {
     id: 'fr-10y-oat',
     symbol: 'FR10Y',
@@ -194,7 +389,7 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     benchmarkRole: 'French Sovereign Fiscal Headroom & OAT-Bund Spread Risk Indicator',
     creditRating: 'AA- (Negative Outlook)',
     centralBankPolicyRate: 'OAT-Bund Spread: +97 bps (Fiscal deficit watch)',
-    spreadVsBundBps: 97.0, // OAT-Bund spread
+    spreadVsBundBps: 97.0,
     spreadVsUS10YBps: -49.0
   },
   {
@@ -219,7 +414,9 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     spreadVsUS10YBps: 15.0
   },
 
-  // --- 4. ITALY (BTP - BUONI DEL TESORO POLIENNALI) ---
+  // ============================================================================
+  // --- 7. ITALY (BTP - BUONI DEL TESORO POLIENNALI) ---
+  // ============================================================================
   {
     id: 'it-10y-btp',
     symbol: 'IT10Y',
@@ -263,7 +460,9 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
     spreadVsUS10YBps: 5.0
   },
 
-  // --- 5. SPAIN (BONOS DEL ESTADO) ---
+  // ============================================================================
+  // --- 8. SPAIN (BONOS DEL ESTADO) ---
+  // ============================================================================
   {
     id: 'es-10y-bonos',
     symbol: 'ES10Y',
@@ -310,7 +509,7 @@ export const SOVEREIGN_BONDS_DATA: SovereignBondItem[] = [
 
 export const YIELD_CURVE_BENCHMARKS = {
   usInversion: {
-    spread2Y10Y: '+27.0 bps', // Normal un-inverted curve
+    spread2Y10Y: '+27.0 bps',
     spread10Y30Y: '+36.0 bps',
     status: 'Disinverted / Positively Sloped (+27 bps)',
     recessionRiskIndicator: 'Watch / Normalized Term Structure'
@@ -318,7 +517,8 @@ export const YIELD_CURVE_BENCHMARKS = {
   mortgageSpread: {
     spreadVs10Y: '+181.0 bps',
     medianMonthlyPayment500kLoan: '$3,245 / mo',
-    historicalMeanSpread: '170 bps'
+    historicalMeanSpread: '170 bps',
+    exchangeFeed: 'US30YFRM:Exchange'
   },
   bundSpreads: [
     { country: 'Spain (Bonos)', spread: '+45 bps', trend: 'Tightening', rating: 'A' },

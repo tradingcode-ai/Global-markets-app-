@@ -69,7 +69,7 @@ export type ShovelSubSector =
 
 export type CommodityCategory = 'Energy & Natural Gas' | 'Crude Oil & Refined' | 'Precious Metals' | 'Industrial & Battery Metals' | 'Agricultural & Softs';
 
-export type BondRegion = 'US' | 'Germany' | 'United Kingdom' | 'France' | 'Italy' | 'Spain';
+export type BondRegion = 'US' | 'China' | 'Germany' | 'Japan' | 'United Kingdom' | 'France' | 'Italy' | 'Spain';
 
 export interface SovereignBondItem {
   id: string;

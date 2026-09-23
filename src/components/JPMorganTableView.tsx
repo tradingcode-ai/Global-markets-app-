@@ -35,6 +35,7 @@ import {
   Activity
 } from 'lucide-react';
 import { getStockTechnicalMetrics } from '../data/technicalData';
+import { getMarketSessionInfo } from '../utils/marketSession';
 
 interface JPMorganTableViewProps {
   results: QuarterlyResult[];
@@ -871,6 +872,34 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                           {asset.ticker}
                         </span>
 
+                        {/* Pre/After-Market Indicator in grey with green or red figures (disappears when regular market is open) */}
+                        {(() => {
+                          if (asset.assetType !== 'equity') return null;
+                          const q = quotes[asset.ticker] || (asset.primaryListingSymbol ? quotes[asset.primaryListingSymbol] : undefined);
+                          const session = getMarketSessionInfo(asset.ticker, q);
+                          const showPrePost = session && !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
+                          if (!showPrePost) return null;
+                          const curSym = getCurrencySymbol(asset.currency);
+                          return (
+                            <span 
+                              className="inline-flex items-center gap-1 text-[10px] font-mono-code font-medium px-1.5 py-0.5 rounded bg-slate-100/90 border border-slate-200 text-slate-500 shadow-2xs"
+                              title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
+                            >
+                              <span className="text-[8px] uppercase text-slate-400 font-bold tracking-wider">
+                                {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                              </span>
+                              {session.prePostPrice !== undefined && (
+                                <span className="text-slate-500 font-normal">
+                                  {curSym}{session.prePostPrice.toFixed(2)}
+                                </span>
+                              )}
+                              <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {session.prePostChangePercent! >= 0 ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%
+                              </span>
+                            </span>
+                          );
+                        })()}
+
                         {/* Yellow / Amber NOTE badge (Screenshot 1 pill) */}
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#FDF3D8] text-[#855B00] border border-[#F3DE9D]">
                           {asset.noteBadge || 'NOTE'}
@@ -1132,6 +1161,35 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                               <span className="font-mono-code font-bold text-sm text-slate-900">
                                 {asset.ticker}
                               </span>
+
+                              {/* Pre/After-Market Indicator in grey with green or red figures (disappears when regular market is open) */}
+                              {(() => {
+                                if (asset.assetType !== 'equity') return null;
+                                const q = quotes[asset.ticker] || (asset.primaryListingSymbol ? quotes[asset.primaryListingSymbol] : undefined);
+                                const session = getMarketSessionInfo(asset.ticker, q);
+                                const showPrePost = session && !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
+                                if (!showPrePost) return null;
+                                const curSym = getCurrencySymbol(asset.currency);
+                                return (
+                                  <span 
+                                    className="inline-flex items-center gap-1 text-[10px] font-mono-code font-medium px-1.5 py-0.5 rounded bg-slate-100/90 border border-slate-200 text-slate-500 shadow-2xs"
+                                    title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
+                                  >
+                                    <span className="text-[8px] uppercase text-slate-400 font-bold tracking-wider">
+                                      {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                                    </span>
+                                    {session.prePostPrice !== undefined && (
+                                      <span className="text-slate-500 font-normal">
+                                        {curSym}{session.prePostPrice.toFixed(2)}
+                                      </span>
+                                    )}
+                                    <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {session.prePostChangePercent! >= 0 ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%
+                                    </span>
+                                  </span>
+                                );
+                              })()}
+
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#FDF3D8] text-[#855B00] border border-[#F3DE9D]">
                                 {asset.noteBadge || 'NOTE'}
                               </span>

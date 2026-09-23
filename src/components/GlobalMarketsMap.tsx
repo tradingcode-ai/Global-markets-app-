@@ -8,6 +8,9 @@ import * as topojson from 'topojson-client';
 import { geoNaturalEarth1, geoPath, geoGraticule } from 'd3-geo';
 import worldData from 'world-atlas/countries-110m.json';
 
+export type ChartTimeframe = '24U' | '1W' | '3M' | 'YTD' | '1Y' | '5Y' | '10Y' | 'ALL';
+export type ChartDesignTheme = 'bloomberg' | 'ice' | 'executive';
+
 export interface ChartPoint {
   date: string;
   value: number;
@@ -33,12 +36,7 @@ export interface MarketItem {
   fiftyTwoWeekLow: number;
   volume: number;
   currency: string;
-  charts?: {
-    '1W': ChartPoint[];
-    '1M': ChartPoint[];
-    '6M': ChartPoint[];
-    '1Y': ChartPoint[];
-  };
+  charts?: Record<ChartTimeframe, ChartPoint[]>;
   previousClose?: number;
   status: 'PRE_MARKET' | 'OPEN' | 'AFTER_MARKET' | 'CLOSED';
   statusLabel: string;
@@ -52,7 +50,7 @@ export interface CityHub {
   id: string;
   cityName: string;
   country: string;
-  continent: 'europe' | 'north_america' | 'asia' | 'middle_east' | 'south_asia' | 'oceania';
+  continent: 'europe' | 'north_america' | 'south_america' | 'asia' | 'middle_east' | 'south_asia' | 'oceania';
   lat: number;
   lng: number;
   marketIds: string[];
@@ -184,6 +182,60 @@ export const CITY_HUBS: CityHub[] = [
     lat: -33.8688,
     lng: 151.2093,
     marketIds: ['asx']
+  },
+  {
+    id: 'toronto',
+    cityName: 'Toronto',
+    country: 'Canada',
+    continent: 'north_america',
+    lat: 43.6532,
+    lng: -79.3832,
+    marketIds: ['tsx']
+  },
+  {
+    id: 'zurich',
+    cityName: 'Zürich',
+    country: 'Zwitserland',
+    continent: 'europe',
+    lat: 47.3769,
+    lng: 8.5417,
+    marketIds: ['smi']
+  },
+  {
+    id: 'sao_paulo',
+    cityName: 'São Paulo',
+    country: 'Brazilië',
+    continent: 'south_america',
+    lat: -23.5505,
+    lng: -46.6333,
+    marketIds: ['ibovespa']
+  },
+  {
+    id: 'madrid',
+    cityName: 'Madrid',
+    country: 'Spanje',
+    continent: 'europe',
+    lat: 40.4168,
+    lng: -3.7038,
+    marketIds: ['ibex']
+  },
+  {
+    id: 'milan',
+    cityName: 'Milaan',
+    country: 'Italië',
+    continent: 'europe',
+    lat: 45.4642,
+    lng: 9.1900,
+    marketIds: ['ftsemib']
+  },
+  {
+    id: 'singapore',
+    cityName: 'Singapore',
+    country: 'Singapore',
+    continent: 'asia',
+    lat: 1.3521,
+    lng: 103.8198,
+    marketIds: ['sti']
   }
 ];
 
@@ -196,9 +248,10 @@ interface ContinentViewport {
 }
 
 const CONTINENT_VIEWPORTS: Record<string, ContinentViewport> = {
-  world: { name: 'Wereld', zoom: 1, centerLng: 10, centerLat: 20 },
+  world: { name: 'Wereld', zoom: 1.25, centerLng: 18, centerLat: 16 },
   europe: { name: 'Europa', zoom: 2.8, centerLng: 10, centerLat: 50 },
   north_america: { name: 'Noord-Amerika', zoom: 2.4, centerLng: -95, centerLat: 40 },
+  south_america: { name: 'Zuid-Amerika', zoom: 2.3, centerLng: -58, centerLat: -18 },
   asia: { name: 'Azië', zoom: 2.3, centerLng: 105, centerLat: 32 },
   middle_east: { name: 'Midden-Oosten', zoom: 3.2, centerLng: 48, centerLat: 26 },
   south_asia: { name: 'Zuid-Azië', zoom: 3.0, centerLng: 75, centerLat: 22 },
@@ -212,7 +265,7 @@ export function buildClientMarketCharts(
   low52: number,
   changePercent: number,
   seedStr: string
-) {
+): Record<ChartTimeframe, ChartPoint[]> {
   let seed = 0;
   for (let i = 0; i < seedStr.length; i++) {
     seed = (seed * 31 + seedStr.charCodeAt(i)) >>> 0;
@@ -224,71 +277,138 @@ export function buildClientMarketCharts(
 
   const now = new Date();
 
-  // 1W: 7 days
+  // 24U: 96 high-frequency intraday points (15 min intervals), dense micro-ticks like Bloomberg tick stream
+  const chart24U: ChartPoint[] = [];
+  const start24U = currentPrice * (1 - (changePercent / 100));
+  let running24U = start24U;
+  for (let i = 95; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 15 * 60000);
+    const progress = (95 - i) / 95;
+    const target = start24U + (currentPrice - start24U) * progress;
+    const microJitter = (nextRandom() - 0.49) * (currentPrice * 0.0035);
+    const wave = Math.sin(progress * Math.PI * 4) * (currentPrice * 0.004);
+    running24U = i === 0 ? currentPrice : +(target + wave + microJitter).toFixed(2);
+    chart24U.push({
+      date: d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }),
+      value: running24U
+    });
+  }
+
+  // 1W: 84 hourly points across 7 trading days, high detail
   const chart1W: ChartPoint[] = [];
-  const start1W = currentPrice * (1 - (changePercent / 100) * 0.7 - (nextRandom() - 0.5) * 0.015);
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 86400000);
-    const progress = (6 - i) / 6;
-    const wave = Math.sin(progress * Math.PI * 1.5) * (currentPrice * 0.008);
-    const noise = (nextRandom() - 0.5) * (currentPrice * 0.005);
-    const val = i === 0 ? currentPrice : +(start1W + (currentPrice - start1W) * progress + wave + noise).toFixed(2);
+  const start1W = currentPrice * (1 - (changePercent / 100) * 0.7 - (nextRandom() - 0.5) * 0.02);
+  for (let i = 83; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 2 * 3600000);
+    const progress = (83 - i) / 83;
+    const wave = Math.sin(progress * Math.PI * 3.5) * (currentPrice * 0.012);
+    const microNoise = (nextRandom() - 0.5) * (currentPrice * 0.004);
+    const val = i === 0 ? currentPrice : +(start1W + (currentPrice - start1W) * progress + wave + microNoise).toFixed(2);
     chart1W.push({
-      date: d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }),
+      date: d.toLocaleDateString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' }),
       value: val
     });
   }
 
-  // 1M: 22 points
-  const chart1M: ChartPoint[] = [];
-  const start1M = currentPrice * (1 - (nextRandom() * 0.05 - 0.02));
-  for (let i = 21; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * (86400000 * 1.35));
-    const progress = (21 - i) / 21;
-    const wave = Math.sin(progress * Math.PI * 2.5) * (currentPrice * 0.018);
-    const noise = (nextRandom() - 0.5) * (currentPrice * 0.01);
-    const val = i === 0 ? currentPrice : +(start1M + (currentPrice - start1M) * progress + wave + noise).toFixed(2);
-    chart1M.push({
+  // 3M: 65 daily trading points, crisp intermediate detail
+  const chart3M: ChartPoint[] = [];
+  const start3M = currentPrice * (1 - (nextRandom() * 0.08 - 0.03));
+  for (let i = 64; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * (86400000 * 1.4));
+    const progress = (64 - i) / 64;
+    const wave = Math.sin(progress * Math.PI * 3.2) * (currentPrice * 0.022);
+    const noise = (nextRandom() - 0.5) * (currentPrice * 0.008);
+    const val = i === 0 ? currentPrice : +(start3M + (currentPrice - start3M) * progress + wave + noise).toFixed(2);
+    chart3M.push({
       date: d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }),
       value: val
     });
   }
 
-  // 6M: 26 points
-  const chart6M: ChartPoint[] = [];
-  const start6M = Math.max(low52 * 1.03, currentPrice * (1 - (nextRandom() * 0.12 - 0.03)));
-  for (let i = 25; i >= 0; i--) {
+  // YTD: ~55 points from start of year
+  const chartYTD: ChartPoint[] = [];
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const daysYtd = Math.max(20, Math.floor((now.getTime() - startOfYear.getTime()) / 86400000));
+  const ytdPoints = 55;
+  const startYTD = currentPrice * (1 - (nextRandom() * 0.14 - 0.05));
+  for (let i = ytdPoints - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - (i / ytdPoints) * daysYtd * 86400000);
+    const progress = (ytdPoints - 1 - i) / (ytdPoints - 1);
+    const wave = Math.sin(progress * Math.PI * 3.0) * (currentPrice * 0.025);
+    const noise = (nextRandom() - 0.5) * (currentPrice * 0.009);
+    const val = i === 0 ? currentPrice : +(startYTD + (currentPrice - startYTD) * progress + wave + noise).toFixed(2);
+    chartYTD.push({
+      date: d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }),
+      value: val
+    });
+  }
+
+  // 1Y: 52 weekly points
+  const chart1Y: ChartPoint[] = [];
+  const start1Y = low52 + (high52 - low52) * (0.25 + nextRandom() * 0.3);
+  for (let i = 51; i >= 0; i--) {
     const d = new Date(now.getTime() - i * (7 * 86400000));
-    const progress = (25 - i) / 25;
-    const wave = Math.sin(progress * Math.PI * 3.2) * (currentPrice * 0.035);
-    const noise = (nextRandom() - 0.5) * (currentPrice * 0.02);
-    const val = i === 0 ? currentPrice : +(start6M + (currentPrice - start6M) * progress + wave + noise).toFixed(2);
-    chart6M.push({
-      date: d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: '2-digit' }),
+    const progress = (51 - i) / 51;
+    const wave = Math.sin(progress * Math.PI * 3.8) * ((high52 - low52) * 0.16);
+    const noise = (nextRandom() - 0.5) * ((high52 - low52) * 0.05);
+    const val = i === 0 ? currentPrice : +(start1Y + (currentPrice - start1Y) * progress + wave + noise).toFixed(2);
+    chart1Y.push({
+      date: d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }),
       value: Math.min(high52, Math.max(low52, val))
     });
   }
 
-  // 1Y: 52 points
-  const chart1Y: ChartPoint[] = [];
-  const start1Y = low52 + (high52 - low52) * (0.2 + nextRandom() * 0.3);
-  for (let i = 51; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * (7 * 86400000));
-    const progress = (51 - i) / 51;
-    const wave = Math.sin(progress * Math.PI * 4) * ((high52 - low52) * 0.15);
-    const noise = (nextRandom() - 0.5) * ((high52 - low52) * 0.06);
-    const val = i === 0 ? currentPrice : +(start1Y + (currentPrice - start1Y) * progress + wave + noise).toFixed(2);
-    chart1Y.push({
+  // 5Y: 40 monthly points (smoother macro resolution)
+  const chart5Y: ChartPoint[] = [];
+  const start5Y = currentPrice * (0.58 + nextRandom() * 0.12);
+  for (let i = 39; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * (45 * 86400000));
+    const progress = (39 - i) / 39;
+    const macroCycle = Math.sin(progress * Math.PI * 2.5) * (currentPrice * 0.1);
+    const smoothNoise = (nextRandom() - 0.5) * (currentPrice * 0.025);
+    const val = i === 0 ? currentPrice : +(start5Y + (currentPrice - start5Y) * progress + macroCycle + smoothNoise).toFixed(2);
+    chart5Y.push({
       date: d.toLocaleDateString('nl-NL', { month: 'short', year: '2-digit' }),
-      value: Math.min(high52, Math.max(low52, val))
+      value: Math.max(low52 * 0.7, val)
+    });
+  }
+
+  // 10Y: 30 quarterly points (macro secular trend)
+  const chart10Y: ChartPoint[] = [];
+  const start10Y = currentPrice * (0.38 + nextRandom() * 0.1);
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * (120 * 86400000));
+    const progress = (29 - i) / 29;
+    const secularCycle = Math.sin(progress * Math.PI * 2.2) * (currentPrice * 0.12);
+    const val = i === 0 ? currentPrice : +(start10Y + (currentPrice - start10Y) * Math.pow(progress, 0.9) + secularCycle).toFixed(2);
+    chart10Y.push({
+      date: d.toLocaleDateString('nl-NL', { year: 'numeric', month: 'short' }),
+      value: Math.max(low52 * 0.5, val)
+    });
+  }
+
+  // ALL: 25 broad multi-year secular points
+  const chartALL: ChartPoint[] = [];
+  const startALL = currentPrice * (0.18 + nextRandom() * 0.08);
+  for (let i = 24; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * (365 * 86400000));
+    const progress = (24 - i) / 24;
+    const multiDecade = Math.sin(progress * Math.PI * 2.0) * (currentPrice * 0.14);
+    const val = i === 0 ? currentPrice : +(startALL + (currentPrice - startALL) * Math.pow(progress, 1.25) + multiDecade).toFixed(2);
+    chartALL.push({
+      date: String(d.getFullYear()),
+      value: Math.max(low52 * 0.25, val)
     });
   }
 
   return {
+    '24U': chart24U,
     '1W': chart1W,
-    '1M': chart1M,
-    '6M': chart6M,
-    '1Y': chart1Y
+    '3M': chart3M,
+    'YTD': chartYTD,
+    '1Y': chart1Y,
+    '5Y': chart5Y,
+    '10Y': chart10Y,
+    'ALL': chartALL
   };
 }
 
@@ -708,6 +828,162 @@ const DEFAULT_MARKETS: MarketItem[] = [
     statusLabel: 'Open',
     statusColor: '#10b981',
     localTime: '12:45'
+  },
+  {
+    id: 'tsx',
+    name: 'S&P/TSX Composite',
+    exchange: 'TSX',
+    city: 'Toronto',
+    country: 'Canada',
+    region: 'americas',
+    lat: 43.6532,
+    lng: -79.3832,
+    timeZone: 'America/Toronto',
+    yahooTicker: '^GSPTSE',
+    price: 24720.50,
+    change: 86.40,
+    changePercent: 0.35,
+    dayLow: 24650.00,
+    dayHigh: 24790.00,
+    fiftyTwoWeekHigh: 25010.40,
+    fiftyTwoWeekLow: 19120.30,
+    volume: 245000000,
+    currency: 'CAD',
+    previousClose: 24634.10,
+    status: 'CLOSED',
+    statusLabel: 'Closed',
+    statusColor: '#64748b',
+    localTime: '16:00'
+  },
+  {
+    id: 'smi',
+    name: 'Swiss Market Index (SMI)',
+    exchange: 'SIX Swiss Exchange',
+    city: 'Zürich',
+    country: 'Zwitserland',
+    region: 'europe',
+    lat: 47.3769,
+    lng: 8.5417,
+    timeZone: 'Europe/Zurich',
+    yahooTicker: '^SSMI',
+    price: 12150.80,
+    change: 26.70,
+    changePercent: 0.22,
+    dayLow: 12110.00,
+    dayHigh: 12190.00,
+    fiftyTwoWeekHigh: 12450.90,
+    fiftyTwoWeekLow: 10820.40,
+    volume: 42000000,
+    currency: 'CHF',
+    previousClose: 12124.10,
+    status: 'CLOSED',
+    statusLabel: 'Closed',
+    statusColor: '#64748b',
+    localTime: '17:30'
+  },
+  {
+    id: 'ibovespa',
+    name: 'Ibovespa',
+    exchange: 'B3',
+    city: 'São Paulo',
+    country: 'Brazilië',
+    region: 'americas',
+    lat: -23.5505,
+    lng: -46.6333,
+    timeZone: 'America/Sao_Paulo',
+    yahooTicker: '^BVSP',
+    price: 131850.00,
+    change: 628.00,
+    changePercent: 0.48,
+    dayLow: 131100.00,
+    dayHigh: 132400.00,
+    fiftyTwoWeekHigh: 137469.00,
+    fiftyTwoWeekLow: 118120.00,
+    volume: 1250000000,
+    currency: 'BRL',
+    previousClose: 131222.00,
+    status: 'CLOSED',
+    statusLabel: 'Closed',
+    statusColor: '#64748b',
+    localTime: '17:00'
+  },
+  {
+    id: 'ibex',
+    name: 'IBEX 35',
+    exchange: 'Bolsa de Madrid',
+    city: 'Madrid',
+    country: 'Spanje',
+    region: 'europe',
+    lat: 40.4168,
+    lng: -3.7038,
+    timeZone: 'Europe/Madrid',
+    yahooTicker: '^IBEX',
+    price: 11840.60,
+    change: 22.40,
+    changePercent: 0.19,
+    dayLow: 11790.00,
+    dayHigh: 11880.00,
+    fiftyTwoWeekHigh: 12020.40,
+    fiftyTwoWeekLow: 8850.10,
+    volume: 110000000,
+    currency: 'EUR',
+    previousClose: 11818.20,
+    status: 'CLOSED',
+    statusLabel: 'Closed',
+    statusColor: '#64748b',
+    localTime: '17:30'
+  },
+  {
+    id: 'ftsemib',
+    name: 'FTSE MIB',
+    exchange: 'Borsa Italiana',
+    city: 'Milaan',
+    country: 'Italië',
+    region: 'europe',
+    lat: 45.4642,
+    lng: 9.1900,
+    timeZone: 'Europe/Rome',
+    yahooTicker: 'FTSEMIB.MI',
+    price: 34820.30,
+    change: 107.50,
+    changePercent: 0.31,
+    dayLow: 34680.00,
+    dayHigh: 34950.00,
+    fiftyTwoWeekHigh: 35450.20,
+    fiftyTwoWeekLow: 27150.00,
+    volume: 85000000,
+    currency: 'EUR',
+    previousClose: 34712.80,
+    status: 'CLOSED',
+    statusLabel: 'Closed',
+    statusColor: '#64748b',
+    localTime: '17:30'
+  },
+  {
+    id: 'sti',
+    name: 'Straits Times Index (STI)',
+    exchange: 'SGX',
+    city: 'Singapore',
+    country: 'Singapore',
+    region: 'asia',
+    lat: 1.3521,
+    lng: 103.8198,
+    timeZone: 'Asia/Singapore',
+    yahooTicker: '^STI',
+    price: 3620.40,
+    change: -4.35,
+    changePercent: -0.12,
+    dayLow: 3605.00,
+    dayHigh: 3635.00,
+    fiftyTwoWeekHigh: 3645.00,
+    fiftyTwoWeekLow: 3040.50,
+    volume: 220000000,
+    currency: 'SGD',
+    previousClose: 3624.75,
+    status: 'CLOSED',
+    statusLabel: 'Closed',
+    statusColor: '#64748b',
+    localTime: '17:00'
   }
 ];
 
@@ -729,26 +1005,137 @@ function formatVolume(vol?: number): string {
   return vol.toLocaleString('nl-NL');
 }
 
+// Chart Design Theme Configurations inspired by top data providers (Bloomberg, ICE, LSEG/Morgan Stanley)
+export const CHART_THEMES: Record<ChartDesignTheme, {
+  id: ChartDesignTheme;
+  name: string;
+  provider: string;
+  badge: string;
+  lineColor: string;
+  lineGlowColor: string;
+  fillColor: string;
+  fillOpacityStart: number;
+  fillOpacityEnd: number;
+  bgColor: string;
+  borderColor: string;
+  gridColor: string;
+  gridOpacity: number;
+  gridDashed: boolean;
+  watermark: string;
+  accentText: string;
+  highTagBg: string;
+  highTagBorder: string;
+  highTagText: string;
+  lowTagBg: string;
+  lowTagBorder: string;
+  lowTagText: string;
+  hasVolumeTicks?: boolean;
+  hasBaseline?: boolean;
+  hasGlowFilter?: boolean;
+}> = {
+  bloomberg: {
+    id: 'bloomberg',
+    name: 'Bloomberg Terminal',
+    provider: 'Bloomberg LP',
+    badge: 'B-BAR <GO>',
+    lineColor: '#f59e0b', // Iconic Bloomberg Amber
+    lineGlowColor: 'rgba(245, 158, 11, 0.4)',
+    fillColor: '#f59e0b',
+    fillOpacityStart: 0.22,
+    fillOpacityEnd: 0.01,
+    bgColor: '#03050a',
+    borderColor: '#291d08',
+    gridColor: '#f59e0b',
+    gridOpacity: 0.12,
+    gridDashed: true,
+    watermark: 'BLOOMBERG PROFESSIONAL · B-BAR <GO>',
+    accentText: 'text-amber-400',
+    highTagBg: 'bg-amber-950/80',
+    highTagBorder: 'border-amber-500/60',
+    highTagText: 'text-amber-300',
+    lowTagBg: 'bg-amber-950/50',
+    lowTagBorder: 'border-amber-700/50',
+    lowTagText: 'text-amber-400/80',
+    hasVolumeTicks: true
+  },
+  ice: {
+    id: 'ice',
+    name: 'ICE Data Services',
+    provider: 'Intercontinental Exchange',
+    badge: 'NYSE / ICE-L1',
+    lineColor: '#06b6d4', // Precision Electric Cyan
+    lineGlowColor: 'rgba(6, 182, 212, 0.35)',
+    fillColor: '#06b6d4',
+    fillOpacityStart: 0.20,
+    fillOpacityEnd: 0.01,
+    bgColor: '#030a16',
+    borderColor: '#0e2b47',
+    gridColor: '#1e293b',
+    gridOpacity: 0.65,
+    gridDashed: false,
+    watermark: 'ICE DATA SERVICES · CONSOLIDATED FEED',
+    accentText: 'text-cyan-400',
+    highTagBg: 'bg-cyan-950/80',
+    highTagBorder: 'border-cyan-500/60',
+    highTagText: 'text-cyan-200',
+    lowTagBg: 'bg-slate-900/80',
+    lowTagBorder: 'border-cyan-800/50',
+    lowTagText: 'text-cyan-400/70',
+    hasBaseline: true
+  },
+  executive: {
+    id: 'executive',
+    name: 'LSEG Executive Cobalt',
+    provider: 'London Stock Exchange / Morgan Stanley',
+    badge: 'WORKSPACE',
+    lineColor: '#6366f1', // Royal Cobalt & Indigo Neon
+    lineGlowColor: 'rgba(99, 102, 241, 0.45)',
+    fillColor: '#6366f1',
+    fillOpacityStart: 0.25,
+    fillOpacityEnd: 0.01,
+    bgColor: '#05071a',
+    borderColor: '#1e1b4b',
+    gridColor: '#312e81',
+    gridOpacity: 0.35,
+    gridDashed: true,
+    watermark: 'LSEG / MORGAN STANLEY EXECUTIVE MATRIX',
+    accentText: 'text-indigo-400',
+    highTagBg: 'bg-indigo-950/80',
+    highTagBorder: 'border-indigo-500/60',
+    highTagText: 'text-indigo-200',
+    lowTagBg: 'bg-slate-950/80',
+    lowTagBorder: 'border-indigo-800/50',
+    lowTagText: 'text-indigo-300/70',
+    hasGlowFilter: true
+  }
+};
+
 // Interactive Financial History Chart Component
 interface MarketHistoryChartProps {
   chartData: ChartPoint[];
   currency: string;
-  isPositive: boolean;
-  timeframe: '1W' | '1M' | '6M' | '1Y';
+  marketName: string;
+  ticker?: string;
+  timeframe: ChartTimeframe;
+  theme: ChartDesignTheme;
 }
 
 const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   chartData,
   currency,
-  isPositive,
-  timeframe
+  marketName,
+  ticker,
+  timeframe,
+  theme
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
+  const currentTheme = CHART_THEMES[theme] || CHART_THEMES.bloomberg;
+
   if (!chartData || chartData.length === 0) {
     return (
-      <div className="h-32 flex items-center justify-center text-xs text-slate-500 font-mono">
+      <div className="h-36 flex items-center justify-center text-xs text-slate-500 font-mono">
         Geen historische grafiekdata beschikbaar
       </div>
     );
@@ -758,21 +1145,21 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
   const valSpread = rawMax - rawMin || 1;
-  const paddingBuffer = valSpread * 0.08;
+  const paddingBuffer = valSpread * 0.09;
   const yMin = rawMin - paddingBuffer;
   const yMax = rawMax + paddingBuffer;
   const yRange = yMax - yMin;
 
-  const width = 540;
-  const height = 130;
-  const topPad = 12;
-  const bottomPad = 22;
-  const leftPad = 6;
-  const rightPad = 70; // room for price labels
+  const width = 600;
+  const height = 155;
+  const topPad = 14;
+  const bottomPad = 26;
+  const leftPad = 8;
+  const rightPad = 72; // room for price labels
   const plotWidth = width - leftPad - rightPad;
   const plotHeight = height - topPad - bottomPad;
 
-  // Calculate coords for points
+  // Calculate coords for points with high floating-point fidelity
   const points = chartData.map((d, i) => {
     const x = leftPad + (i / (chartData.length - 1)) * plotWidth;
     const y = topPad + plotHeight - ((d.value - yMin) / yRange) * plotHeight;
@@ -784,14 +1171,20 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   // Area path
   const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)},${(topPad + plotHeight).toFixed(1)} L ${points[0].x.toFixed(1)},${(topPad + plotHeight).toFixed(1)} Z`;
 
-  const strokeColor = isPositive ? '#10b981' : '#f43f5e';
-  const gradientId = `chartGrad_${timeframe}_${isPositive ? 'pos' : 'neg'}`;
-
+  // Start & End statistics
   const startVal = values[0];
   const endVal = values[values.length - 1];
   const diff = endVal - startVal;
   const diffPct = (diff / startVal) * 100;
   const isPeriodPos = diff >= 0;
+
+  // Midline Y coordinate
+  const yMid = topPad + plotHeight / 2;
+  const startY = topPad + plotHeight - ((startVal - yMin) / yRange) * plotHeight;
+
+  // Gradient ID unique to theme and timeframe
+  const gradientId = `chartGrad_${theme}_${timeframe}`;
+  const filterId = `chartGlow_${theme}`;
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
@@ -808,178 +1201,335 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
 
   const activePoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : null;
 
+  // Generate 4-5 well-spaced date markers along the X axis
+  const numDateTicks = Math.min(5, Math.max(2, chartData.length));
+  const dateTickIndices: number[] = [];
+  for (let step = 0; step < numDateTicks; step++) {
+    const idx = Math.round((step / (numDateTicks - 1)) * (chartData.length - 1));
+    if (!dateTickIndices.includes(idx)) {
+      dateTickIndices.push(idx);
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-1.5">
-      {/* Performance Bar */}
-      <div className="flex items-center justify-between text-[11px] px-1 font-mono-code">
-        <span className="text-slate-400">
-          Periode verloop ({timeframe}):
-        </span>
+    <div className="flex flex-col gap-1.5 select-none">
+      {/* Institutional Top Stat Bar */}
+      <div className="flex flex-wrap items-center justify-between text-[11px] px-1 font-mono-code gap-1">
         <div className="flex items-center gap-2">
-          <span className="text-slate-400">
-            {formatMarketPrice(startVal, currency)} → <span className="text-slate-200 font-semibold">{formatMarketPrice(endVal, currency)}</span>
+          <span className="text-slate-400 font-medium">
+            Looptijd ({timeframe}):
           </span>
-          <span className={`font-semibold flex items-center gap-0.5 ${isPeriodPos ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <span className="text-slate-400">
+            {formatMarketPrice(startVal, currency)} → <span className="text-white font-bold">{formatMarketPrice(endVal, currency)}</span>
+          </span>
+          <span className={`font-bold flex items-center gap-0.5 ${isPeriodPos ? 'text-emerald-400' : 'text-rose-400'}`}>
             {isPeriodPos ? '+' : ''}{diff.toFixed(2)} ({isPeriodPos ? '+' : ''}{diffPct.toFixed(2)}%)
+          </span>
+        </div>
+
+        {/* Current Theme Indicator Tag */}
+        <div className="flex items-center gap-1.5 text-[10px]">
+          <span className="text-slate-500">Design:</span>
+          <span className={`px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${currentTheme.highTagBg} ${currentTheme.highTagBorder} ${currentTheme.highTagText} border`}>
+            {currentTheme.name}
           </span>
         </div>
       </div>
 
-      {/* SVG Canvas */}
-      <div className="relative w-full rounded-lg bg-[#040813] border border-slate-800/80 overflow-hidden select-none">
+      {/* SVG Canvas with Provider Design Aesthetic */}
+      <div 
+        className="relative w-full rounded-lg overflow-hidden border shadow-inner transition-colors duration-300"
+        style={{ 
+          backgroundColor: currentTheme.bgColor,
+          borderColor: currentTheme.borderColor
+        }}
+      >
         <svg
           ref={svgRef}
-          className="w-full h-[125px] sm:h-[135px] cursor-crosshair block"
+          className="w-full h-[145px] sm:h-[155px] cursor-crosshair block"
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         >
           <defs>
+            {/* Area Linear Gradient */}
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={strokeColor} stopOpacity="0.28" />
-              <stop offset="90%" stopColor={strokeColor} stopOpacity="0.01" />
+              <stop offset="0%" stopColor={currentTheme.fillColor} stopOpacity={currentTheme.fillOpacityStart} />
+              <stop offset="95%" stopColor={currentTheme.fillColor} stopOpacity={currentTheme.fillOpacityEnd} />
             </linearGradient>
+
+            {/* Neon Glow Filter for Line */}
+            <filter id={filterId} x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor={currentTheme.lineColor} floodOpacity="0.6" />
+            </filter>
           </defs>
 
-          {/* Horizontal Reference Lines */}
+          {/* Watermark Label in Center/Top */}
+          <text
+            x={leftPad + 6}
+            y={topPad + 14}
+            fill={currentTheme.lineColor}
+            fillOpacity="0.14"
+            fontSize="10"
+            fontWeight="bold"
+            letterSpacing="0.08em"
+            fontFamily="monospace"
+          >
+            {currentTheme.watermark}
+          </text>
+
+          {/* Horizontal Grid & Price Reference Levels */}
+          {/* Upper Quartile / Max Bound */}
           <line
             x1={leftPad}
             y1={topPad}
             x2={leftPad + plotWidth}
             y2={topPad}
-            stroke="#1e293b"
+            stroke={currentTheme.gridColor}
+            strokeOpacity={currentTheme.gridOpacity}
             strokeWidth="0.8"
-            strokeDasharray="3 3"
+            strokeDasharray={currentTheme.gridDashed ? "2 3" : undefined}
           />
           <text
             x={leftPad + plotWidth + 6}
             y={topPad + 4}
-            fill="#64748b"
+            fill={currentTheme.lineColor}
+            fillOpacity="0.85"
             fontSize="9"
+            fontWeight="bold"
             fontFamily="monospace"
           >
             {formatMarketPrice(rawMax, currency)}
           </text>
 
+          {/* Midline Level */}
           <line
             x1={leftPad}
-            y1={topPad + plotHeight / 2}
+            y1={yMid}
             x2={leftPad + plotWidth}
-            y2={topPad + plotHeight / 2}
-            stroke="#1e293b"
+            y2={yMid}
+            stroke={currentTheme.gridColor}
+            strokeOpacity={currentTheme.gridOpacity * 0.75}
             strokeWidth="0.5"
-            strokeDasharray="3 3"
+            strokeDasharray={currentTheme.gridDashed ? "2 3" : undefined}
           />
+          <text
+            x={leftPad + plotWidth + 6}
+            y={yMid + 3}
+            fill="#64748b"
+            fontSize="8.5"
+            fontFamily="monospace"
+          >
+            {formatMarketPrice((rawMax + rawMin) / 2, currency)}
+          </text>
 
+          {/* Baseline Reference (Start of period) for ICE theme */}
+          {currentTheme.hasBaseline && (
+            <line
+              x1={leftPad}
+              y1={startY}
+              x2={leftPad + plotWidth}
+              y2={startY}
+              stroke="#0891b2"
+              strokeOpacity="0.5"
+              strokeWidth="0.75"
+              strokeDasharray="4 4"
+            />
+          )}
+
+          {/* Lower Quartile / Min Bound */}
           <line
             x1={leftPad}
             y1={topPad + plotHeight}
             x2={leftPad + plotWidth}
             y2={topPad + plotHeight}
-            stroke="#1e293b"
+            stroke={currentTheme.gridColor}
+            strokeOpacity={currentTheme.gridOpacity}
             strokeWidth="0.8"
-            strokeDasharray="3 3"
+            strokeDasharray={currentTheme.gridDashed ? "2 3" : undefined}
           />
           <text
             x={leftPad + plotWidth + 6}
             y={topPad + plotHeight + 3}
-            fill="#64748b"
+            fill={currentTheme.lineColor}
+            fillOpacity="0.85"
             fontSize="9"
+            fontWeight="bold"
             fontFamily="monospace"
           >
             {formatMarketPrice(rawMin, currency)}
           </text>
 
+          {/* Bloomberg-Style Micro Volume/Tick Bars along Bottom */}
+          {currentTheme.hasVolumeTicks && points.map((p, idx) => {
+            if (idx % 2 !== 0 && chartData.length > 50) return null; // sample for dense series
+            const pseudoHeight = 3 + Math.abs(Math.sin(idx * 1.7)) * 10;
+            return (
+              <line
+                key={`tick_${idx}`}
+                x1={p.x}
+                y1={topPad + plotHeight}
+                x2={p.x}
+                y2={topPad + plotHeight - pseudoHeight}
+                stroke={currentTheme.lineColor}
+                strokeOpacity="0.22"
+                strokeWidth={chartData.length > 60 ? "1.0" : "1.5"}
+              />
+            );
+          })}
+
           {/* Area Fill */}
           <path d={areaPath} fill={`url(#${gradientId})`} />
 
-          {/* Trendline */}
+          {/* Detailed Primary Price Trendline */}
           <path
             d={linePath}
             fill="none"
-            stroke={strokeColor}
-            strokeWidth="1.75"
+            stroke={currentTheme.lineColor}
+            strokeWidth={currentTheme.hasGlowFilter ? "2.0" : "1.8"}
             strokeLinecap="round"
             strokeLinejoin="round"
+            filter={currentTheme.hasGlowFilter ? `url(#${filterId})` : undefined}
           />
 
-          {/* Start and End date labels */}
-          <text
-            x={leftPad}
-            y={height - 6}
-            fill="#64748b"
-            fontSize="8.5"
-            fontFamily="monospace"
-          >
-            {chartData[0]?.date}
-          </text>
-          <text
-            x={leftPad + plotWidth}
-            y={height - 6}
-            textAnchor="end"
-            fill="#64748b"
-            fontSize="8.5"
-            fontFamily="monospace"
-          >
-            {chartData[chartData.length - 1]?.date}
-          </text>
+          {/* Key inflection anchor dots on low point count series */}
+          {chartData.length <= 40 && points.map((p, idx) => (
+            <circle
+              key={`anchor_${idx}`}
+              cx={p.x}
+              cy={p.y}
+              r="2.2"
+              fill={currentTheme.lineColor}
+              stroke={currentTheme.bgColor}
+              strokeWidth="1"
+            />
+          ))}
 
-          {/* Crosshair on active hover */}
+          {/* Date Axis Markers evenly distributed */}
+          {dateTickIndices.map((idx, step) => {
+            const p = points[idx];
+            if (!p) return null;
+            const isFirst = step === 0;
+            const isLast = step === dateTickIndices.length - 1;
+            const anchor = isFirst ? 'start' : isLast ? 'end' : 'middle';
+            return (
+              <text
+                key={`date_${idx}`}
+                x={p.x}
+                y={height - 7}
+                textAnchor={anchor}
+                fill="#64748b"
+                fontSize="8.5"
+                fontFamily="monospace"
+              >
+                {p.date}
+              </text>
+            );
+          })}
+
+          {/* Crosshair & Floating Tooltip on Hover */}
           {activePoint && (
             <g>
-              {/* Vertical line */}
+              {/* Vertical Crosshair Line */}
               <line
                 x1={activePoint.x}
                 y1={topPad}
                 x2={activePoint.x}
                 y2={topPad + plotHeight}
-                stroke="#94a3b8"
+                stroke={currentTheme.crosshairColor}
                 strokeWidth="1"
                 strokeDasharray="2 2"
+                strokeOpacity="0.8"
               />
 
-              {/* Highlight dot on curve */}
+              {/* Horizontal Crosshair Line */}
+              <line
+                x1={leftPad}
+                y1={activePoint.y}
+                x2={leftPad + plotWidth}
+                y2={activePoint.y}
+                stroke={currentTheme.crosshairColor}
+                strokeWidth="0.75"
+                strokeDasharray="2 2"
+                strokeOpacity="0.5"
+              />
+
+              {/* Highlight Target Dot on Curve */}
               <circle
                 cx={activePoint.x}
                 cy={activePoint.y}
-                r="4.5"
-                fill={strokeColor}
+                r="5"
+                fill={currentTheme.lineColor}
                 stroke="#0f172a"
                 strokeWidth="2"
               />
+              <circle
+                cx={activePoint.x}
+                cy={activePoint.y}
+                r="8"
+                fill="none"
+                stroke={currentTheme.lineColor}
+                strokeWidth="1"
+                strokeOpacity="0.5"
+              />
+
+              {/* Dynamic Price Tag on Y Axis */}
+              <g transform={`translate(${leftPad + plotWidth + 3}, ${activePoint.y - 7})`}>
+                <rect
+                  x="0"
+                  y="0"
+                  width="62"
+                  height="14"
+                  rx="2"
+                  fill={currentTheme.lineColor}
+                />
+                <text
+                  x="31"
+                  y="10.5"
+                  textAnchor="middle"
+                  fill="#000000"
+                  fontSize="8.5"
+                  fontWeight="bold"
+                  fontFamily="monospace"
+                >
+                  {formatMarketPrice(activePoint.value, currency)}
+                </text>
+              </g>
 
               {/* Floating Tooltip Box */}
               <g
-                transform={`translate(${Math.max(10, Math.min(width - 130, activePoint.x - 55))}, ${Math.max(6, activePoint.y - 38)})`}
+                transform={`translate(${Math.max(10, Math.min(width - 150, activePoint.x - 65))}, ${Math.max(6, activePoint.y - 44)})`}
               >
                 <rect
                   x="0"
                   y="0"
-                  width="110"
-                  height="28"
+                  width="130"
+                  height="34"
                   rx="4"
-                  fill="#0b1120"
-                  stroke="#334155"
-                  strokeWidth="0.8"
-                  filter="drop-shadow(0 2px 4px rgba(0,0,0,0.5))"
+                  fill="#060c1c"
+                  stroke={currentTheme.lineColor}
+                  strokeWidth="0.85"
+                  strokeOpacity="0.9"
+                  filter="drop-shadow(0 4px 6px rgba(0,0,0,0.7))"
                 />
                 <text
-                  x="55"
-                  y="11"
+                  x="65"
+                  y="12"
                   textAnchor="middle"
                   fill="#94a3b8"
                   fontSize="8"
-                  fontFamily="sans-serif"
+                  fontWeight="500"
+                  fontFamily="monospace"
                 >
-                  {activePoint.date}
+                  {activePoint.date} • {timeframe}
                 </text>
                 <text
-                  x="55"
-                  y="22"
+                  x="65"
+                  y="26"
                   textAnchor="middle"
                   fill="#ffffff"
-                  fontSize="9.5"
+                  fontSize="10"
                   fontWeight="bold"
                   fontFamily="monospace"
                 >
@@ -1006,14 +1556,17 @@ export const GlobalMarketsMap: React.FC = () => {
   const [activeContinent, setActiveContinent] = useState<string>('world');
   const [selectedHub, setSelectedHub] = useState<CityHub | null>(null);
   
-  // Selected market for detailed analysis below the list
-  const [selectedMarketId, setSelectedMarketId] = useState<string>('sp500');
+  // Selected market for detailed analysis below the list (null initially as requested)
+  const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
   
   // Tab filter: 'open' | 'closed' | 'all'
   const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'all'>('open');
   
-  // Timeframe for the historical chart: '1W' | '1M' | '6M' | '1Y'
-  const [activeTimeframe, setActiveTimeframe] = useState<'1W' | '1M' | '6M' | '1Y'>('1M');
+  // Timeframe for the historical chart: '24U' | '1W' | '3M' | 'YTD' | '1Y' | '5Y' | '10Y' | 'ALL'
+  const [activeTimeframe, setActiveTimeframe] = useState<ChartTimeframe>('24U');
+
+  // Chart Design Theme: 'bloomberg' | 'ice' | 'executive'
+  const [chartTheme, setChartTheme] = useState<ChartDesignTheme>('bloomberg');
 
   const [hoveredHub, setHoveredHub] = useState<CityHub | null>(null);
   const [countdown, setCountdown] = useState(30);
@@ -1027,9 +1580,9 @@ export const GlobalMarketsMap: React.FC = () => {
     amsterdam: '--:--:-- CET'
   });
 
-  // Vector Map Zoom state (Fixed, Non-moveable by dragging)
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  // Vector Map Zoom state: initially zoomed in (1.25x) centered so world map fills frame nicely
+  const [zoom, setZoom] = useState(1.25);
+  const [pan, setPan] = useState({ x: -184.4, y: -0.6 });
 
   // SVG dimensions for Natural Earth projection
   const MAP_WIDTH = 1000;
@@ -1077,7 +1630,13 @@ export const GlobalMarketsMap: React.FC = () => {
             tasi: 'middle_east',
             adx: 'middle_east',
             nifty: 'asia',
-            asx: 'oceania'
+            asx: 'oceania',
+            tsx: 'americas',
+            smi: 'europe',
+            ibovespa: 'americas',
+            ibex: 'europe',
+            ftsemib: 'europe',
+            sti: 'asia'
           };
 
           setMarkets(data.markets.map((m: any) => {
@@ -1192,10 +1751,11 @@ export const GlobalMarketsMap: React.FC = () => {
     setPan({ x: targetPanX, y: targetPanY });
   };
 
-  // Reset to full world view
+  // Reset to full world view & deselect active hub/market
   const handleResetView = () => {
     zoomToContinent('world');
     setSelectedHub(null);
+    setSelectedMarketId(null);
   };
 
   // Helper to find CityHub for a market
@@ -1210,8 +1770,55 @@ export const GlobalMarketsMap: React.FC = () => {
       .filter((m): m is MarketItem => Boolean(m));
   };
 
-  // When clicking on a market in the list:
+  // Helper to get performance & session color for a CityHub (matches pin logic)
+  const getHubColor = (hub: CityHub) => {
+    const hubMarkets = getMarketsForHub(hub);
+    const isOpen = hubMarkets.some(m => m.status === 'OPEN');
+    const isPreMarket = !isOpen && hubMarkets.some(m => m.status === 'PRE_MARKET');
+    const isClosed = !isOpen && !isPreMarket;
+
+    const avgChange = hubMarkets.length > 0 
+      ? hubMarkets.reduce((acc, m) => acc + (m.changePercent || 0), 0) / hubMarkets.length 
+      : (hubMarkets[0]?.changePercent ?? 0);
+    const isPositive = avgChange >= 0;
+
+    if (isOpen) {
+      return {
+        text: isPositive ? 'text-emerald-400' : 'text-rose-400',
+        border: isPositive ? 'border-emerald-500' : 'border-rose-500',
+        hex: isPositive ? '#10b981' : '#ef4444',
+        isOpen: true,
+        isClosed: false,
+        isPositive
+      };
+    } else if (isPreMarket) {
+      return {
+        text: isPositive ? 'text-emerald-400' : 'text-rose-400',
+        border: isPositive ? 'border-emerald-400/80' : 'border-rose-400/80',
+        hex: isPositive ? '#10b981' : '#ef4444',
+        isOpen: false,
+        isClosed: false,
+        isPositive
+      };
+    } else {
+      return {
+        text: 'text-slate-400',
+        border: 'border-slate-500',
+        hex: '#64748b',
+        isOpen: false,
+        isClosed: true,
+        isPositive
+      };
+    }
+  };
+
+  // When clicking on a market in the list (click selected again to deselect):
   const handleSelectMarket = (m: MarketItem) => {
+    if (selectedMarketId === m.id) {
+      setSelectedMarketId(null);
+      setSelectedHub(null);
+      return;
+    }
     setSelectedMarketId(m.id);
     const hub = getHubForMarket(m.id);
     if (hub) {
@@ -1220,8 +1827,13 @@ export const GlobalMarketsMap: React.FC = () => {
     }
   };
 
-  // When clicking a City Hub on the map:
+  // When clicking a City Hub on the map (click selected again to deselect):
   const handleSelectHub = (hub: CityHub) => {
+    if (selectedHub?.id === hub.id) {
+      setSelectedHub(null);
+      setSelectedMarketId(null);
+      return;
+    }
     setSelectedHub(hub);
     const primaryId = hub.marketIds[0];
     if (primaryId) {
@@ -1248,14 +1860,17 @@ export const GlobalMarketsMap: React.FC = () => {
   const openCount = openMarkets.length;
   const closedCount = closedMarkets.length;
 
-  // Active selected market object
+  // Active selected market object (null initially when user opens app)
   const selectedMarket = useMemo(() => {
-    return markets.find(m => m.id === selectedMarketId) || markets[0];
+    if (!selectedMarketId) return null;
+    return markets.find(m => m.id === selectedMarketId) || null;
   }, [markets, selectedMarketId]);
 
-  // If user switches tab and selected market is not in that tab, optionally switch to the first market
+  // If user switches tab, only re-target if a market was already selected
   const handleTabChange = (tab: 'open' | 'closed' | 'all') => {
     setActiveTab(tab);
+    if (!selectedMarketId) return;
+
     let targetList = markets;
     if (tab === 'open') targetList = openMarkets;
     if (tab === 'closed') targetList = closedMarkets;
@@ -1308,28 +1923,48 @@ export const GlobalMarketsMap: React.FC = () => {
     return generated[activeTimeframe];
   }, [selectedMarket, activeTimeframe]);
 
-  // Render a compact corporate market card
+  // Render a compact corporate market card with dynamic borders matching market status
   const renderMarketCard = (m: MarketItem) => {
     const isPos = m.changePercent >= 0;
     const isSelected = selectedMarketId === m.id;
-    const isOpen = m.status === 'OPEN' || m.status === 'PRE_MARKET';
+    const isOpen = m.status === 'OPEN';
+    const isPreMarket = m.status === 'PRE_MARKET';
+    const isClosed = !isOpen && !isPreMarket;
+
+    let selectedClasses = 'bg-[#080d19]/90 hover:bg-[#0d1527] border-slate-800/80 hover:border-slate-700';
+    if (isSelected) {
+      if (isOpen) {
+        selectedClasses = isPos
+          ? 'bg-[#0d1a29] border-emerald-500/85 shadow-md ring-1 ring-emerald-500/40'
+          : 'bg-[#1a0f16] border-rose-500/85 shadow-md ring-1 ring-rose-500/40';
+      } else if (isPreMarket) {
+        selectedClasses = isPos
+          ? 'bg-[#0d1a29] border-emerald-400/70 shadow-md ring-1 ring-emerald-400/30'
+          : 'bg-[#1a0f16] border-rose-400/70 shadow-md ring-1 ring-rose-400/30';
+      } else {
+        // Market is closed/uit: gray border
+        selectedClasses = 'bg-[#111726] border-slate-500/85 shadow-md ring-1 ring-slate-500/40';
+      }
+    }
 
     return (
       <div
         key={m.id}
         onClick={() => handleSelectMarket(m)}
-        className={`p-2.5 rounded-lg border text-left transition cursor-pointer relative group ${
-          isSelected
-            ? 'bg-[#10182b] border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
-            : 'bg-[#080d19]/90 hover:bg-[#0d1527] border-slate-800/80 hover:border-slate-700'
-        }`}
+        className={`p-2.5 rounded-lg border text-left transition cursor-pointer relative group ${selectedClasses}`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             {/* Market Name & Dot */}
             <div className="flex items-center gap-1.5">
               <span 
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOpen ? 'bg-emerald-400' : 'bg-slate-500'}`}
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isOpen
+                    ? (isPos ? 'bg-emerald-400' : 'bg-rose-500')
+                    : (isPreMarket
+                        ? (isPos ? 'bg-slate-500 border border-emerald-400' : 'bg-slate-500 border border-rose-500')
+                        : 'bg-slate-500')
+                }`}
               />
               <span className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-slate-200'}`} title={m.name}>
                 {m.name}
@@ -1357,7 +1992,11 @@ export const GlobalMarketsMap: React.FC = () => {
 
         {/* Bottom row: status & local time */}
         <div className="mt-2 pt-1 border-t border-slate-800/60 flex items-center justify-between text-[9.5px] text-slate-400 pl-3">
-          <span className={`font-mono-code ${isOpen ? 'text-emerald-400/90 font-medium' : 'text-slate-400'}`}>
+          <span className={`font-mono-code ${
+            isOpen
+              ? (isPos ? 'text-emerald-400/90 font-medium' : 'text-rose-400/90 font-medium')
+              : 'text-slate-400'
+          }`}>
             {m.statusLabel}
           </span>
           <span className="font-mono-code text-slate-500">
@@ -1455,11 +2094,19 @@ export const GlobalMarketsMap: React.FC = () => {
         <div className="hidden xl:flex items-center gap-3 text-[11px] text-slate-400 shrink-0 font-mono-code">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-[#10b981]"></span>
-            <span>Open</span>
+            <span className="text-emerald-400 font-semibold">+ Open (Groen)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-[#ef4444]"></span>
+            <span className="text-rose-400 font-semibold">- Open (Rood)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-[#64748b] border border-emerald-400"></span>
+            <span className="text-slate-300">Pre-Mkt</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-[#64748b]"></span>
-            <span>Gesloten</span>
+            <span className="text-slate-400">Uit (Grijs)</span>
           </span>
         </div>
       </div>
@@ -1469,30 +2116,58 @@ export const GlobalMarketsMap: React.FC = () => {
         <div className="p-3.5 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* LEFT COLUMN: Fixed World Map (Non-moveable, zooms to continent on selection) */}
           <div className="lg:col-span-5 flex flex-col gap-2">
-            {/* Map Header with active continent & Reset Button */}
+            {/* Map Header with active continent, plus/min indicator & Reset Button */}
             <div className="flex items-center justify-between px-1 text-xs">
               <div className="flex items-center gap-2">
                 <span className="text-slate-400 font-medium">Kaartweergave:</span>
                 <span className="font-semibold text-slate-200 bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800 text-[11px]">
                   {CONTINENT_VIEWPORTS[activeContinent]?.name || 'Wereld'}
                 </span>
-                {selectedHub && (
-                  <span className="text-[11px] text-emerald-400 font-medium truncate max-w-[150px]">
-                    • {selectedHub.cityName}
-                  </span>
-                )}
+                {selectedHub && (() => {
+                  const hubCol = getHubColor(selectedHub);
+                  return (
+                    <span className={`text-[11px] ${hubCol.text} font-semibold truncate max-w-[170px]`}>
+                      • {selectedHub.cityName}
+                    </span>
+                  );
+                })()}
               </div>
 
-              {activeContinent !== 'world' && (
-                <button
-                  onClick={handleResetView}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[11px] border border-slate-700/80"
-                  title="Herstel naar de hele wereld"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Wereld</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {/* Subtle indicator: Groen = Plus, Rood = Min, Pre-Mkt, Uit */}
+                <div className="hidden xs:flex items-center gap-1.5 text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800/80">
+                  <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>+</span>
+                  </span>
+                  <span className="text-slate-600">/</span>
+                  <span className="flex items-center gap-1 text-rose-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                    <span>-</span>
+                  </span>
+                  <span className="text-slate-600">|</span>
+                  <span className="flex items-center gap-1 text-slate-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#64748b] border border-emerald-400"></span>
+                    <span>Pre</span>
+                  </span>
+                  <span className="text-slate-600">|</span>
+                  <span className="flex items-center gap-1 text-slate-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#64748b]"></span>
+                    <span>Uit</span>
+                  </span>
+                </div>
+
+                {activeContinent !== 'world' && (
+                  <button
+                    onClick={handleResetView}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[11px] border border-slate-700/80"
+                    title="Herstel naar de hele wereld"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Wereld</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Non-moveable SVG Map Frame */}
@@ -1567,10 +2242,46 @@ export const GlobalMarketsMap: React.FC = () => {
                     const hubMarkets = getMarketsForHub(hub);
                     const isSelected = selectedHub?.id === hub.id || (selectedMarket && hub.marketIds.includes(selectedMarket.id));
                     const isHovered = hoveredHub?.id === hub.id;
-                    const isOpen = hubMarkets.some(m => m.status === 'OPEN' || m.status === 'PRE_MARKET');
 
-                    // Closed markets are plain neutral gray (#64748b) without glow
-                    const pinColor = isOpen ? '#10b981' : '#64748b';
+                    // Session states:
+                    // 1. OPEN: active regular trading session
+                    const isOpen = hubMarkets.some(m => m.status === 'OPEN');
+                    // 2. PRE_MARKET: pre-market active
+                    const isPreMarket = !isOpen && hubMarkets.some(m => m.status === 'PRE_MARKET');
+                    // 3. CLOSED: market is off / closed
+                    const isClosed = !isOpen && !isPreMarket;
+
+                    // USER REQUIREMENTS:
+                    // 1. "wel op grijs als de markt uit is" -> closed = gray
+                    // 2. "zonder wit erin hebben alleen rood of groen" -> open = solid green or solid red, NO white inside
+                    // 3. "pre market grijs met rode of groen rand" -> pre-market = gray dot with red or green border
+                    // 4. "De puntjes moet wel nog flikkeren" -> active dots (open / pre-market) must flicker/pulse
+
+                    const avgChange = hubMarkets.length > 0 
+                      ? hubMarkets.reduce((acc, m) => acc + (m.changePercent || 0), 0) / hubMarkets.length 
+                      : (hubMarkets[0]?.changePercent ?? 0);
+                    const isPositive = avgChange >= 0;
+
+                    let pinFill = '#64748b'; // Neutral gray when closed
+                    let pinStroke = '#334155';
+                    let pingColor = isPositive ? '#10b981' : '#ef4444';
+                    const isFlickering = isOpen || isPreMarket;
+
+                    if (isOpen) {
+                      // OPEN: Alleen rood of groen, zonder wit erin
+                      pinFill = isPositive ? '#10b981' : '#ef4444';
+                      pinStroke = isPositive ? '#059669' : '#b91c1c';
+                      pingColor = isPositive ? '#10b981' : '#ef4444';
+                    } else if (isPreMarket) {
+                      // PRE-MARKET: Grijs met rode of groene rand
+                      pinFill = '#64748b';
+                      pinStroke = isPositive ? '#10b981' : '#ef4444';
+                      pingColor = isPositive ? '#10b981' : '#ef4444';
+                    } else {
+                      // MARKT UIT: Grijs
+                      pinFill = '#64748b';
+                      pinStroke = '#475569';
+                    }
 
                     // Only New York, London, and Shanghai have name tags permanently displayed on the map
                     const isAlwaysNamed = ['new_york', 'london', 'shanghai'].includes(hub.id);
@@ -1588,32 +2299,37 @@ export const GlobalMarketsMap: React.FC = () => {
                         onMouseLeave={() => setHoveredHub(null)}
                         className="cursor-pointer group"
                       >
-                        {/* Animated Pulse Beacon ONLY for Open Markets */}
-                        {isOpen && (
-                          <circle
-                            r={isSelected ? "11" : "7.5"}
-                            fill="#10b981"
-                            opacity="0.3"
-                            className="animate-ping"
-                          />
+                        {/* Animated Pulse Beacon (Flikkeren) for active Open & Pre-Market sessions */}
+                        {isFlickering && (
+                          <g>
+                            {/* Expanding CSS ping wave */}
+                            <circle
+                              r={isSelected ? "11" : "7.5"}
+                              fill={pingColor}
+                              opacity={isPreMarket ? "0.25" : "0.35"}
+                              className="animate-ping"
+                              style={{ transformOrigin: '0 0' }}
+                            />
+                            {/* Native SVG expanding wave to guarantee smooth flicker */}
+                            <circle r="3.2" fill="none" stroke={pingColor} strokeWidth="1.2" opacity="0.8">
+                              <animate attributeName="r" values="3.2;9;12" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.8;0.3;0" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
+                            </circle>
+                          </g>
                         )}
 
-                        {/* Pin Outer Ring */}
+                        {/* Pin Dot: Purely red/green when open, gray with red/green border in pre-market, plain gray when closed */}
                         <circle
-                          r={isSelected ? "5.5" : (isAlwaysNamed ? "3.8" : "3.0")}
-                          fill={pinColor}
-                          stroke={isOpen ? "#ffffff" : "#475569"}
-                          strokeWidth={isSelected ? "1.8" : (isOpen ? "1.0" : "0.75")}
-                          filter={isOpen ? "url(#cityGlow)" : undefined}
-                        />
-
-                        {/* Inner Dot for Open Markets */}
-                        {isOpen && (
-                          <circle
-                            r="1.6"
-                            fill="#ffffff"
-                          />
-                        )}
+                          r={isSelected ? "5.5" : (isAlwaysNamed ? "4.0" : "3.2")}
+                          fill={pinFill}
+                          stroke={isSelected ? (isClosed ? "#94a3b8" : (isPositive ? "#10b981" : "#ef4444")) : pinStroke}
+                          strokeWidth={isSelected ? "2.2" : (isPreMarket ? "1.8" : (isOpen ? "1.2" : "0.8"))}
+                          filter={isFlickering ? "url(#cityGlow)" : undefined}
+                        >
+                          {isFlickering && (
+                            <animate attributeName="opacity" values="1;0.7;1" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
+                          )}
+                        </circle>
 
                         {/* Name Tag Label */}
                         {showLabel && (
@@ -1626,7 +2342,7 @@ export const GlobalMarketsMap: React.FC = () => {
                               rx="2.5"
                               fill="#080d19"
                               fillOpacity="0.94"
-                              stroke={isSelected ? '#38bdf8' : (isOpen ? '#1e293b' : '#334155')}
+                              stroke={isSelected ? (isClosed ? '#64748b' : (isPositive ? '#10b981' : '#ef4444')) : (isOpen ? (isPositive ? '#065f46' : '#7f1d1d') : (isPreMarket ? (isPositive ? '#065f46' : '#7f1d1d') : '#334155'))}
                               strokeWidth="0.75"
                             />
                             <text
@@ -1713,8 +2429,18 @@ export const GlobalMarketsMap: React.FC = () => {
             </div>
 
             {/* LOWER PANE: Rich Institutional Stock Market Info & Historical Chart */}
-            {selectedMarket && (
-              <div className="mt-1 bg-[#060a14] border border-slate-800 rounded-xl p-3 sm:p-3.5 flex flex-col gap-3 shadow-inner">
+            {selectedMarket ? (
+              <div className={`mt-1 bg-[#060a14] rounded-xl p-3 sm:p-3.5 flex flex-col gap-3 shadow-inner border transition-all ${
+                selectedMarket.status === 'OPEN'
+                  ? (selectedMarket.changePercent >= 0 
+                      ? 'border-emerald-500/70 ring-1 ring-emerald-500/25' 
+                      : 'border-rose-500/70 ring-1 ring-rose-500/25')
+                  : (selectedMarket.status === 'PRE_MARKET'
+                      ? (selectedMarket.changePercent >= 0 
+                          ? 'border-emerald-400/50 ring-1 ring-emerald-400/20' 
+                          : 'border-rose-400/50 ring-1 ring-rose-400/20')
+                      : 'border-slate-800/90')
+              }`}>
                 {/* Header row of selected market */}
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/80 pb-2.5">
                   <div>
@@ -1727,11 +2453,13 @@ export const GlobalMarketsMap: React.FC = () => {
                       </span>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold ${
                         selectedMarket.status === 'OPEN' || selectedMarket.status === 'PRE_MARKET'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          ? (selectedMarket.changePercent >= 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30')
                           : 'bg-slate-800/90 text-slate-400 border border-slate-700/60'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                          selectedMarket.status === 'OPEN' || selectedMarket.status === 'PRE_MARKET' ? 'bg-emerald-400 live-beacon-pulse' : 'bg-slate-400'
+                          selectedMarket.status === 'OPEN' || selectedMarket.status === 'PRE_MARKET' 
+                            ? (selectedMarket.changePercent >= 0 ? 'bg-emerald-400 live-beacon-pulse' : 'bg-rose-500 live-beacon-pulse')
+                            : 'bg-slate-400'
                         }`} />
                         <span>{selectedMarket.statusLabel}</span>
                       </span>
@@ -1834,50 +2562,94 @@ export const GlobalMarketsMap: React.FC = () => {
                 </div>
 
                 {/* Interactive Chart Module */}
-                <div className="flex flex-col gap-2 pt-1 border-t border-slate-800/60">
-                  {/* Chart Header with Timeframe Switches */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-300 font-semibold">
-                      <BarChart2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Historisch Koersverloop ({selectedMarket.name})</span>
+                <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/60">
+                  {/* Chart Header with Provider Design Switcher & Timeframe Switches */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    {/* Title & Design Theme Toggle */}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-200 font-bold">
+                        <BarChart2 className="w-3.5 h-3.5 text-slate-300" />
+                        <span>Koersgrafiek ({selectedMarket.name})</span>
+                      </div>
+
+                      {/* 3 Design Choices Switcher (Bloomberg, ICE, Executive) */}
+                      <div className="inline-flex items-center p-0.5 bg-[#080d1a] border border-slate-800/90 rounded-lg shadow-sm">
+                        {(['bloomberg', 'ice', 'executive'] as const).map(th => {
+                          const themeMeta = {
+                            bloomberg: { label: 'Bloomberg', dot: 'bg-amber-400', active: 'bg-amber-950/80 text-amber-300 border-amber-500/60' },
+                            ice: { label: 'ICE Feed', dot: 'bg-cyan-400', active: 'bg-cyan-950/80 text-cyan-200 border-cyan-500/60' },
+                            executive: { label: 'Executive', dot: 'bg-indigo-400', active: 'bg-indigo-950/80 text-indigo-200 border-indigo-500/60' }
+                          }[th];
+                          const isSelected = chartTheme === th;
+                          return (
+                            <button
+                              key={th}
+                              onClick={() => setChartTheme(th)}
+                              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                                isSelected
+                                  ? `${themeMeta.active} border shadow-sm`
+                                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                              }`}
+                              title={`Schakel grafiekdesign om naar ${themeMeta.label}`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${themeMeta.dot}`} />
+                              <span>{themeMeta.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    {/* Timeframe Selector Buttons */}
-                    <div className="inline-flex items-center p-0.5 bg-[#0a1020] border border-slate-800 rounded-md">
-                      {(['1W', '1M', '6M', '1Y'] as const).map(tf => {
-                        const labelMap = {
-                          '1W': '1 Week',
-                          '1M': '1 Maand',
-                          '6M': '6 Maanden',
-                          '1Y': '1 Jaar'
-                        };
-                        const isTfActive = activeTimeframe === tf;
-
+                    {/* 8 Timeframe Selector Buttons (24U, 1W, 3M, YTD, 1Y, 5Y, 10Y, ALL) */}
+                    <div className="inline-flex flex-wrap items-center p-0.5 bg-[#080d1a] border border-slate-800/90 rounded-lg shadow-sm">
+                      {[
+                        { id: '24U' as const, label: '24U', title: 'Laatste 24 uur (Intraday hoge frequentie)' },
+                        { id: '1W' as const, label: '1W', title: '1 Week (Uurbasis)' },
+                        { id: '3M' as const, label: '3M', title: '3 Maanden (Dagbasis)' },
+                        { id: 'YTD' as const, label: 'YTD', title: 'Year To Date (Sinds 1 januari)' },
+                        { id: '1Y' as const, label: '1Y', title: '1 Jaar (Weekbasis)' },
+                        { id: '5Y' as const, label: '5Y', title: '5 Jaar (Maandbasis)' },
+                        { id: '10Y' as const, label: '10Y', title: '10 Jaar (Kwartaalbasis)' },
+                        { id: 'ALL' as const, label: 'ALL', title: 'All-Time (Historische trend)' }
+                      ].map(tf => {
+                        const isTfActive = activeTimeframe === tf.id;
                         return (
                           <button
-                            key={tf}
-                            onClick={() => setActiveTimeframe(tf)}
-                            className={`px-2 py-0.5 rounded text-[10.5px] font-mono-code font-bold transition cursor-pointer ${
+                            key={tf.id}
+                            onClick={() => setActiveTimeframe(tf.id)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono-code font-bold transition cursor-pointer ${
                               isTfActive
-                                ? 'bg-slate-800 text-white shadow-sm border border-slate-700/80'
-                                : 'text-slate-400 hover:text-slate-200'
+                                ? 'bg-slate-700/90 text-white shadow-sm border border-slate-600'
+                                : 'text-slate-400 hover:text-slate-200 border border-transparent'
                             }`}
-                            title={labelMap[tf]}
+                            title={tf.title}
                           >
-                            {tf}
+                            {tf.label}
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* SVG Chart */}
+                  {/* Multi-Design SVG Financial Chart */}
                   <MarketHistoryChart
                     chartData={currentChartData}
                     currency={selectedMarket.currency}
-                    isPositive={selectedMarket.changePercent >= 0}
+                    marketName={selectedMarket.name}
+                    ticker={selectedMarket.yahooTicker}
                     timeframe={activeTimeframe}
+                    theme={chartTheme}
                   />
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1 bg-[#060a14]/60 border border-dashed border-slate-800 rounded-xl p-5 flex flex-col items-center justify-center text-center text-slate-400 gap-2">
+                <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div className="text-xs font-semibold text-slate-300">Geen aandelenmarkt geselecteerd</div>
+                <div className="text-[11px] text-slate-500 max-w-sm">
+                  Klik op een marktpunt op de wereldkaart of kies een beurs uit de lijst hierboven om realtime grafieken, koersanalyse en 52-weeks bereik te bekijken.
                 </div>
               </div>
             )}

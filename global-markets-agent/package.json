@@ -1,0 +1,19 @@
+{
+  "name": "global-markets-news-agent",
+  "version": "1.0.0",
+  "description": "Autonomous Financial News Agent with Google GenAI SDK, Gemini 3.8 Flash, Medium Thinking, and PostgreSQL",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "run:agent": "node src/cli.js"
+  },
+  "dependencies": {
+    "@google/genai": "^0.1.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1"
+  }
+}

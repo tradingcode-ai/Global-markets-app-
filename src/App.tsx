@@ -17,6 +17,7 @@ import { COMMODITIES_DATA } from './data/commoditiesData';
 import { getStockTechnicalMetrics } from './data/technicalData';
 import { getStockQuarterlyConsensus, getStockAnalystOutlooks } from './data/analystCoverageData';
 import { getCurrencySymbol } from './utils/formatters';
+import { resolveLiveQuote } from './utils/marketSession';
 import { 
   getStoredPreferences, 
   savePreferences, 
@@ -44,6 +45,7 @@ import { CommoditiesSection } from './components/CommoditiesSection';
 import { BondsSection } from './components/BondsSection';
 import { JPMorganTableView } from './components/JPMorganTableView';
 import { McKinseyExecutiveView } from './components/McKinseyExecutiveView';
+import { GlobalNewsAgentView } from './components/GlobalNewsAgentView';
 import { FloatingAdvisoryBubble } from './components/FloatingAdvisoryBubble';
 import { 
   LayoutGrid, 
@@ -56,7 +58,8 @@ import {
   Menu,
   Layers,
   BookOpen,
-  Landmark
+  Landmark,
+  Globe
 } from 'lucide-react';
 
 export default function App() {
@@ -96,9 +99,11 @@ export default function App() {
   const prevQuotesRef = useRef<Record<string, LiveQuote>>({});
 
   // UI State
-  const [activeTab, setActiveTab] = useState<'jpmorgan' | 'bonds' | 'matrix' | 'calendar' | 'commodities' | 'mckinsey'>('jpmorgan');
+  const [activeTab, setActiveTab] = useState<'jpmorgan' | 'bonds' | 'matrix' | 'calendar' | 'commodities' | 'mckinsey' | 'globalnewsagent'>('jpmorgan');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
+  const [selectedBondId, setSelectedBondId] = useState<string>('us-10y-treasury');
+  const [selectedCommodityId, setSelectedCommodityId] = useState<string>('wti-crude');
   
   // Modals
   const [selectedResultForModal, setSelectedResultForModal] = useState<QuarterlyResult | null>(null);
@@ -509,34 +514,75 @@ export default function App() {
     handleSaveNotifications([]);
   };
 
-  const handleSelectTickerFromPill = (sym: string) => {
-    const commoditySymbols = [
-      'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'INE-SC',
-      'RBOB', 'HO', 'GOLD', 'SILVER', 'COPPER', 'URANIUM', 'LITHIUM', 'WHEAT', 'CORN'
-    ];
-    if (commoditySymbols.includes(sym)) {
+  const handleSelectTickerFromPill = useCallback((sym: string) => {
+    const rawSym = (sym || '').trim().toUpperCase();
+    const commodityMap: Record<string, string> = {
+      'WTI': 'wti-crude', 'CL': 'wti-crude',
+      'BRENT': 'brent-crude', 'BZ': 'brent-crude',
+      'TTF': 'dutch-ttf',
+      'NG': 'henry-hub', 'HENRY-HUB': 'henry-hub',
+      'JKM': 'jkm-lng',
+      'MURBAN': 'murban-crude',
+      'GOLD': 'gold', 'GC': 'gold', 'XAU': 'gold',
+      'SILVER': 'silver', 'SI': 'silver', 'XAG': 'silver',
+      'COPPER': 'copper', 'HG': 'copper',
+      'URANIUM': 'uranium',
+      'LITHIUM': 'lithium',
+      'WHEAT': 'milling-wheat',
+      'CORN': 'corn',
+      'INE-SC': 'murban-crude',
+      'RBOB': 'wti-crude',
+      'HO': 'wti-crude'
+    };
+
+    if (commodityMap[rawSym]) {
+      setSelectedCommodityId(commodityMap[rawSym]);
       setActiveTab('commodities');
       return;
     }
-    const bondSymbols = ['US10Y', 'US2Y', 'US30Y', 'DE10Y', 'DE30Y', 'GB10Y', 'FR10Y', 'IT10Y'];
-    if (bondSymbols.includes(sym)) {
-      setActiveTab('commodities');
+
+    const bondMap: Record<string, string> = {
+      'US10Y': 'us-10y-treasury',
+      'US2Y': 'us-2y-treasury',
+      'US30Y': 'us-30y-treasury',
+      'US30YMORT': 'us-30y-mortgage',
+      'US30YFRM': 'us-30y-mortgage',
+      'CN10Y': 'cn-10y-cgb',
+      'CN30Y': 'cn-30y-cgb',
+      'DE10Y': 'de-10y-bund',
+      'DE30Y': 'de-30y-bund',
+      'JP10Y': 'jp-10y-jgb',
+      'JP30Y': 'jp-30y-jgb',
+      'GB10Y': 'gb-10y-gilt',
+      'GB30Y': 'gb-30y-gilt',
+      'FR10Y': 'fr-10y-oat',
+      'FR30Y': 'fr-30y-oat',
+      'IT10Y': 'it-10y-btp',
+      'IT30Y': 'it-30y-btp',
+      'ES10Y': 'es-10y-bonos',
+      'ES30Y': 'es-30y-bonos'
+    };
+
+    if (bondMap[rawSym]) {
+      setSelectedBondId(bondMap[rawSym]);
+      setActiveTab('bonds');
       return;
     }
-    const matched = results.find(r => r.ticker === sym);
+
+    const matched = results.find(r => r.ticker === rawSym);
     if (matched) {
       setSelectedResultForModal(matched);
       return;
     }
 
     // If company exists in TECH_COMPANIES or SHOVEL_SELLERS_COMPANIES, generate modal view
-    const meta = TECH_COMPANIES[sym] || (SHOVEL_SELLERS_COMPANIES as any)[sym] || (HYPERSCALER_COMPANIES as any)[sym];
+    const meta = TECH_COMPANIES[rawSym] || (SHOVEL_SELLERS_COMPANIES as any)[rawSym] || (HYPERSCALER_COMPANIES as any)[rawSym];
     if (meta) {
-      const q = quotes[sym];
+      const q = quotes[rawSym];
       const livePrice = q ? q.price : meta.currentPrice;
       const syntheticResult: QuarterlyResult = {
-        id: `shovel-selected-${sym}`,
-        ticker: sym,
+        id: `shovel-selected-${rawSym}`,
+        ticker: rawSym,
         companyName: meta.name,
         sector: meta.sector || 'The Shovel Sellers',
         subSector: meta.subSector || 'Semiconductors',
@@ -564,15 +610,15 @@ export default function App() {
         segments: [
           { name: meta.subSector || 'Core Infrastructure', revenue: meta.marketCap, growthYoY: '+18%', beatExpectation: true }
         ],
-        quarterlyConsensus: getStockQuarterlyConsensus(sym, livePrice, '$', {
-          ticker: sym,
+        quarterlyConsensus: getStockQuarterlyConsensus(rawSym, livePrice, '$', {
+          ticker: rawSym,
           companyName: meta.name,
           quarter: 'Q2 2026',
           epsEstimate: 1.45,
           revenueEstimate: 3.85
         } as any),
-        analystOutlooks: getStockAnalystOutlooks(sym, livePrice, '$', {
-          ticker: sym,
+        analystOutlooks: getStockAnalystOutlooks(rawSym, livePrice, '$', {
+          ticker: rawSym,
           companyName: meta.name,
           sector: meta.sector || 'The Shovel Sellers',
           epsEstimate: 1.45,
@@ -581,7 +627,26 @@ export default function App() {
       };
       setSelectedResultForModal(syntheticResult);
     }
-  };
+  }, [results, quotes]);
+
+  const handleNavigateAsset = useCallback((target: { type: 'equity' | 'commodity' | 'bond'; symbol: string; targetId?: string }) => {
+    if (target.type === 'bond') {
+      if (target.targetId) {
+        setSelectedBondId(target.targetId);
+      }
+      setActiveTab('bonds');
+      return;
+    }
+    if (target.type === 'commodity') {
+      if (target.targetId) {
+        setSelectedCommodityId(target.targetId);
+      }
+      setActiveTab('commodities');
+      return;
+    }
+    // Equity
+    handleSelectTickerFromPill(target.symbol);
+  }, [handleSelectTickerFromPill]);
 
   // Handle 200-day moving average breakdown alert notification
   const handleTriggerTechnicalAlert = useCallback((
@@ -764,6 +829,20 @@ export default function App() {
               <Sparkles className="w-3.5 h-3.5 text-cyan-500" />
               <span>McKinsey Thought Leadership</span>
             </button>
+
+            {/* 6. Global Markets News Agent */}
+            <button
+              id="tab-globalnewsagent"
+              onClick={() => setActiveTab('globalnewsagent')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer font-medium ${
+                activeTab === 'globalnewsagent' 
+                  ? 'bg-[#002d62] text-cyan-300 shadow-2xs font-bold border border-cyan-700' 
+                  : 'text-slate-700 hover:text-slate-950 hover:bg-white/60'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Global News Agent</span>
+            </button>
           </div>
 
           {/* Institutional Alert Protocol Status Banner */}
@@ -806,6 +885,8 @@ export default function App() {
             recentTicks={recentTicks}
             onRefreshQuotes={() => loadMarketQuotes(true)}
             isLoadingQuotes={isQuotesLoading}
+            selectedBondId={selectedBondId}
+            onSelectBondId={setSelectedBondId}
           />
         )}
 
@@ -841,6 +922,8 @@ export default function App() {
             recentTicks={recentTicks}
             onRefreshQuotes={() => loadMarketQuotes(true)}
             isLoadingQuotes={isQuotesLoading}
+            selectedCommodityId={selectedCommodityId}
+            onSelectCommodityId={setSelectedCommodityId}
           />
         )}
 
@@ -850,6 +933,16 @@ export default function App() {
             results={filteredResults}
             quotes={quotes}
             onSelectResult={(item) => setSelectedResultForModal(item)}
+          />
+        )}
+
+        {/* Tab 6: Autonomous Global Markets News Agent */}
+        {activeTab === 'globalnewsagent' && (
+          <GlobalNewsAgentView
+            subscribedTickers={preferences.subscribedTickers}
+            onToggleSubscription={handleToggleSubscription}
+            onSelectTicker={handleSelectTickerFromPill}
+            onNavigateToAsset={handleNavigateAsset}
           />
         )}
       </main>
@@ -887,7 +980,7 @@ export default function App() {
       {selectedResultForModal && (
         <CompanyDetailModal
           result={selectedResultForModal}
-          quote={quotes[selectedResultForModal.ticker]}
+          quote={resolveLiveQuote(selectedResultForModal.ticker, quotes)}
           onClose={() => setSelectedResultForModal(null)}
           onTriggerTestPush={handleTriggerTestPush}
           preferences={preferences}

@@ -29,6 +29,8 @@ interface CommoditiesSectionProps {
   recentTicks: Record<string, 'up' | 'down'>;
   onRefreshQuotes: () => void;
   isLoadingQuotes: boolean;
+  selectedCommodityId?: string;
+  onSelectCommodityId?: (commodityId: string) => void;
 }
 
 const CATEGORY_ICONS: Record<CommodityCategory, React.ReactNode> = {
@@ -59,9 +61,11 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
   quotes,
   recentTicks,
   onRefreshQuotes,
-  isLoadingQuotes
+  isLoadingQuotes,
+  selectedCommodityId: externalCommodityId,
+  onSelectCommodityId
 }) => {
-  const [selectedCommodityId, setSelectedCommodityId] = useState<string>('murban-crude');
+  const [internalCommodityId, setInternalCommodityId] = useState<string>('murban-crude');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
@@ -69,6 +73,22 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
   const [showSynthesisModal, setShowSynthesisModal] = useState<boolean>(false);
   const [synthesisReport, setSynthesisReport] = useState<string | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState<boolean>(false);
+
+  const selectedCommodityId = externalCommodityId || internalCommodityId;
+  const setSelectedCommodityId = (id: string) => {
+    setInternalCommodityId(id);
+    if (onSelectCommodityId) onSelectCommodityId(id);
+  };
+
+  React.useEffect(() => {
+    if (externalCommodityId) {
+      setInternalCommodityId(externalCommodityId);
+      const c = COMMODITIES_DATA.find(item => item.id === externalCommodityId);
+      if (c && activeCategoryFilter !== 'ALL' && c.category !== activeCategoryFilter) {
+        setActiveCategoryFilter('ALL');
+      }
+    }
+  }, [externalCommodityId]);
 
   // Group commodities by category
   const categoriesToRender = useMemo(() => {
