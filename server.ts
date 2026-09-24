@@ -2921,7 +2921,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
     const normalizeRevB = (val?: number | null): number | undefined => {
       if (val === undefined || val === null || isNaN(val)) return undefined;
       const converted = val * fx;
-      if (Math.abs(converted) >= 1e8) {
+      if (Math.abs(converted) >= 1e6) {
         return Number((converted / 1e9).toFixed(2));
       }
       return Number(converted.toFixed(2));
