@@ -502,9 +502,9 @@ export default function App() {
       'LITHIUM': 'lithium',
       'WHEAT': 'milling-wheat',
       'CORN': 'corn',
-      'INE-SC': 'murban-crude',
-      'RBOB': 'wti-crude',
-      'HO': 'wti-crude'
+      'INE-SC': 'shanghai-crude',
+      'RBOB': 'rbob-gasoline',
+      'HO': 'heating-oil'
     };
 
     if (commodityMap[rawSym]) {
