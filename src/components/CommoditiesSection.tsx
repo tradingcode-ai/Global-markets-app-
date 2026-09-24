@@ -317,8 +317,6 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
                     const pct = itemQuote ? itemQuote.changePercent : item.changePercent;
                     const isUp = chg >= 0;
                     const itemTick = recentTicks[item.symbol];
-                    const isMurban = item.symbol === 'MURBAN';
-
                     return (
                       <button
                         key={item.id}
@@ -361,14 +359,6 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
                           </span>
                         </div>
 
-                        {/* Special OilPrice.com benchmark badge for Murban */}
-                        {isMurban && (
-                          <div className={`mt-1.5 text-[8.5px] font-mono-code font-semibold px-1 py-0.5 rounded truncate ${
-                            isSelected ? 'bg-amber-400/20 text-amber-300' : 'bg-orange-50 text-orange-800 border border-orange-200'
-                          }`}>
-                            OilPrice.com Index ($121.39)
-                          </div>
-                        )}
                       </button>
                     );
                   })}
@@ -477,31 +467,7 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
               <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
               <div className="text-[11px] leading-relaxed flex-1">
                 <p>{selectedCommodity.primaryBenchmarkRole}</p>
-                {selectedCommodity.symbol === 'MURBAN' && (
-                  <div className="mt-2.5 pt-2 border-t border-slate-200 space-y-1.5">
-                    <div className="p-2 rounded bg-amber-50/80 border border-amber-200 text-[10px] text-amber-900 leading-normal">
-                      <strong>OilPrice.com vs Physical Price Breakdown:</strong>
-                      <div className="mt-0.5">
-                        • <strong>OilPrice.com Benchmark ($121.39):</strong> Reflects ICE Futures Abu Dhabi (IFAD) MBN exchange futures pricing.
-                      </div>
-                      <div className="mt-0.5">
-                        • <strong>Physical Spot Barrels (~$76-$79):</strong> Reflects prompt FOB physical liftings at Fujairah terminal (priced at Brent + $0.75 OSP differential).
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[10px] text-slate-500 font-mono-code font-bold">SOURCE: OilPrice.com & ICE IFAD</span>
-                      <a
-                        href="https://oilprice.com/oil-price-charts/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-700 hover:text-orange-900 transition"
-                      >
-                        <span>Verify on OilPrice.com</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </a>
-                    </div>
-                  </div>
-                )}
+
               </div>
             </div>
           </div>
