@@ -135,40 +135,42 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
   // Unique list of banks for filter
   const allBanks = Array.from(new Set(selectedCommodity.analystOutlooks.map(o => o.bankName)));
 
-  // Generate Institutional Cross-Commodity Synthesis
-  const handleGenerateSynthesis = () => {
+  // Generate a real AI cross-commodity synthesis; never fabricate a memo locally.
+  const handleGenerateSynthesis = async () => {
     setIsSynthesizing(true);
     setShowSynthesisModal(true);
 
-    setTimeout(() => {
-      setSynthesisReport(`
-### Institutional Macro Commodities & Energy Intelligence Briefing
-**Cross-Asset Overview: Energy, Precious Metals, Industrial Transition Metals & Agriculture**
+    const universe = COMMODITIES_DATA.map(item =>
+      `${item.name} (${item.symbol}, ${item.currency}/unit)`
+    ).join(', ');
 
-#### 1. Energy & Natural Gas (Dutch TTF, Henry Hub, JKM)
-- **Dutch TTF**: European natural gas balances remain vulnerable to sudden supply disruptions despite storage exceeding 92%. **Goldman Sachs** and **J.P. Morgan** model persistent upside tail risk (€38-€41.50/MWh) due to the expiration of the Russia-Ukraine transit accord and global competition for flexible LNG cargoes with Asia.
-- **Henry Hub ($2.85/MMBtu)**: Transitioning from domestic surplus into an export-led demand boom (+3.5 Bcf/d in new Gulf Coast liquefaction) and massive electricity demand from AI data centers, supporting a consensus recovery to **$3.30-$3.60/MMBtu**.
-- **Platts JKM LNG ($13.40/MMBtu)**: Asian spot buyers continue paying a +$1.85/MMBtu premium over European hub prices to lock in winter peaking cargoes.
+    try {
+      const response = await fetch('/api/analyze-earnings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: `Prepare a concise cross-commodity institutional market synthesis for this tracked universe: ${universe}. Focus on observable supply/demand drivers, inventory, curve structure, macro sensitivity and material risks. Do not invent prices, analyst targets, inventories or named-bank views; state when live data is unavailable.`
+        })
+      });
 
-#### 2. Crude Oil & Distillates (Brent, WTI, Murban, INE-SC, RBOB, ULSD)
-- **Crude Benchmarks ($74-$78/bbl)**: Anchored in a bounded range ($75-$85) defended by OPEC+ voluntary cuts. **Citi** projects downside to $68 by 2027 as deepwater offshore output from Guyana and Brazil scales, while **Standard Chartered** notes extreme speculative short positioning that risks violent short-squeezes.
-- **Murban Crude**: Commands expanding adoption among East Asian refiners due to direct Fujairah pipeline bypass around the Strait of Hormuz.
-- **Refined Cracks**: Distillate and diesel cracks remain historically robust (~$27/bbl) on Atlantic basin refinery capacity constraints.
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Macro synthesis unavailable');
+      }
 
-#### 3. Precious Metals (Gold & Silver)
-- **Gold ($2,548/oz)**: Premier macro conviction asset across **Goldman Sachs** and **J.P. Morgan** ($2,700-$2,850/oz targets). Driven by historic central bank net sovereign accumulation (>1,000 tonnes/yr) and Western ETF inflows in response to global monetary easing cycles.
-- **Silver ($30.15/oz)**: Structural multi-year deficit fueled by record solar photovoltaic paste consumption (N-type TOPCon cells), with **UBS** targeting $36.00/oz as the gold/silver ratio compresses toward 70x.
-
-#### 4. Industrial Transition Metals (Copper, Uranium, Lithium)
-- **Copper ($4.38/lb / ~$9,650/t)**: "Doctor Copper" faces unprecedented physical deficit drivers: zero smelter treatment charges (TC/RCs), severe mine disruptions, and compounding grid/AI data center electrical wiring requirements. Target: **$4.85-$5.20/lb ($10,700-$11,500/t)**.
-- **Uranium Yellowcake ($84.50/lb U3O8)**: Structural nuclear renaissance fueled by Big Tech direct clean power purchase agreements (Microsoft, Amazon) and supply cuts from Kazatomprom. Target: **$98-$105/lb**.
-- **Lithium Carbonate ($11,800/t)**: Prices have bottomed near the 80th cash cost percentile; supply cuts in China and Australia will tighten balances as grid battery energy storage systems (BESS) surge +45% YoY.
-
-#### 5. Agricultural Softs (Chicago Wheat & Corn)
-- **Wheat ($5.82/bu) & Corn ($4.18/bu)**: Global stocks-to-use ratios are at multi-year lows outside China; European wet weather damage provides price support against seasonal US harvest pressure.
-      `);
+      const analysis = payload.analysis || {};
+      setSynthesisReport([
+        analysis.summaryVerdict,
+        ...(Array.isArray(analysis.keyDrivers) ? analysis.keyDrivers.map((item: string) => `- ${item}`) : []),
+        analysis.guidanceAndOutlook,
+        analysis.marketImplication
+      ].filter(Boolean).join('\n\n'));
+    } catch (error) {
+      console.error('[Commodities AI Synthesis]', error);
+      setSynthesisReport('Live AI synthesis is temporarily unavailable. No synthetic market memo was generated.');
+    } finally {
       setIsSynthesizing(false);
-    }, 700);
+    }
   };
 
   const getCurrencySymbol = (currency: string) => {
@@ -199,7 +201,7 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Live tick-by-tick pricing, futures curve spreads, inventory data, and bank consensus outlooks (Goldman, J.P. Morgan, Morgan Stanley, Citi, UBS, BofA)
+                Live quote feeds, futures curve context, inventory references, and clearly labelled quarterly outlooks
               </p>
             </div>
           </div>
@@ -222,7 +224,7 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Institutional Bank Memo</span>
+              <span>AI Macro Synthesis</span>
             </button>
           </div>
         </div>
