@@ -1292,15 +1292,6 @@ export const GlobalMarketsMap: React.FC = () => {
         return prev - 1;
       });
 
-      // Micro-tick movement on active OPEN markets
-      setMarkets(prev => prev.map(m => {
-        if (m.status === 'OPEN') {
-          const delta = (Math.random() - 0.495) * (m.price * 0.0001);
-          const newPrice = +(m.price + delta).toFixed(2);
-          return { ...m, price: newPrice };
-        }
-        return m;
-      }));
     }, 1000);
 
     return () => clearInterval(timer);
