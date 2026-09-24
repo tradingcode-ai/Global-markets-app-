@@ -10,7 +10,7 @@ export interface MarketSessionInfo {
 }
 
 const COMMODITY_SYMBOLS = new Set([
-  'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'INE-SC',
+  'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'MRBC', 'OQD', 'INE-SC',
   'RBOB', 'HO', 'GOLD', 'SILVER', 'COPPER', 'URANIUM', 'LITHIUM', 'WHEAT', 'CORN'
 ]);
 
@@ -346,6 +346,9 @@ export const TICKER_ALIASES: Record<string, string[]> = {
   'CORN': ['CORN', 'C.1', 'ZC=F'],
   'RBOB': ['RBOB', 'RB.1', 'RB=F'],
   'HO': ['HO', 'HO.1', 'HO=F'],
+  'MURBAN': ['MURBAN', 'MRBC', 'MBN=F'],
+  'MRBC': ['MRBC', 'MURBAN', 'MBN=F'],
+  'OQD': ['OQD', 'OQ=F'],
 };
 
 /**

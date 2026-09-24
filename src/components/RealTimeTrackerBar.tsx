@@ -63,7 +63,7 @@ const EU_FINANCIAL_TICKERS = [
 
 // 6. Global Energy & Industrial Commodities
 const COMMODITY_TICKERS = [
-  'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'INE-SC', 
+  'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'MRBC', 'OQD', 'INE-SC', 
   'RBOB', 'HO', 'GOLD', 'SILVER', 'COPPER', 'URANIUM', 'LITHIUM', 'WHEAT', 'CORN'
 ];
 
@@ -115,6 +115,9 @@ export const getQuoteForTicker = (
   if (upper === 'SAP' && quotes['SAP.DE']) return quotes['SAP.DE'];
   if (upper === 'SAP.DE' && quotes['SAP']) return quotes['SAP'];
   if (upper === 'STM' && (quotes['STM.PA'] || quotes['STMPA.PA'])) return quotes['STM.PA'] || quotes['STMPA.PA'];
+  if (upper === 'MRBC' && (quotes['MRBC'] || quotes['MURBAN'])) return quotes['MRBC'] || quotes['MURBAN'];
+  if (upper === 'MURBAN' && (quotes['MRBC'] || quotes['MURBAN'])) return quotes['MRBC'] || quotes['MURBAN'];
+  if (upper === 'OQD' && quotes['OQD']) return quotes['OQD'];
 
   // 1. Tech Mega-Caps
   const tech = TECH_COMPANIES[sym];

@@ -13,33 +13,54 @@ export const FloatingAdvisoryBubble: React.FC<FloatingAdvisoryBubbleProps> = ({
   const [chatLog, setChatLog] = useState<Array<{ sender: 'user' | 'advisor'; text: string }>>([
     {
       sender: 'advisor',
-      text: 'Welcome to the Corporate Strategy & Market Advisory Desk. Ask me about hyperscaler CapEx, semiconductor supply bottlenecks, or energy grid constraints.'
+      text: 'Welcome to the Executive Executive Strategic Advisory Desk. Ask me about hyperscaler CapEx, semiconductor supply bottlenecks, or energy grid constraints.'
     }
   ]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
 
-  const handleSend = () => {
-    if (!message.trim()) return;
-    const userMsg = message;
+  const handleSend = async () => {
+    const userMsg = message.trim();
+    if (!userMsg || isTyping) return;
+
     setMessage('');
     setChatLog(prev => [...prev, { sender: 'user', text: userMsg }]);
     setIsTyping(true);
 
-    setTimeout(() => {
-      let reply = "Our strategic perspective indicates that tech megacaps with integrated vertical architectures (such as NVIDIA, ASML, and Microsoft) maintain superior ROIC leverage. However, baseload energy procurement (Dutch TTF natural gas contracts and nuclear SMRs) remains the dominant bottleneck for 2026-2028 data center energization.";
-      
-      const lower = userMsg.toLowerCase();
-      if (lower.includes('power') || lower.includes('energy') || lower.includes('ttf') || lower.includes('gas')) {
-        reply = "Energy analysis: European natural gas (Dutch TTF) and US Gulf liquefaction feedgas are facing structural tightness. Hyperscalers are contracting behind-the-meter nuclear and combined-cycle gas generation to bypass 4-7 year public utility grid interconnection queues.";
-      } else if (lower.includes('asml') || lower.includes('lithography') || lower.includes('europe')) {
-        reply = "European tech analysis: ASML maintains a 100% global monopoly on High-NA EUV lithography systems (€350M each). Transatlantic semiconductor sovereignty acts as a major defensive valuation moat for European tech leaders.";
-      } else if (lower.includes('nvidia') || lower.includes('capex') || lower.includes('ai')) {
-        reply = "CapEx analysis: Hyperscaler capital expenditure is on track to surpass $340B in 2026. While hardware procurement remains robust, market multiples increasingly reward companies demonstrating enterprise software margin accretion.";
+    try {
+      const response = await fetch('/api/analyze-earnings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: userMsg })
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Advisory analysis unavailable');
       }
 
-      setChatLog(prev => [...prev, { sender: 'advisor', text: reply }]);
+      const analysis = payload.analysis || {};
+      const reply = [
+        analysis.summaryVerdict,
+        Array.isArray(analysis.keyDrivers) && analysis.keyDrivers.length
+          ? analysis.keyDrivers.map((item: string) => `• ${item}`).join('\n')
+          : '',
+        analysis.guidanceAndOutlook || '',
+        analysis.marketImplication || ''
+      ].filter(Boolean).join('\n\n');
+
+      setChatLog(prev => [...prev, {
+        sender: 'advisor',
+        text: reply || 'Geen inhoudelijke analyse ontvangen.'
+      }]);
+    } catch (error) {
+      console.error('[Executive Strategic Advisory Desk]', error);
+      setChatLog(prev => [...prev, {
+        sender: 'advisor',
+        text: 'De strategische analyse is momenteel niet beschikbaar. Probeer het opnieuw zodra de analyse-service beschikbaar is.'
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 600);
+    }
   };
 
   return (
@@ -59,7 +80,7 @@ export const FloatingAdvisoryBubble: React.FC<FloatingAdvisoryBubbleProps> = ({
                 </h4>
                 <div className="flex items-center gap-1.5 text-[10px] text-cyan-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  <span>McKinsey & Institutional Framework</span>
+                  <span>Institutional Research Framework</span>
                 </div>
               </div>
             </div>
@@ -144,12 +165,12 @@ export const FloatingAdvisoryBubble: React.FC<FloatingAdvisoryBubbleProps> = ({
 
       {/* Floating Action Button Matching Screenshot 2 Bottom Right Chat Bubble */}
       <button
-        id="btn-mckinsey-floating-advisory"
+        id="btn-executive-strategic-advisory"
         onClick={() => {
           setIsOpen(prev => !prev);
           if (onOpenConsultation) onOpenConsultation();
         }}
-        aria-label="Open Strategic Advisory"
+        aria-label="Open Executive Strategic Advisory Desk"
         className="fixed bottom-6 right-6 z-40 w-13 h-13 rounded-full bg-[#1b5be4] hover:bg-[#1548b8] text-white shadow-xl hover:shadow-2xl flex items-center justify-center transition-transform hover:scale-105 cursor-pointer border-2 border-white/20"
       >
         <MessageCircle className="w-7 h-7 text-white fill-white" />

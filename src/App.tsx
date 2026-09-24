@@ -136,7 +136,7 @@ export default function App() {
         twelveMonthHorizon: snap.twelveMonthHorizon || institutionalConsensus.twelveMonthHorizon,
         provider: snap.provider || 'Yahoo Finance Analyst Consensus',
         averagePriceTarget: snap.averagePriceTarget ?? institutionalConsensus.averagePriceTarget,
-        targetCurrency: snap.targetCurrency || institutionalConsensus.targetCurrency || (item.currency || 'USD'),
+        targetCurrency: snap.targetCurrency || institutionalConsensus.targetCurrency,
         upsidePercent: snap.averagePriceTarget !== undefined && livePrice > 0
           ? Number((((snap.averagePriceTarget - livePrice) / livePrice) * 100).toFixed(1))
           : institutionalConsensus.upsidePercent
@@ -492,6 +492,8 @@ export default function App() {
       'TTF': 'dutch-ttf',
       'NG': 'henry-hub', 'HENRY-HUB': 'henry-hub',
       'JKM': 'jkm-lng',
+      'MRBC': 'murban-crude',
+      'OQD': 'oman-crude',
       'MURBAN': 'murban-crude',
       'GOLD': 'gold', 'GC': 'gold', 'XAU': 'gold',
       'SILVER': 'silver', 'SI': 'silver', 'XAG': 'silver',
@@ -500,9 +502,9 @@ export default function App() {
       'LITHIUM': 'lithium',
       'WHEAT': 'milling-wheat',
       'CORN': 'corn',
-      'INE-SC': 'murban-crude',
-      'RBOB': 'wti-crude',
-      'HO': 'wti-crude'
+      'INE-SC': 'shanghai-crude',
+      'RBOB': 'rbob-gasoline',
+      'HO': 'heating-oil'
     };
 
     if (commodityMap[rawSym]) {

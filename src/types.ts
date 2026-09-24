@@ -101,6 +101,7 @@ export type CommodityId =
   | 'wti-crude' 
   | 'brent-crude' 
   | 'murban-crude' 
+  | 'oman-crude'
   | 'shanghai-crude'
   | 'rbob-gasoline'
   | 'heating-oil'
