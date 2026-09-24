@@ -136,7 +136,7 @@ export default function App() {
         twelveMonthHorizon: snap.twelveMonthHorizon || institutionalConsensus.twelveMonthHorizon,
         provider: snap.provider || 'Yahoo Finance Analyst Consensus',
         averagePriceTarget: snap.averagePriceTarget ?? institutionalConsensus.averagePriceTarget,
-        targetCurrency: snap.targetCurrency || institutionalConsensus.targetCurrency || (item.currency || 'USD'),
+        targetCurrency: snap.targetCurrency || institutionalConsensus.targetCurrency,
         upsidePercent: snap.averagePriceTarget !== undefined && livePrice > 0
           ? Number((((snap.averagePriceTarget - livePrice) / livePrice) * 100).toFixed(1))
           : institutionalConsensus.upsidePercent
