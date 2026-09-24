@@ -68,7 +68,7 @@ const triStreamSchema = {
   type: Type.OBJECT,
   additionalProperties: false,
   properties: {
-    edition: { type: Type.STRING, enum: ["ASIA_OPEN", "MORNING_EUROPE", "US_OPEN", "MARKET_CLOSE"] },
+    edition: { type: Type.STRING, enum: ["MORNING_EUROPE", "US_OPEN", "MARKET_CLOSE"] },
     macro_news: {
       type: Type.ARRAY,
       maxItems: 5,
@@ -101,8 +101,8 @@ export function getCurrentEdition() {
   const minute = Number(parts.find(p => p.type === "minute").value);
   const minutes = hour * 60 + minute;
 
-  // 02:30 (150m), 07:00 (420m), 15:30 (930m), 21:30 (1290m)
-  if (minutes < 7 * 60) return "ASIA_OPEN";
+  // 07:00 (420m), 15:30 (930m), 21:30 (1290m)
+  if (minutes < 11 * 60) return "MORNING_EUROPE";
   if (minutes < 18 * 60) return "US_OPEN";
   return "MARKET_CLOSE";
 }

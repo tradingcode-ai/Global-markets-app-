@@ -1,0 +1,63 @@
+name: Global Markets News Agent Scheduler
+
+on:
+  schedule:
+    # GitHub Actions draait standaard in UTC (Universal Time Coordinated).
+    #
+    # Tijden afgestemd op Europe/Amsterdam (maandag t/m vrijdag):
+    # - Ochtendeditie (07:00 Amsterdam): 05:00 UTC (zomertijd) / 06:00 UTC (wintertijd)
+    # - US Beursopening (15:30 Amsterdam): 13:30 UTC (zomertijd) / 14:30 UTC (wintertijd)
+    # - Beursafsluiting (21:30 Amsterdam): 19:30 UTC (zomertijd) / 20:30 UTC (wintertijd)
+    - cron: '0 5 * * 1-5'    # 07:00 Amsterdam (Ochtend Europa)
+    - cron: '30 13 * * 1-5'  # 15:30 Amsterdam (US Open)
+    - cron: '30 19 * * 1-5'  # 21:30 Amsterdam (Beursafsluiting)
+
+  # Handmatige trigger via GitHub UI:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: 'Te draaien editie (kies AUTO voor automatische tijdscorrelatie)'
+        required: false
+        default: 'AUTO'
+        type: choice
+        options:
+          - AUTO
+          - MORNING_EUROPE
+          - US_OPEN
+          - MARKET_CLOSE
+
+jobs:
+  run-agent:
+    name: Execute Market News Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Global Markets News Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_NEWS_MODEL: "gemini-3.8-flash"
+          GEMINI_THINKING_LEVEL: "MEDIUM"
+          GEMINI_TEMPERATURE: "0.1"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MARKET_NEWS_TIMEZONE: "Europe/Amsterdam"
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+        run: |
+          if [ "${{ github.event.inputs.edition }}" != "" ] && [ "${{ github.event.inputs.edition }}" != "AUTO" ]; then
+            echo "Running specified edition: ${{ github.event.inputs.edition }}"
+            node src/cli.js "${{ github.event.inputs.edition }}"
+          else
+            echo "Running with automatic time-based edition detection"
+            node src/cli.js
+          fi

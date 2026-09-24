@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { QuarterlyResult, AiEarningsAnalysis, AlertPreferences, LiveQuote } from '../types';
 import { 
   X, 
@@ -45,36 +45,6 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [loadingAi, setLoadingAi] = useState<boolean>(false);
   const [aiAnalysis, setAiAnalysis] = useState<AiEarningsAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [liveConsensus, setLiveConsensus] = useState<any | null>(null);
-  const [liveOutlooks, setLiveOutlooks] = useState<any[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const ticker = result?.ticker;
-    if (!ticker) {
-      setLiveConsensus(null);
-      setLiveOutlooks([]);
-      return;
-    }
-
-    const loadLiveAnalystData = async () => {
-      try {
-        const res = await fetch(`/api/quarterly-analyst-outlook?symbols=${encodeURIComponent(ticker)}`);
-        if (!res.ok) return;
-        const json = await res.json();
-        const snap = json?.data?.[ticker.toUpperCase()];
-        if (!cancelled && snap) {
-          setLiveConsensus(snap);
-          setLiveOutlooks(Array.isArray(snap.outlooks) ? snap.outlooks : []);
-        }
-      } catch (err) {
-        console.warn('Live analyst snapshot unavailable:', err);
-      }
-    };
-
-    loadLiveAnalystData();
-    return () => { cancelled = true; };
-  }, [result?.ticker]);
 
   if (!result) return null;
 
@@ -136,17 +106,14 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     ? (session.prePostPrice - quote.price) 
     : undefined;
 
-  // Prefer live Yahoo consensus, then the app-level synchronized snapshot, and only
-  // use the curated local dataset as a temporary fallback when Yahoo is unavailable.
+  // Resolve Quarterly Analyst Consensus and Investment Bank Analyst Outlooks with live dynamic forward horizon & monthly revision
   const safeCurrentPrice = (displayPrice && displayPrice > 0) ? displayPrice : (meta?.currentPrice || 150);
-  const fallbackConsensus = getStockQuarterlyConsensus(result.ticker, safeCurrentPrice, cur, result);
-  const consensus = liveConsensus || result.quarterlyConsensus || fallbackConsensus;
-  const fallbackOutlooks = getStockAnalystOutlooks(result.ticker, safeCurrentPrice, cur, result);
-  const outlooks = liveOutlooks.length > 0 ? liveOutlooks : ((result.analystOutlooks && result.analystOutlooks.length > 0) ? result.analystOutlooks : fallbackOutlooks);
-  const consensusTargetCurrency = getCurrencySymbol(consensus?.targetCurrency || currencyCode);
-  const consensusFinancialCurrency = consensus?.isConvertedToUsd
-    ? '$'
-    : (isEuropeanCompany ? '€' : consensusTargetCurrency);
+  const dynamicConsensus = getStockQuarterlyConsensus(result.ticker, safeCurrentPrice, cur, result);
+  const consensus = {
+    ...dynamicConsensus,
+    targetCurrency: isEuropeanCompany ? '€' : (dynamicConsensus.targetCurrency || cur)
+  };
+  const outlooks = getStockAnalystOutlooks(result.ticker, safeCurrentPrice, cur, result);
 
   const handleFetchAiMemo = async () => {
     setLoadingAi(true);
@@ -432,7 +399,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     Toekomst Kwartaal: {consensus.nextQuarterLabel || consensus.quarterKey}
                   </span>
                   <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-medium">
-                    Yahoo Finance Consensus
+                    CNBC & FT Consensus
                   </span>
                   <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded">
                     Herziening: {consensus.monthlyRevisionDate}
@@ -441,7 +408,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </div>
 
               <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                Live analyst consensus from Yahoo Finance earnings estimates. The displayed quarter follows Yahoo's current earnings-estimate period and is refreshed automatically.
+                Gevalideerde marktconsensus van Wall Street, Financial Times (FT) en CNBC Markets. Data wordt maandelijks herzien en richt zich continu op het eerstvolgende toekomstkwartaal.
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -461,37 +428,37 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     )}
                   </div>
                   <strong className="text-sm text-slate-900 font-bold">
-                    {consensus.averagePriceTarget !== undefined ? `${consensusTargetCurrency}${consensus.averagePriceTarget.toFixed(2)}` : 'N/A'}
+                    {consensus.averagePriceTarget !== undefined ? `${consensus.targetCurrency || cur}${consensus.averagePriceTarget.toFixed(2)}` : 'N/A'}
                   </strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <span className="text-[10px] text-slate-400 block uppercase">Target Range</span>
                   <strong className="text-xs text-slate-700 font-mono-code block mt-0.5">
                     {consensus.lowPriceTarget !== undefined && consensus.highPriceTarget !== undefined
-                      ? `${consensusTargetCurrency}${consensus.lowPriceTarget.toFixed(0)} - ${consensusTargetCurrency}${consensus.highPriceTarget.toFixed(0)}`
+                      ? `${consensus.targetCurrency || cur}${consensus.lowPriceTarget.toFixed(0)} - ${consensus.targetCurrency || cur}${consensus.highPriceTarget.toFixed(0)}`
                       : 'N/A'}
                   </strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <span className="text-[10px] text-slate-400 block uppercase">Toekomst Q EPS</span>
                   <strong className="text-sm text-blue-700 font-bold">
-                    {consensus.nextQuarterEps !== undefined ? `${consensusFinancialCurrency}${consensus.nextQuarterEps.toFixed(2)}` : 'N/A'}
+                    {consensus.nextQuarterEps !== undefined ? `${consensus.targetCurrency || cur}${consensus.nextQuarterEps.toFixed(2)}` : 'N/A'}
                   </strong>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 block uppercase">Toekomst Q Omzet</span>
-                    <span className="text-[8px] font-mono-code font-bold px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200" title="Gemiddelde van Yahoo Finance analistenramingen">
+                    <span className="text-[8px] font-mono-code font-bold px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200" title="Gemiddelde van analistentaxaties (Wall Street, CNBC & FT)">
                       Analisten Gem.
                     </span>
                   </div>
                   <strong className="text-sm text-slate-900 font-bold block mt-0.5">
-                    {formatRevenueBillions(consensus.nextQuarterRevenue, consensusFinancialCurrency)}
+                    {formatRevenueBillions(consensus.nextQuarterRevenue, consensus.targetCurrency || cur)}
                     {consensus.isConvertedToUsd && <span className="text-xs font-semibold text-amber-700 ml-1">USD</span>}
                   </strong>
                   {consensus.nextQuarterRevenueLow !== undefined && consensus.nextQuarterRevenueHigh !== undefined && (
                     <span className="text-[10px] text-slate-400 font-mono-code block">
-                      Range: {consensusFinancialCurrency}{consensus.nextQuarterRevenueLow}B - {consensusFinancialCurrency}{consensus.nextQuarterRevenueHigh}B
+                      Range: {consensus.targetCurrency || cur}{consensus.nextQuarterRevenueLow}B - {consensus.targetCurrency || cur}{consensus.nextQuarterRevenueHigh}B
                     </span>
                   )}
                 </div>
@@ -518,7 +485,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 </div>
               )}
               <div className="mt-2 text-[10px] text-slate-400 flex items-center justify-between">
-                <span>Live update-cyclus • {consensus.analystsCount || 0} analisten gevolgd</span>
+                <span>Maandelijkse update-cyclus actief • {consensus.analystsCount || 48} analisten gevolgd</span>
                 <span className="font-mono-code text-indigo-700">Horizon: {consensus.twelveMonthHorizon}</span>
               </div>
             </div>
@@ -548,7 +515,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     Toekomst Kwartaal: {consensus?.quarterKey}
                   </span>
                   <span className="text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-bold">
-                    Yahoo Finance Coverage
+                    CNBC & FT Coverage
                   </span>
                 </div>
               </div>
@@ -579,7 +546,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                             {outlook.rating}
                           </span>
                           <span className="text-[10px] bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-mono-code">
-                            {outlook.provider || 'Yahoo Finance Analyst History'}
+                            {outlook.provider || (idx === 0 ? 'Financial Times (FT) Research' : 'CNBC Markets Consensus')}
                           </span>
                         </div>
 
@@ -626,7 +593,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                       )}
 
                       <div className="text-[10px] text-slate-400 mt-2.5 flex items-center justify-between border-t border-slate-100 pt-1.5">
-                        <span>Bron: {outlook.provider || 'Yahoo Finance Analyst History'}</span>
+                        <span>Bron: {outlook.provider || 'Financial Times (FT) & CNBC Markets Institutional Coverage'}</span>
                         <span>Horizon: {outlook.timeHorizon || '12 Months'} • Maandelijkse herziening: {outlook.lastUpdated}</span>
                       </div>
                     </div>

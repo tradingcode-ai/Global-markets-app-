@@ -19,19 +19,19 @@ export const INSTITUTIONAL_ANALYST_COVERAGE: Record<string, CoverageData> = {
         sell: 0,
         strongSell: 0
       },
-      averagePriceTarget: 327.70,
-      lowPriceTarget: 180.00,
-      highPriceTarget: 515.00,
+      averagePriceTarget: 215.00,
+      lowPriceTarget: 175.00,
+      highPriceTarget: 250.00,
       targetCurrency: '$',
-      nextQuarterEps: 2.47,
-      nextQuarterEpsLow: 2.34,
-      nextQuarterEpsHigh: 2.70,
-      nextQuarterRevenue: 109.01,
-      nextQuarterRevenueLow: 104.94,
-      nextQuarterRevenueHigh: 116.25,
+      nextQuarterEps: 0.78,
+      nextQuarterEpsLow: 0.72,
+      nextQuarterEpsHigh: 0.85,
+      nextQuarterRevenue: 34.20,
+      nextQuarterRevenueLow: 32.50,
+      nextQuarterRevenueHigh: 36.00,
       previousQuarterEps: 0.68,
       previousQuarterRevenue: 30.04,
-      analystsCount: 44,
+      analystsCount: 61,
       outlooks: []
     },
     outlooks: [
@@ -862,7 +862,7 @@ export interface InstitutionalConsensusItem {
 // Master institutional analyst consensus estimates (averages from Wall Street, CNBC & FT analyst surveys)
 export const ALL_STOCKS_ANALYST_CONSENSUS: Record<string, InstitutionalConsensusItem> = {
   // Megacap & Big Tech
-  NVDA: { ticker: 'NVDA', name: 'NVIDIA', analystRevenueAvg: 109.01, analystRevenueLow: 104.94, analystRevenueHigh: 116.25, analystEpsAvg: 2.47, analystEpsLow: 2.34, analystEpsHigh: 2.70, currency: 'USD', currencySymbol: '$', isNonEuUs: false },
+  NVDA: { ticker: 'NVDA', name: 'NVIDIA', analystRevenueAvg: 34.20, analystRevenueLow: 32.50, analystRevenueHigh: 36.00, analystEpsAvg: 0.78, analystEpsLow: 0.72, analystEpsHigh: 0.85, currency: 'USD', currencySymbol: '$', isNonEuUs: false },
   MSFT: { ticker: 'MSFT', name: 'Microsoft', analystRevenueAvg: 68.20, analystRevenueLow: 66.50, analystRevenueHigh: 70.10, analystEpsAvg: 3.10, analystEpsLow: 2.95, analystEpsHigh: 3.25, currency: 'USD', currencySymbol: '$', isNonEuUs: false },
   AAPL: { ticker: 'AAPL', name: 'Apple', analystRevenueAvg: 94.50, analystRevenueLow: 92.00, analystRevenueHigh: 96.50, analystEpsAvg: 1.60, analystEpsLow: 1.52, analystEpsHigh: 1.68, currency: 'USD', currencySymbol: '$', isNonEuUs: false },
   GOOGL: { ticker: 'GOOGL', name: 'Alphabet', analystRevenueAvg: 92.40, analystRevenueLow: 89.80, analystRevenueHigh: 94.50, analystEpsAvg: 1.95, analystEpsLow: 1.85, analystEpsHigh: 2.05, currency: 'USD', currencySymbol: '$', isNonEuUs: false },
@@ -1009,7 +1009,7 @@ export function getStockQuarterlyConsensus(
       quarterKey: horizon.quarterKey,
       nextQuarterLabel: horizon.nextQuarterLabel,
       snapshotDate: new Date().toISOString(),
-      provider: 'Yahoo Finance Analyst Consensus',
+      provider: 'CNBC Markets & Financial Times (FT) Institutional Consensus',
       monthlyRevisionDate: horizon.monthName,
       twelveMonthHorizon: horizon.twelveMonthHorizon,
       averagePriceTarget: avgTarget,

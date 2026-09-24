@@ -51,15 +51,11 @@ interface BondHistoryResponse {
   avgYield: number;
   provider: string;
   lastUpdated: string;
-  timeZone?: string;
-  timeZoneLabel?: string;
-  marketTime?: string;
-  tradingDay?: string;
   points: HistoricalPoint[];
 }
 
 const TIME_RANGES = [
-  { id: '1D', label: '24U' },
+  { id: '1D', label: '1D' },
   { id: '5D', label: '5D' },
   { id: '1M', label: '1M' },
   { id: '6M', label: '6M' },
@@ -126,7 +122,7 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
             <Activity className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
               <h4 className="text-sm font-bold text-slate-900 tracking-tight">
                 Historische Yield Curve & Real-Time Rente
               </h4>
@@ -134,18 +130,9 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 LIVE FEED • DAGELIJKS GEOUPDATE
               </span>
-              {data?.marketTime && (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200" title={`Interne klok van beurs (${data.timeZone || 'lokale markt'})`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                  {data.marketTime} {data.timeZoneLabel || ''} (Beurstijd)
-                </span>
-              )}
             </div>
             <p className="text-xs text-slate-500">
-              Historisch renteverloop van <strong>{bond.name}</strong> ({bond.country})
-              {selectedRange === '1D'
-                ? ` • Handelssessie ${data?.tradingDay || ''} (${data?.timeZoneLabel || 'lokale beurstijd'}, vanaf marktopening)`
-                : ' • Officiële Centrale Bank & Kapitaalmarkt Data'}
+              Historisch renteverloop van <strong>{bond.name}</strong> ({bond.country}) • Officiële Centrale Bank & Kapitaalmarkt Data
             </p>
           </div>
         </div>
@@ -296,7 +283,6 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    minTickGap={28}
                     tick={{ fontSize: 11, fill: '#64748b' }}
                     tickLine={false}
                     axisLine={{ stroke: '#cbd5e1' }}
@@ -315,7 +301,7 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                         return (
                           <div className="bg-slate-900 text-white rounded-lg p-3 shadow-xl text-xs font-mono-code border border-slate-700">
                             <div className="text-[10px] text-slate-400 uppercase font-sans font-semibold mb-1">
-                              {pt.date} {selectedRange === '1D' ? `(${data?.timeZoneLabel || 'lokale beurstijd'})` : ''} • OFFICIËLE RENTEDATA
+                              {pt.date} • OFFICIËLE RENTEDATA
                             </div>
                             <div className="flex items-center justify-between gap-4">
                               <span className="text-slate-300">Rente (Yield):</span>
@@ -352,7 +338,7 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                     />
                   )}
                   <Area
-                    type="linear"
+                    type="monotone"
                     dataKey="yield"
                     stroke={strokeColor}
                     strokeWidth={2}
@@ -365,7 +351,6 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    minTickGap={28}
                     tick={{ fontSize: 11, fill: '#64748b' }}
                     tickLine={false}
                     axisLine={{ stroke: '#cbd5e1' }}
@@ -384,7 +369,7 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                         return (
                           <div className="bg-slate-900 text-white rounded-lg p-3 shadow-xl text-xs font-mono-code border border-slate-700">
                             <div className="text-[10px] text-slate-400 uppercase font-sans font-semibold mb-1">
-                              {pt.date} {selectedRange === '1D' ? `(${data?.timeZoneLabel || 'lokale beurstijd'})` : ''} • OFFICIËLE RENTEDATA
+                              {pt.date} • OFFICIËLE RENTEDATA
                             </div>
                             <div className="flex items-center justify-between gap-4">
                               <span className="text-slate-300">Rente (Yield):</span>
@@ -418,7 +403,7 @@ export const SovereignYieldHistoryChart: React.FC<SovereignYieldHistoryChartProp
                     />
                   )}
                   <Line
-                    type="linear"
+                    type="monotone"
                     dataKey="yield"
                     stroke={strokeColor}
                     strokeWidth={2.2}

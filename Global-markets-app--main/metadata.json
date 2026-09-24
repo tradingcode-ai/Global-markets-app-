@@ -1,0 +1,6 @@
+{
+  "name": "Tech Earnings Pulse",
+  "description": "Institutional corporate finance terminal and Global Markets and Research and Trading Desk tracking US & European tech and financial megacaps (Big 6 banks, alternative asset managers, European banks, STOXX 600 Banks Index) with official logos, investment bank analyst outlooks, real-time commodities, US Treasuries (2Y, 10Y, 30Y), US mortgage rates, and European sovereign yields.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

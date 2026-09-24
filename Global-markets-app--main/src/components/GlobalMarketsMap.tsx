@@ -612,17 +612,17 @@ const DEFAULT_MARKETS: MarketItem[] = [
     lat: 24.4539,
     lng: 54.3773,
     timeZone: 'Asia/Dubai',
-    yahooTicker: 'FADX15.FGI',
-    price: 10864.70,
-    change: -10.70,
-    changePercent: -0.10,
-    dayLow: 10797.87,
-    dayHigh: 10890.81,
-    fiftyTwoWeekHigh: 10890.81,
+    yahooTicker: 'AIR.AD',
+    price: 9280.90,
+    change: -4.60,
+    changePercent: -0.05,
+    dayLow: 9250.00,
+    dayHigh: 9310.00,
+    fiftyTwoWeekHigh: 9720.50,
     fiftyTwoWeekLow: 8890.10,
     volume: 98000000,
     currency: 'AED',
-    previousClose: 10875.40,
+    previousClose: 9285.50,
     status: 'CLOSED',
     statusLabel: 'Closed',
     statusColor: '#64748b',
@@ -980,9 +980,7 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
       <div className="mb-2 flex flex-wrap items-end justify-between gap-3 px-1">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-semibold">
-              {timeframe === '24U' ? 'Handelssessie · Vanaf marktopening' : 'Price history'}
-            </span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-semibold">Price history</span>
             <span className="text-[9px] text-slate-600 font-mono">{provider}</span>
           </div>
           <div className="mt-1 flex items-baseline gap-3 font-mono-code">
@@ -995,8 +993,8 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
           </div>
         </div>
         <div className="text-right text-[10px] text-slate-500 font-mono">
-          <div>{marketName} · {timeframe === '24U' ? 'Handelssessie (24U)' : timeframe}</div>
-          <div>{points.length} datapunten · {points[0]?.date || ''} – {points[points.length - 1]?.date || ''}</div>
+          <div>{marketName} · {timeframe}</div>
+          <div>{points.length} data points · exchange-local timestamps</div>
         </div>
       </div>
 
@@ -2179,7 +2177,7 @@ export const GlobalMarketsMap: React.FC = () => {
 
                       <div className="flex items-center bg-[#07101c] border border-slate-800 rounded-lg p-0.5 self-start sm:self-auto">
                         {[
-                          { id: '24U' as const, label: '24U', title: 'Intraday handelssessie (vanaf beursopening, geen eerdere dagen)' },
+                          { id: '24U' as const, label: '24U', title: 'Intraday 5-minuten data' },
                           { id: '1W' as const, label: '1W', title: '15-minuten data' },
                           { id: '3M' as const, label: '3M', title: 'Dagdata' },
                           { id: 'YTD' as const, label: 'YTD', title: 'Dagdata sinds 1 januari' },

@@ -112,9 +112,12 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeToast, setActiveToast] = useState<PushNotificationItem | null>(null);
 
-  // Analyst consensus is live Yahoo Finance data. The client refreshes it periodically
-  // instead of keeping a stale month-long localStorage snapshot.
-  const ANALYST_REFRESH_MS = 6 * 60 * 60 * 1000;
+  // Monthly analyst/consensus snapshots updated every month for the forward quarter
+  const getMonthSnapshotKey = useCallback((date = new Date()) => {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }, []);
 
   const applyQuarterlySnapshot = useCallback((snapshot: Record<string, any>) => {
     setQuarterlySnapshots(snapshot);
@@ -130,16 +133,14 @@ export default function App() {
       const mergedConsensus = snap ? {
         ...institutionalConsensus,
         ...snap,
-        quarterKey: snap.quarterKey || institutionalConsensus.quarterKey,
-        nextQuarterLabel: snap.nextQuarterLabel || institutionalConsensus.nextQuarterLabel,
-        monthlyRevisionDate: snap.monthlyRevisionDate || institutionalConsensus.monthlyRevisionDate,
-        twelveMonthHorizon: snap.twelveMonthHorizon || institutionalConsensus.twelveMonthHorizon,
-        provider: snap.provider || 'Yahoo Finance Analyst Consensus',
-        averagePriceTarget: snap.averagePriceTarget ?? institutionalConsensus.averagePriceTarget,
-        targetCurrency: snap.targetCurrency || institutionalConsensus.targetCurrency || (item.currency || 'USD'),
-        upsidePercent: snap.averagePriceTarget !== undefined && livePrice > 0
-          ? Number((((snap.averagePriceTarget - livePrice) / livePrice) * 100).toFixed(1))
-          : institutionalConsensus.upsidePercent
+        quarterKey: institutionalConsensus.quarterKey,
+        nextQuarterLabel: institutionalConsensus.nextQuarterLabel,
+        monthlyRevisionDate: institutionalConsensus.monthlyRevisionDate,
+        twelveMonthHorizon: institutionalConsensus.twelveMonthHorizon,
+        provider: 'CNBC Markets & Financial Times (FT) Institutional Consensus',
+        averagePriceTarget: snap.averagePriceTarget || institutionalConsensus.averagePriceTarget,
+        targetCurrency: cur,
+        upsidePercent: institutionalConsensus.upsidePercent
       } : institutionalConsensus;
 
       return {
@@ -153,30 +154,59 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const loadQuarterlySnapshot = async () => {
+      const snapshotKey = getMonthSnapshotKey();
+      const storageKey = `global_markets_monthly_consensus_${snapshotKey}`;
       try {
+        const storedRaw = localStorage.getItem(storageKey);
+        if (storedRaw) {
+          const stored = JSON.parse(storedRaw);
+          if (!cancelled && stored?.data) {
+            applyQuarterlySnapshot(stored.data);
+            setQuarterlyOutlookLoaded(true);
+            return;
+          }
+        }
         const allSymbols = Array.from(new Set([
           ...INITIAL_EARNINGS_RESULTS.map(r => r.ticker),
           ...Object.keys(TECH_COMPANIES),
           ...Object.keys(SHOVEL_SELLERS_COMPANIES),
-          ...Object.keys(HYPERSCALER_COMPANIES),
-          ...Object.keys(FINANCIAL_COMPANIES)
+          ...Object.keys(HYPERSCALER_COMPANIES)
         ]));
         const response = await fetchQuarterlyAnalystOutlook(allSymbols);
         if (cancelled || !response?.data) return;
+        localStorage.setItem(storageKey, JSON.stringify({ 
+          monthKey: snapshotKey, 
+          savedAt: new Date().toISOString(), 
+          provider: 'CNBC Markets & Financial Times (FT) Institutional Consensus', 
+          data: response.data 
+        }));
         applyQuarterlySnapshot(response.data);
+        const notification: PushNotificationItem = {
+          id: `monthly-analyst-outlook-${snapshotKey}`,
+          ticker: 'MARKET',
+          companyName: 'Global Markets',
+          title: `Monthly Analyst & Forward Quarter Outlook — ${snapshotKey}`,
+          body: `Analyst consensus targets and next-quarter earnings projections updated via CNBC Markets & Financial Times (FT).`,
+          timestamp: 'Just now', type: 'breaking', read: false
+        };
+        const existing = getStoredNotifications();
+        if (!existing.some(n => n.id === notification.id)) {
+          const updated = [notification, ...existing];
+          saveNotifications(updated);
+          if (!cancelled) {
+            setNotifications(updated);
+            setActiveToast(notification);
+            if (preferences.soundEnabled) playCorporateChime();
+          }
+        }
         if (!cancelled) setQuarterlyOutlookLoaded(true);
       } catch (error) {
-        console.warn('Live Yahoo analyst consensus could not be loaded:', error);
+        console.warn('Monthly analyst consensus could not be loaded:', error);
       }
     };
-
     loadQuarterlySnapshot();
-    const timer = window.setInterval(loadQuarterlySnapshot, ANALYST_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [applyQuarterlySnapshot]);
+    return () => { cancelled = true; };
+  }, [applyQuarterlySnapshot, getMonthSnapshotKey, preferences.soundEnabled]);
 
   // Sync notification permission state
   useEffect(() => {

@@ -28,7 +28,6 @@ import {
   Info
 } from 'lucide-react';
 import { CompanyFinancialHistory, QuarterlyFinancialPoint, FinancialMetricKey } from '../types';
-import { getCurrencySymbol } from '../utils/formatters';
 
 interface FinancialHistoryChartProps {
   ticker: string;
@@ -112,7 +111,6 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
   }, [data, timeRange]);
 
   // Metric configuration
-  const displayCurrency = data?.currency ? getCurrencySymbol(data.currency) : currency;
   const metricConfigs: Record<FinancialMetricKey, {
     label: string;
     shortLabel: string;
@@ -139,7 +137,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
       badgeBg: 'bg-blue-50',
       badgeText: 'text-blue-700',
       badgeBorder: 'border-blue-200',
-      formatter: (val: number) => `${displayCurrency}${val.toFixed(2)}B`
+      formatter: (val: number) => `${currency}${val.toFixed(2)}B`
     },
     freeCashFlow: {
       label: 'Free Cash Flow (FCF)',
@@ -153,12 +151,12 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
       badgeBg: 'bg-emerald-50',
       badgeText: 'text-emerald-700',
       badgeBorder: 'border-emerald-200',
-      formatter: (val: number) => `${displayCurrency}${val.toFixed(2)}B`
+      formatter: (val: number) => `${currency}${val.toFixed(2)}B`
     },
     eps: {
       label: 'EPS (Winst per aandeel)',
       shortLabel: 'EPS',
-      unit: `${displayCurrency} per aandeel`,
+      unit: `${currency} per aandeel`,
       description: 'Verwaterde nettowinst toegerekend per uitstaand aandeel',
       icon: Target,
       color: '#d97706',
@@ -167,7 +165,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
       badgeBg: 'bg-amber-50',
       badgeText: 'text-amber-700',
       badgeBorder: 'border-amber-200',
-      formatter: (val: number) => `${displayCurrency}${val.toFixed(2)}`
+      formatter: (val: number) => `${currency}${val.toFixed(2)}`
     },
     netIncome: {
       label: 'Netto Winst / Verlies',
@@ -181,7 +179,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
       badgeBg: 'bg-purple-50',
       badgeText: 'text-purple-700',
       badgeBorder: 'border-purple-200',
-      formatter: (val: number) => `${displayCurrency}${val.toFixed(2)}B`
+      formatter: (val: number) => `${currency}${val.toFixed(2)}B`
     }
   };
 
@@ -244,11 +242,11 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mt-1">
             <span className="inline-flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <strong className="text-slate-700">Live gesynchroniseerd</strong> via Yahoo Finance
+              <strong className="text-slate-700">Maandelijks gesynchroniseerd</strong> via Yahoo Finance
             </span>
             <span>•</span>
             <span className="font-mono-code text-slate-400">
-              Laatste update: {data?.lastUpdated ? new Date(data.lastUpdated).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+              Laatste update: {data?.lastUpdated ? new Date(data.lastUpdated).toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' }) : 'September 2026'}
             </span>
           </div>
         </div>
@@ -559,11 +557,11 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
                       {q.releaseLabel || q.quarter}
                     </td>
                     <td className="py-2 px-3 text-slate-500">{q.fiscalDate}</td>
-                    <td className="py-2 px-3 text-right font-bold text-blue-700">{displayCurrency}{q.revenue.toFixed(2)}B</td>
-                    <td className="py-2 px-3 text-right font-bold text-emerald-700">{displayCurrency}{q.freeCashFlow.toFixed(2)}B</td>
-                    <td className="py-2 px-3 text-right font-bold text-amber-700">{displayCurrency}{q.eps.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-right font-bold text-blue-700">{currency}{q.revenue.toFixed(2)}B</td>
+                    <td className="py-2 px-3 text-right font-bold text-emerald-700">{currency}{q.freeCashFlow.toFixed(2)}B</td>
+                    <td className="py-2 px-3 text-right font-bold text-amber-700">{currency}{q.eps.toFixed(2)}</td>
                     <td className={`py-2 px-3 text-right font-bold ${q.netIncome >= 0 ? 'text-purple-700' : 'text-rose-700'}`}>
-                      {displayCurrency}{q.netIncome.toFixed(2)}B
+                      {currency}{q.netIncome.toFixed(2)}B
                     </td>
                   </tr>
                 ))}
