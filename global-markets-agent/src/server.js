@@ -16,10 +16,15 @@ app.get("/health", (req, res) => {
 // 1. Live Timeline Feed Endpoint voor de Global Markets App
 app.get("/api/v1/news/timeline", async (req, res) => {
   try {
-    const { stream, ticker, sentiment, impact, limit = 50 } = req.query;
+    const { edition, stream, ticker, sentiment, impact, limit = 50 } = req.query;
 
     let query = `SELECT * FROM market_news WHERE 1=1`;
     const params = [];
+
+    if (edition) {
+      params.push(String(edition).toUpperCase());
+      query += ` AND edition = ${params.length}`;
+    }
 
     if (stream === "macro") {
       query += ` AND category IN ('MACRO', 'CENTRAL_BANK', 'ECONOMIC_DATA', 'GEOPOLITICS', 'COMMODITIES')`;
