@@ -47,6 +47,7 @@ jobs:
 
       - name: Run Global Markets News Agent
         working-directory: global-markets-agent
+        run: npm start
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_NEWS_MODEL: "gemini-3.8-flash"
