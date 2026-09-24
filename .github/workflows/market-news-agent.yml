@@ -2,6 +2,7 @@ name: Global Markets News Agent Manual Runner
 
 # Production scheduling is handled by the always-on Render service (server.js).
 # Render runs the agent automatically at:
+#   02:30 Europe/Amsterdam  -> ASIA_OPEN
 #   07:00 Europe/Amsterdam  -> MORNING_EUROPE
 #   15:30 Europe/Amsterdam  -> US_OPEN
 #   21:30 Europe/Amsterdam  -> MARKET_CLOSE
@@ -19,6 +20,7 @@ on:
         type: choice
         options:
           - AUTO
+          - ASIA_OPEN
           - MORNING_EUROPE
           - US_OPEN
           - MARKET_CLOSE
