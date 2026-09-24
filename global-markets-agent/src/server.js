@@ -3,6 +3,7 @@ import { pool } from "./db.js";
 import { CONFIG } from "./config.js";
 import { initScheduler } from "./scheduler.js";
 import { runAgentCycle, getCurrentEdition } from "./marketNewsAgent.js";
+import { getActiveAlertTickers } from "./db.js";
 
 const app = express();
 app.use(express.json());
@@ -81,7 +82,24 @@ app.post("/api/v1/alerts/toggle", async (req, res) => {
   }
 });
 
-// 3. Handmatige trigger endpoint
+// 3. Status endpoint for the dedicated news agent.
+app.get('/api/v1/news/status', async (_req, res) => {
+  try {
+    const activeAlertTickers = await getActiveAlertTickers();
+    res.json({
+      model: CONFIG.GEMINI_MODEL,
+      thinkingLevel: CONFIG.GEMINI_THINKING_LEVEL,
+      timezone: CONFIG.TIMEZONE,
+      configured: Boolean(CONFIG.GEMINI_API_KEY && CONFIG.DATABASE_URL),
+      postgresConnected: Boolean(CONFIG.DATABASE_URL),
+      activeAlertTickers,
+      schedule: CONFIG.EDITION_SCHEDULES
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+// 4. Handmatige trigger endpoint
 app.post("/api/v1/agent/run", async (req, res) => {
   const apiKey = req.headers["x-admin-key"];
   if (apiKey !== process.env.ADMIN_SECRET) {
