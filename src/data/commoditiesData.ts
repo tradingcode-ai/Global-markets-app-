@@ -39,7 +39,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'European storage will exit summer at comfortable fullness, but persistent LNG competition from Asia and potential late-winter cold snaps maintain upside tail risk. Russian pipeline transit expiration introduces a structural €4-€6 premium risk.',
         catalysts: ['Winter weather severity in NW Europe', 'Asian LNG spot import competition', 'Freeport & Sabine Pass LNG terminal uptime'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'J.P. Morgan',
@@ -50,7 +50,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Tight global LNG flexible cargo balance. Any unplanned Norwegian continental shelf outages rapidly re-tightens northwest Europe, driving gas-to-coal switching boundaries higher.',
         catalysts: ['Norwegian pipeline export consistency', 'Middle East geopolitical shipping disruption', 'Industrial gas demand recovery in Germany'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Morgan Stanley',
@@ -61,7 +61,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Industrial demand in Germany and Italy remains structurally depressed by -12% vs 2021 baselines. New global LNG liquefaction waves from Qatar and US Gulf Coast in 2026/27 will cap upside spikes.',
         catalysts: ['European chemical sector operating rates', 'New Qatar North Field LNG supply contracts', 'Renewable power displacement in summer'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Citi',
@@ -72,7 +72,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bearish',
         thesis: 'Structural wave of global LNG supply from Golden Pass, Plaquemines, and Qatar North Field East adds over 180 bcm/yr into 2027, transitioning the European market into long-term oversupply.',
         catalysts: ['US Gulf Coast LNG train commissioning', 'German renewable generation capacity additions', 'Subdued European industrial manufacturing PMI'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -115,7 +115,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'LNG export capacity expansion of +3.5 Bcf/d absorbs excess domestic inventories, shifting Henry Hub from structural surplus to demand-driven tightening.',
         catalysts: ['LNG feedgas nominations at Sabine & Calcasieu', 'Winter heating degree days (HDDs)', 'Coal-to-gas power generation switching threshold'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Morgan Stanley',
@@ -126,7 +126,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Hyperscaler data center power purchase agreements (PPAs) for combined-cycle gas turbines (CCGT) create persistent year-round baseload demand floor.',
         catalysts: ['PJM & ERCOT data center grid connection approvals', 'Permian Matterhorn pipeline egress flows'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Bank of America',
@@ -137,7 +137,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Permian associated gas volume elasticities keep domestic storage comfortable, limiting aggressive multi-month price spikes above $4.00.',
         catalysts: ['Oil-directed drilling in Delaware Basin', 'Storage injection pace through October'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -180,7 +180,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Asian spot appetite remains resilient as emerging South and Southeast Asia (Vietnam, Philippines, India) expand regasification throughput alongside peak Chinese winter demand.',
         catalysts: ['Northeast Asian winter chill', 'Australian Gorgon/Wheatstone maintenance', 'Panama Canal LNG slot availability'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'UBS',
@@ -191,7 +191,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Expanding Pacific basin liquefaction and continued Japanese reactor reactivation will compress the JKM-TTF arbitrage spread.',
         catalysts: ['Kansai Electric nuclear operating factors', 'China domestic renewable capacity growth'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -234,7 +234,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Permian efficiency gains are slowing down while E&P M&A consolidation (Exxon-Pioneer, Diamondback-Endeavor) enforces shareholder cash return over volume growth.',
         catalysts: ['US weekly EIA inventory draws', 'Permian horizontal rig count stability', 'SPR crude purchase solicitations'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Citi',
@@ -245,7 +245,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bearish',
         thesis: 'Non-OPEC deepwater additions from Guyana, Brazil, and Canada combined with EV penetration in light passenger fleets creates supply surpluses into 2027.',
         catalysts: ['Guyana FPSO Errea Wittu startup', 'OPEC+ voluntary cut unwind timeline', 'Global refinery margins'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Standard Chartered',
@@ -256,7 +256,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Speculative money manager positioning is excessively short. Any unexpected geopolitical catalyst or prompt Cushing delivery squeeze will trigger rapid short-covering.',
         catalysts: ['CFTC net speculative length', 'Cushing tank farm inventory levels', 'US hurricane season interruptions'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -299,7 +299,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Global oil demand expands by +1.3 mb/d led by aviation jet fuel and emerging petrochemical feedstocks. OPEC+ will remain proactive in defending the $75-$85 band.',
         catalysts: ['OPEC+ Ministerial monitoring committee decisions', 'Middle East geopolitical risks', 'OECD commercial inventory deficits'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Morgan Stanley',
@@ -310,7 +310,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Market is in balanced equilibrium. Supply growth from the Americas (US, Guyana, Brazil, Canada) roughly matches incremental demand.',
         catalysts: ['Global mobility indicators', 'Tanker charter rates (VLCC dirty freight)', 'China teapot refinery run rates'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Goldman Sachs',
@@ -321,62 +321,89 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Project a range of $75 to $85 per barrel. Price ceiling capped by ~5.5 mb/d of OPEC spare capacity; floor defended by low OECD inventories and attractive valuation.',
         catalysts: ['Saudi official selling prices (OSPs) to Asia', 'Fed rate cutting cycle impact on dollar', 'Non-OPEC deepwater execution'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
 
-  // 6. Murban Crude Oil
+  // 6. Murban Crude Oil Futures
   {
     id: 'murban-crude',
-    name: 'Murban Crude Oil (ICE IFAD)',
-    symbol: 'MURBAN',
+    name: 'Murban Crude Oil Futures (MRBC)',
+    symbol: 'MRBC',
     category: 'Crude Oil & Refined',
-    marketCode: 'ICE Futures Abu Dhabi (IFAD): MBN • OilPrice.com Live Index',
+    marketCode: 'CNBC: MRBC / ICE IFAD: MBN',
     unit: 'USD/barrel',
-    currentPrice: 121.39,
-    change: -1.70,
-    changePercent: -1.38,
-    dayHigh: 124.20,
-    dayLow: 120.50,
-    volume: '124,800 contracts',
+    currentPrice: 117.20,
+    change: 0,
+    changePercent: 0,
+    dayHigh: 117.20,
+    dayLow: 117.20,
+    volume: '—',
     currency: 'USD',
     curveStructure: 'Backwardation',
-    inventoryStatus: 'Fujairah Commercial Terminal: 19.8M bbls (Physical FOB ~$76.03)',
-    crackSpreadOrMargin: 'Exchange Index: $121.39 (Physical Spot Parity: Brent + $0.75)',
-    primaryBenchmarkRole: 'Premier Middle Eastern Light Sour Crude Benchmark traded on ICE Futures Abu Dhabi (IFAD) and published by OilPrice.com & TradingView',
-    sparkline: [123.10, 122.80, 123.40, 122.10, 121.75, 121.39],
-    consensusTarget: '$126.00 / bbl',
-    consensusRange: { low: 114.00, high: 132.00, avg: 124.50 },
+    inventoryStatus: 'Exchange futures benchmark; physical inventory data not embedded in quote',
+    crackSpreadOrMargin: '—',
+    primaryBenchmarkRole: 'Abu Dhabi Murban crude futures benchmark',
+    sparkline: [],
+    consensusTarget: 'Kwartaaloverzicht 2026',
+    consensusRange: { low: 0, high: 0, avg: 0 },
     macroFactors: [
-      'OilPrice.com & TradingView track ICE Futures Abu Dhabi (MBN) pricing at $121.39 USD/bbl',
-      'Physical spot delivery barrels at Fujairah trade at prompt Brent parity (~$76.03-$79.15/bbl)',
-      'ADNOC pipeline link delivering 1.8 mb/d directly to Fujairah, bypassing the Strait of Hormuz',
-      'High naphtha and middle distillate yields commanding strong pricing among East Asian refiners',
-      'Expansion of ADNOC maximum sustained production capacity toward 5.0 mb/d'
+      'Murban futures are monitored through the standard CNBC/Yahoo commodity quote pipeline.',
+      'ICE IFAD / ADNOC benchmark structure and Asia-Pacific refinery demand are key market drivers.',
+      'No OilPrice.com-derived synthetic quote is used by the application.'
     ],
     analystOutlooks: [
       {
-        bankName: 'Goldman Sachs',
-        logoColor: 'text-blue-700 bg-blue-50 border-blue-200',
-        targetPrice: '$80.50 / bbl',
-        targetPriceNumeric: 80.50,
-        timeHorizon: '12-Month Target',
+        bankName: 'Kwartaaloverzicht 2026',
+        targetPrice: 'Niet beschikbaar',
+        targetPriceNumeric: 0,
+        timeHorizon: 'Kwartaaloverzicht 2026',
         stance: 'Neutral',
-        thesis: 'Murban continues to gain market share against Dubai and Oman benchmarks due to superior logistical security via Fujairah deepwater terminal.',
-        catalysts: ['IFAD exchange physical delivery volumes', 'East Asian naphtha petrochemical margins', 'ADNOC upstream production quotas'],
-        lastUpdated: 'September 2026'
-      },
+        thesis: 'Geen geverifieerde dagelijkse bankconsensus in de applicatie; gebruik uitsluitend de live/laatste exchange quote voor de actuele prijs.',
+        catalysts: ['ICE IFAD futures positioning', 'Asia-Pacific refinery demand', 'ADNOC production and export flows'],
+        lastUpdated: 'Kwartaaloverzicht 2026'
+      }
+    ]
+  },
+
+  // 7. DME Oman Crude Oil Futures
+  {
+    id: 'oman-crude',
+    name: 'DME Oman Crude Oil Futures (OQD)',
+    symbol: 'OQD',
+    category: 'Crude Oil & Refined',
+    marketCode: 'DME / CME: OQD (OQ)',
+    unit: 'USD/barrel',
+    currentPrice: 117.60,
+    change: 0,
+    changePercent: 0,
+    dayHigh: 117.60,
+    dayLow: 117.60,
+    volume: '—',
+    currency: 'USD',
+    curveStructure: 'Backwardation',
+    inventoryStatus: 'Exchange futures benchmark; physical inventory data not embedded in quote',
+    crackSpreadOrMargin: '—',
+    primaryBenchmarkRole: 'Official DME Oman crude futures benchmark',
+    sparkline: [],
+    consensusTarget: 'Kwartaaloverzicht 2026',
+    consensusRange: { low: 0, high: 0, avg: 0 },
+    macroFactors: [
+      'Oman crude futures are monitored through the standard CNBC/Yahoo commodity quote pipeline.',
+      'DME/CME Oman benchmark pricing is relevant to Middle East and Asia-Pacific crude trade.',
+      'No synthetic intraday series is created when an exchange quote is unavailable.'
+    ],
+    analystOutlooks: [
       {
-        bankName: 'UBS',
-        logoColor: 'text-zinc-700 bg-zinc-100 border-zinc-300',
-        targetPrice: '$83.00 / bbl',
-        targetPriceNumeric: 83.00,
-        timeHorizon: 'Q1 2027 Target',
-        stance: 'Bullish',
-        thesis: 'Indian refiners are structurally tilting import slates away from Russian Urals toward Middle Eastern light sour grades like Murban with transparent futures pricing.',
-        catalysts: ['Indian crude import slate diversification', 'Fujairah bunker and storage utilization', 'Asia-Pacific refiner gross margins'],
-        lastUpdated: 'August 2026'
+        bankName: 'Kwartaaloverzicht 2026',
+        targetPrice: 'Niet beschikbaar',
+        targetPriceNumeric: 0,
+        timeHorizon: 'Kwartaaloverzicht 2026',
+        stance: 'Neutral',
+        thesis: 'Geen geverifieerde dagelijkse bankconsensus in de applicatie; gebruik uitsluitend de live/laatste exchange quote voor de actuele prijs.',
+        catalysts: ['DME/CME futures positioning', 'Asian refinery demand', 'Oman and Middle East export flows'],
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -419,7 +446,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Chinese independent teapots and state majors maintain high sour crude demand as petrochemical demand offsets slower domestic diesel consumption.',
         catalysts: ['Ministry of Commerce import quota batch announcements', 'USD/CNY exchange rate movements', 'Chinese retail fuel price adjustments'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Morgan Stanley',
@@ -430,7 +457,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'INE prices will closely track Brent and Oman physical parity, with RMB valuation playing a key role in domestic crack economics.',
         catalysts: ['China coastal port congestion', 'Domestic petrochemical ethylene crack margins'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -473,7 +500,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Tight refinery conversion capacity in the US Northeast post-refinery closures leaves New York Harbor vulnerable to sudden logistical inventory draws.',
         catalysts: ['US East Coast (PADD 1) inventory levels', 'Colonial Pipeline flow nominations', 'European gasoline export arbitrage'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Citi',
@@ -484,7 +511,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bearish',
         thesis: 'Post-summer driving season demand decline combined with increasing fleet fuel economy and EV adoption will loosen Atlantic gasoline balances.',
         catalysts: ['Post-Labor Day driving demand drop', 'Winter grade RVP blending economics'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -527,7 +554,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Global middle distillate inventories remain tight on structural refinery closures in Europe and US. Winter diesel heating demand provides strong prompt support.',
         catalysts: ['Freight freight ton-mile volume', 'European gasoil tanker arrivals from Jamnagar/Jubail', 'Winter weather chill'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'UBS',
@@ -538,7 +565,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Industrial macroeconomic softness in Europe and North America limits runaway upside for freight diesel, keeping cracks within historical $22-$28/bbl channels.',
         catalysts: ['Manufacturing PMI new export orders', 'Global refinery secondary unit uptime'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -581,7 +608,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Reiterate high-conviction bullish recommendation. Unshakable structural central bank demand alongside physical ETF re-accumulation will drive gold toward record territory.',
         catalysts: ['Fed rate cutting pace', 'Central bank official monthly reserve filings', 'US fiscal deficit trajectory'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'J.P. Morgan',
@@ -592,7 +619,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Gold remains top macro commodity pick. Long-term lower real US yields and persistent geopolitical fractures reinforce gold as the premier sovereign reserve anchor.',
         catalysts: ['US 10-year TIPS real yields', 'Global ETF tonnage holdings', 'Middle East / Taiwan geopolitical risk premia'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Citi',
@@ -603,7 +630,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'While central bank buying provides a rock-solid floor, physical jewelry demand in China and India has slowed due to high domestic spot retail prices.',
         catalysts: ['Indian Diwali festival import tariffs', 'Shanghai Gold Exchange physical premium'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -646,7 +673,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Silver offers superior high-beta leverage to gold rallies. The physical supply deficit is entrenched due to stagnant by-product lead/zinc mine output and explosive solar cell demand.',
         catalysts: ['Global solar gigawatt installation targets', 'COMEX registered vault withdrawals', 'Gold/silver ratio compression toward 70x'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Standard Chartered',
@@ -657,7 +684,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Institutional investor re-engagement through physically backed silver ETFs will amplify upward price discovery in a thin physical market.',
         catalysts: ['Silver Institute supply/demand deficit revisions', 'Chinese photovoltaic export volumes'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -700,7 +727,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Copper is our single highest-conviction base metal. The combination of structural concentrate shortages, near-zero smelter TC/RCs, and surging AI/grid demand will force global stockouts.',
         catalysts: ['Smelter production curtailments in China', 'Grid infrastructure spending budgets in China & Europe', 'Hyperscaler data center power wiring orders'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Morgan Stanley',
@@ -711,7 +738,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Electric vehicle wiring and charging stations consume 3-4x more copper per vehicle than internal combustion engines. Even modest economic stabilization in China triggers market tightness.',
         catalysts: ['China State Grid procurement tenders', 'LME on-warrant inventory movements'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Citi',
@@ -722,7 +749,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Near-term upside is restrained by softness in traditional Chinese residential construction wire and cable demand, though long-term green drivers remain undeniable.',
         catalysts: ['Chinese property completion statistics', 'Cathode imports via bonded warehouses'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -765,7 +792,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Nuclear power renaissance driven by AI hyperscaler 24/7 clean baseload power needs is colliding with decade-long underinvestment in mine supply.',
         catalysts: ['Utility long-term procurement contract signings', 'Kazatomprom 2026/27 production volume targets', 'SMR design approvals'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Goldman Sachs',
@@ -776,7 +803,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Utility uncovered requirements are at 15-year highs. Utilities must re-contract at higher prices as secondary mobile supplies (enricher underfeeding) are exhausted.',
         catalysts: ['WNA (World Nuclear Association) symposium procurement data', 'Cameco McArthur River mine output'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -819,7 +846,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Current prices are below the 80th percentile of the cost curve. Supply cuts by marginal producers will balance the market faster than expected as grid storage demand surges.',
         catalysts: ['Mine shutdown announcements in Yichun, China', 'Global battery cell manufacturing utilization rates'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Goldman Sachs',
@@ -830,7 +857,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Sizable pipeline of low-cost South American brine projects (Argentina, Chile) will temper the pace of price recovery, keeping margins normalized.',
         catalysts: ['Catamarca and Salar de Atacama brine expansion timings', 'North American EV tax credit eligibility guidelines'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -873,7 +900,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'European harvest yields were severely downgraded due to unseasonable rain, while Russian exportable surpluses are tighter than last season.',
         catalysts: ['USDA WASDE monthly report adjustments', 'Black Sea port infrastructure developments', 'Southern hemisphere wheat crop size'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Standard Chartered',
@@ -884,7 +911,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Abundant US winter wheat harvest balances European deficits, maintaining a stable range-bound trading corridor.',
         catalysts: ['US winter wheat emergence ratings', 'Egyptian GASC tender purchase prices'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   },
@@ -927,7 +954,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Neutral',
         thesis: 'Strong US harvest buffers inventories, but strong ethanol crush demand and cheap export pricing stimulate international animal feed buying.',
         catalysts: ['Weekly USDA export sales figures', 'US ethanol refinery grind rates', 'Brazil planting progress'],
-        lastUpdated: 'September 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       },
       {
         bankName: 'Bank of America',
@@ -938,7 +965,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
         stance: 'Bullish',
         thesis: 'Farmer selling discipline at low price points will support cash basis levels, limiting downside below $4.00/bu.',
         catalysts: ['Farmer forward contracting volumes', 'Fertilizer pricing and 2027 acreage intentions'],
-        lastUpdated: 'August 2026'
+        lastUpdated: 'Kwartaaloverzicht 2026'
       }
     ]
   }
