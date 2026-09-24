@@ -399,7 +399,7 @@ const DEFAULT_TECH_SYMBOLS = [
 ];
 
 const DEFAULT_COMMODITY_SYMBOLS = [
-  'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'INE-SC',
+  'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'MRBC', 'OQD', 'INE-SC',
   'RBOB', 'HO', 'GOLD', 'SILVER', 'COPPER', 'URANIUM', 'LITHIUM', 'WHEAT', 'CORN'
 ];
 
@@ -457,6 +457,8 @@ const CNBC_SYMBOL_MAP: Record<string, string> = {
   'CORN': '@C.1',
   'RBOB': '@RB.1',
   'HO': '@HO.1',
+  'MRBC': '@MRBC.1',
+  'OQD': '@OQ.1',
   // Treasuries and Sovereign Yields
   'US2Y': 'US2Y',
   'US10Y': 'US10Y',
@@ -557,6 +559,8 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'NG': 'NG=F',
   'JKM': 'JKM=F',
   'MURBAN': 'MBN.NYM',
+  'MRBC': 'MBN=F',
+  'OQD': 'OQ=F',
   'INE-SC': 'SC=F',
   'RBOB': 'RB=F',
   'HO': 'HO=F',
@@ -633,6 +637,9 @@ const BASELINE_PRICES: Record<string, { price: number; change: number; pct: numb
   '2330.TW': { price: 2480.0, change: 20.0, pct: 0.81, currency: 'TWD' },
   '0700.HK': { price: 430.0, change: 11.0, pct: 2.63, currency: 'HKD' },
   '7974.T': { price: 8339.0, change: -136.0, pct: -1.61, currency: 'JPY' },
+
+  MRBC: { price: 117.20, change: 0, pct: 0, currency: 'USD' },
+  OQD: { price: 117.60, change: 0, pct: 0, currency: 'USD' },
 
   // The Shovel Sellers (USD & Legacy)
   AMAT: { price: 444.57, change: 27.17, pct: 6.51, currency: 'USD' },
@@ -815,12 +822,7 @@ async function fetchQuoteFromCnbc(normalizedKey: string): Promise<CachedQuote | 
             lastUpdated: new Date().toISOString(),
             isLive: true,
             provider: 'CNBC Real-Time Market API',
-            sparkline: [
-              Number((price * 0.998).toFixed(2)),
-              Number((price * 1.001).toFixed(2)),
-              Number((price * 0.999).toFixed(2)),
-              Number(price.toFixed(2))
-            ]
+            sparkline: []
           };
         }
       }
@@ -1033,16 +1035,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     return quotesCache[normalizedKey].data;
   }
 
-  // 1. Try Murban Crude Oil via OilPrice.com if requested
-  if (normalizedKey === 'MURBAN') {
-    const murbanQuote = await fetchMurbanOilPrice();
-    if (murbanQuote) {
-      quotesCache[normalizedKey] = { data: murbanQuote, timestamp: now };
-      return murbanQuote;
-    }
-  }
-
-  // 2. Try US Mortgage via US30YFRM:Exchange Live Feed
+  // 1. Try US Mortgage via US30YFRM:Exchange Live Feed
   if (normalizedKey === 'US30YMORT' || normalizedKey === 'US30YFRM') {
     const cnbcQuote = await fetchQuoteFromCnbc('US30YFRM');
     if (cnbcQuote) {
@@ -1062,7 +1055,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     }
   }
 
-  // 3. Try CNBC Real-Time API for Commodities & Sovereign Yields
+  // 2. Try CNBC Real-Time API for Commodities & Sovereign Yields
   if (CNBC_SYMBOL_MAP[normalizedKey]) {
     const cnbcQuote = await fetchQuoteFromCnbc(normalizedKey);
     if (cnbcQuote) {
@@ -1071,7 +1064,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     }
   }
 
-  // 4. Try Yahoo Finance Real-Time API (with 1-year historical daily closes for 200 DMA + 52W High/Low + Pre/Post Market)
+  // 3. Try Yahoo Finance Real-Time API (with 1-year historical daily closes for 200 DMA + 52W High/Low + Pre/Post Market)
   const yahooSymbol = YAHOO_SYMBOL_MAP[normalizedKey] || normalizedKey;
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=1y&includePrePost=true`;
@@ -1222,7 +1215,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           fiftyTwoWeekHigh,
           fiftyTwoWeekLow,
           twoHundredDayAverage,
-          sparkline: cleanSparkline.length >= 2 ? cleanSparkline : [price * 0.995, price * 1.002, price],
+          sparkline: []
           preMarketPrice,
           preMarketChange,
           preMarketChangePercent,
@@ -1260,96 +1253,42 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     // Fallback to baseline
   }
 
-  // 5. Resilient Institutional Fallback with accurate 52W range, 200 DMA and FX conversion
-  const base = BASELINE_PRICES[yahooSymbol] || BASELINE_PRICES[normalizedKey] || { price: 150.00, change: 1.00, pct: 0.67, currency: 'USD' };
-  const tech = STOCK_TECHNICAL_MAP[yahooSymbol] || STOCK_TECHNICAL_MAP[normalizedKey];
-  const isBond = normalizedKey.includes('Y') || normalizedKey.includes('MORT');
-  const currency = isBond ? '%' : (base.currency || 'USD');
-  const isZeroDecimalCur = currency === 'JPY' || currency === 'KRW';
-  const priceDecimals = isBond ? 3 : isZeroDecimalCur ? 0 : 2;
-
-  const microVariation = isBond 
-    ? (Math.sin(now / 12000 + normalizedKey.charCodeAt(0)) * 0.015)
-    : (Math.sin(now / 15000 + normalizedKey.charCodeAt(0)) * (isZeroDecimalCur ? 25.0 : 0.25));
-
-  const currentPrice = Number((base.price + microVariation).toFixed(priceDecimals));
-  const change = Number((base.change + microVariation).toFixed(priceDecimals));
-  const prevClose = Number((currentPrice - change).toFixed(priceDecimals));
-
-  const preMarketChange = Number((change * 0.35).toFixed(priceDecimals));
-  const preMarketPrice = Number((currentPrice + preMarketChange).toFixed(priceDecimals));
-  const preMarketChangePercent = Number(((preMarketChange / prevClose) * 100).toFixed(2));
-
-  const postMarketChange = Number((-change * 0.28).toFixed(priceDecimals));
-  const postMarketPrice = Number((currentPrice + postMarketChange).toFixed(priceDecimals));
-  const postMarketChangePercent = Number(((postMarketChange / currentPrice) * 100).toFixed(2));
-
-  const fxRateToUsd = await getFxRateToUsd(currency);
-  const priceUsd = currency === 'USD' ? currentPrice : Number((currentPrice * fxRateToUsd).toFixed(2));
-  const keyStats = await getKeyFinancialStatistics(yahooSymbol, currency);
-
-  // Determine marketState for fallback
-  const nowDt = new Date(now);
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-    weekday: 'short'
-  });
-  const parts = formatter.formatToParts(nowDt);
-  const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
-  const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
-  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
-  const isWeekend = weekday === 'Sat' || weekday === 'Sun';
-  const mins = hour * 60 + minute;
-
-  let fallbackMarketState: 'PRE' | 'REGULAR' | 'POST' | 'CLOSED' = 'CLOSED';
-  if (isWeekend) {
-    fallbackMarketState = 'CLOSED';
-  } else if (mins >= 570 && mins <= 960) {
-    fallbackMarketState = 'REGULAR';
-  } else if (mins >= 240 && mins < 570) {
-    fallbackMarketState = 'PRE';
-  } else if (mins > 960 && mins <= 1200) {
-    fallbackMarketState = 'POST';
-  } else {
-    fallbackMarketState = 'CLOSED';
+  // 4. Last-known-close fallback: never simulate a live tick.
+  // If upstream feeds are unavailable, expose only the last known close.
+  const base = BASELINE_PRICES[yahooSymbol] || BASELINE_PRICES[normalizedKey];
+  if (!base) {
+    throw new Error(`No verified quote available for ${normalizedKey} (${yahooSymbol})`);
   }
+  const currency = base.currency || 'USD';
+  const priceDecimals = currency === 'JPY' || currency === 'KRW' ? 0 : 2;
+  const previousClose = Number(base.price.toFixed(priceDecimals));
+  const fxRateToUsd = await getFxRateToUsd(currency);
+  const keyStats = await getKeyFinancialStatistics(yahooSymbol, currency);
 
   const fallbackQuote: CachedQuote = {
     symbol: normalizedKey,
-    price: currentPrice,
-    change,
-    changePercent: Number(((change / prevClose) * 100).toFixed(2)),
-    dayHigh: Number((currentPrice * 1.008).toFixed(priceDecimals)),
-    dayLow: Number((currentPrice * 0.992).toFixed(priceDecimals)),
-    volume: 12500000 + Math.floor(Math.random() * 500000),
-    previousClose: prevClose,
+    price: previousClose,
+    change: 0,
+    changePercent: 0,
+    dayHigh: previousClose,
+    dayLow: previousClose,
+    volume: 0,
+    previousClose,
     currency,
     lastUpdated: new Date().toISOString(),
-    isLive: true,
-    provider: `Market Quote Desk (${yahooSymbol})`,
-    fiftyTwoWeekHigh: tech ? tech.high52 : Number((currentPrice * 1.15).toFixed(priceDecimals)),
-    fiftyTwoWeekLow: tech ? tech.low52 : Number((currentPrice * 0.72).toFixed(priceDecimals)),
-    twoHundredDayAverage: tech ? tech.dma200 : Number((currentPrice * 0.94).toFixed(priceDecimals)),
-    sparkline: [currentPrice * 0.995, currentPrice * 0.998, currentPrice * 1.001, currentPrice],
-    preMarketPrice,
-    preMarketChange,
-    preMarketChangePercent,
-    postMarketPrice,
-    postMarketChange,
-    postMarketChangePercent,
-    marketState: fallbackMarketState,
+    isLive: false,
+    provider: `Slotkoers / Vertraagd (${yahooSymbol})`,
+    sparkline: [],
+    marketState: 'CLOSED',
     primaryListingSymbol: yahooSymbol,
-    exchangeName: keyStats?.exchangeName || (currency === 'JPY' ? 'Tokyo Stock Exchange (TSE)' : currency === 'KRW' ? 'Korea Exchange (KRX)' : currency === 'HKD' ? 'Hong Kong Stock Exchange (HKEX)' : 'Global Exchange'),
-    localPrice: currentPrice,
+    exchangeName: keyStats?.exchangeName,
+    localPrice: previousClose,
     localCurrency: currency,
     fxRateToUsd,
-    priceUsd,
-    marketCapUsd: keyStats?.marketCapUsd || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.cap || KNOWN_MARKET_CAPS_USD[normalizedKey]?.cap,
-    marketCapRawUsd: keyStats?.marketCapRawUsd || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.raw || KNOWN_MARKET_CAPS_USD[normalizedKey]?.raw,
-    peRatio: keyStats?.peRatio || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.pe || KNOWN_MARKET_CAPS_USD[normalizedKey]?.pe,
+    priceUsd: currency === 'USD' ? previousClose : Number((previousClose * fxRateToUsd).toFixed(2)),
+    marketCapUsd: keyStats?.marketCapUsd,
+    marketCapRawUsd: keyStats?.marketCapRawUsd,
+    peRatio: keyStats?.peRatio,
     enterpriseValueUsd: keyStats?.enterpriseValueUsd
   };
 
@@ -1727,8 +1666,11 @@ app.get('/api/bonds/history/:symbol', async (req, res) => {
 
     // 1. Fetch live quote (CNBC live priority)
     const liveQuote = await fetchQuote(rawSymbol);
-    const livePrice = liveQuote ? liveQuote.price : 4.95;
-    const previousClose = liveQuote?.previousClose || (livePrice * 0.998);
+    const livePrice = liveQuote?.price;
+    if (livePrice === undefined) {
+      return res.status(503).json({ success: false, error: 'Live bond quote is temporarily unavailable.' });
+    }
+    const previousClose = liveQuote?.previousClose ?? livePrice;
     const dayChangeBps = Number(((livePrice - previousClose) * 100).toFixed(1));
 
     let cutoffMs = now - 30 * 86400 * 1000;
@@ -1780,7 +1722,9 @@ app.get('/api/bonds/history/:symbol', async (req, res) => {
       low: number;
     }> = [];
 
-    let providerName = 'CNBC Real-Time Feed & Federal Reserve (FRED)';
+    let providerName = config.isChina
+      ? 'Nationale Bank van China (PBOC) Historische Periodiek'
+      : 'CNBC Real-Time Feed & Federal Reserve (FRED)';
 
     // Step A: Attempt high-frequency real market ticks if a direct exchange ticker exists (^TNX, ^TYX)
     let yahooData: Array<{ date: string; timestamp: number; yield: number; high: number; low: number }> | null = null;
@@ -1835,56 +1779,19 @@ app.get('/api/bonds/history/:symbol', async (req, res) => {
 
       providerName = `CNBC Real-Time Feed & CBOE Treasury Benchmarks (${config.timeZoneLabel})`;
     } else if (range === '1D') {
-      // High-resolution 1D Intraday ticks isolated strictly to the active or latest trading session (never 2 days glued)
-      const tz = timeZone;
-      const openHour = config.marketOpen ?? 8.0;
-      const closeHour = config.marketClose ?? 17.0;
-
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        hour12: false,
-        hour: 'numeric',
-        minute: 'numeric'
-      });
-      const parts = formatter.formatToParts(new Date());
-      const curHour = parseInt(parts.find(p => p.type === 'hour')?.value || '12', 10);
-      const curMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
-      const curDec = curHour + curMin / 60;
-      const isMarketOpen = curDec >= openHour && curDec < closeHour;
-
-      const sessionDurationHours = isMarketOpen
-        ? Math.max(0.25, curDec - openHour)
-        : (closeHour - openHour);
-
-      // Granular 5-minute ticks (12 points per hour) exclusively for current session
-      const stepMinutes = 5;
-      const totalSteps = Math.max(6, Math.min(120, Math.round((sessionDurationHours * 60) / stepMinutes)));
-      const stepMs = (sessionDurationHours * 3600 * 1000) / (totalSteps - 1);
-      const startMs = now - sessionDurationHours * 3600 * 1000;
-      const totalDelta = livePrice - previousClose;
-
-      for (let i = 0; i < totalSteps; i++) {
-        const pTime = i === totalSteps - 1 ? now : startMs + i * stepMs;
-        const progress = i / (totalSteps - 1);
-        const swing = Math.sin(i * 0.65) * 0.018 + Math.cos(i * 1.3) * 0.012;
-        const y = i === totalSteps - 1
-          ? livePrice
-          : Number((previousClose + totalDelta * progress + swing).toFixed(3));
-        const d = new Date(pTime);
-        const dateLabel = d.toLocaleTimeString('nl-NL', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
-        const bps = Number(((y - previousClose) * 100).toFixed(1));
-        outputPoints.push({
-          date: dateLabel,
-          timestamp: pTime,
-          yield: y,
-          changeBps: bps,
-          high: Number((y + 0.008).toFixed(3)),
-          low: Number((y - 0.008).toFixed(3))
-        });
-      }
-      providerName = isMarketOpen
-        ? `CNBC Real-Time Intraday Session (${config.timeZoneLabel})`
-        : `CNBC Market Session (${config.timeZoneLabel})`;
+      // No synthetic intraday history. If no real intraday source exists,
+      // expose the current observation only.
+      outputPoints = [{
+        date: new Date(now).toLocaleTimeString('nl-NL', { timeZone, hour: '2-digit', minute: '2-digit' }),
+        timestamp: now,
+        yield: livePrice,
+        changeBps: dayChangeBps,
+        high: livePrice,
+        low: livePrice
+      }];
+      providerName = config.isChina
+        ? 'Nationale Bank van China (PBOC) Historische Periodiek'
+        : `CNBC/FRED Live Observation (${config.timeZoneLabel})`;
     } else {
       // Step B: Official FRED or China series with maximal point preservation (NO over-smoothing)
       let rawPoints: Array<{ date: string; timestamp: number; yield: number }> = [];
@@ -2506,122 +2413,6 @@ const MARKET_TICKER_ALIASES: Record<string, string> = {
   'FADGI': 'FADGI.FGI'
 };
 
-function generateMarketFallbackHistory(
-  definition: typeof GLOBAL_MARKET_DEFINITIONS[0],
-  timeframe: MarketHistoryRange
-): { points: YahooHistoryPoint[]; interval: string; provider: string; lastUpdated: string } {
-  const currentPrice = definition.fallbackPrice;
-  const changePct = definition.fallbackChange;
-  const high52 = definition.fallback52wHigh;
-  const low52 = definition.fallback52wLow;
-  const now = Math.floor(Date.now() / 1000);
-
-  let numPoints = 60;
-  let totalSeconds = 24 * 3600;
-  let startPrice = currentPrice * (1 - (changePct / 100));
-
-  if (timeframe === '24U') {
-    // Single trading session starting strictly from market open (never 2 days glued)
-    const session = calculateSessionStatus(definition);
-    const sessionHours = Math.max(3, (definition.hours.close - definition.hours.open));
-    if (session.status === 'OPEN') {
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: definition.timeZone,
-        hour12: false,
-        hour: 'numeric',
-        minute: 'numeric'
-      });
-      const parts = formatter.formatToParts(new Date());
-      const curH = parseInt(parts.find(p => p.type === 'hour')?.value || '12', 10);
-      const curM = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
-      const currentDec = curH + curM / 60;
-      const elapsedHours = Math.max(0.25, Math.min(sessionHours, currentDec - definition.hours.open));
-      totalSeconds = Math.round(elapsedHours * 3600);
-      numPoints = Math.max(10, Math.min(60, Math.round(totalSeconds / 300)));
-    } else {
-      totalSeconds = Math.round(sessionHours * 3600);
-      numPoints = 50;
-    }
-    startPrice = currentPrice / (1 + (changePct / 100));
-  } else if (timeframe === '1W') {
-    numPoints = 50;
-    totalSeconds = 7 * 24 * 3600;
-    startPrice = currentPrice * 0.992;
-  } else if (timeframe === '3M') {
-    numPoints = 65;
-    totalSeconds = 90 * 24 * 3600;
-    startPrice = currentPrice * 0.96;
-  } else if (timeframe === 'YTD') {
-    numPoints = 75;
-    totalSeconds = 180 * 24 * 3600;
-    startPrice = currentPrice * 0.93;
-  } else if (timeframe === '1Y') {
-    numPoints = 80;
-    totalSeconds = 365 * 24 * 3600;
-    startPrice = Math.max(low52, currentPrice * 0.88);
-  } else if (timeframe === '5Y') {
-    numPoints = 80;
-    totalSeconds = 5 * 365 * 24 * 3600;
-    startPrice = low52 * 0.95;
-  } else if (timeframe === '10Y') {
-    numPoints = 80;
-    totalSeconds = 10 * 365 * 24 * 3600;
-    startPrice = low52 * 0.82;
-  } else if (timeframe === 'ALL') {
-    numPoints = 100;
-    totalSeconds = 15 * 365 * 24 * 3600;
-    startPrice = low52 * 0.70;
-  }
-
-  const stepSec = Math.floor(totalSeconds / (numPoints - 1));
-  const startTime = now - totalSeconds;
-  const points: YahooHistoryPoint[] = [];
-
-  let seed = 0;
-  for (let i = 0; i < definition.id.length; i++) {
-    seed = (seed * 31 + definition.id.charCodeAt(i)) & 0xffffff;
-  }
-
-  for (let i = 0; i < numPoints; i++) {
-    const progress = i / (numPoints - 1);
-    const ts = startTime + i * stepSec;
-    const trend = startPrice + (currentPrice - startPrice) * progress;
-    const wave = (1 - progress) * (
-      Math.sin(progress * Math.PI * 4 + (seed % 10)) * (currentPrice * 0.015) +
-      Math.cos(progress * Math.PI * 8 + (seed % 7)) * (currentPrice * 0.008)
-    );
-    let val = trend + wave;
-    if (i === numPoints - 1) {
-      val = currentPrice;
-    }
-    val = Math.max(low52 * 0.85, Math.min(high52 * 1.05, val));
-    val = Number(val.toFixed(2));
-
-    const open = i === 0 ? val : points[i - 1].close!;
-    const high = Number((Math.max(open, val) * 1.002).toFixed(2));
-    const low = Number((Math.min(open, val) * 0.998).toFixed(2));
-    const volume = Math.round(((definition.fallbackVolume || 10000000) / numPoints) * (0.8 + 0.4 * Math.sin(i)));
-
-    points.push({
-      timestamp: ts,
-      date: formatHistoryPointDate(ts, timeframe, definition.timeZone),
-      value: val,
-      close: val,
-      open,
-      high,
-      low,
-      volume
-    });
-  }
-
-  return {
-    points,
-    interval: MARKET_HISTORY_CONFIG[timeframe].interval,
-    provider: `${definition.name} Consolidated Feed`,
-    lastUpdated: new Date().toISOString()
-  };
-}
-
 async function fetchYahooMarketHistory(
   yahooTicker: string,
   timeframe: MarketHistoryRange,
@@ -2846,8 +2637,11 @@ app.get('/api/global-market-history/:symbol', async (req, res) => {
       definition.timeZone
     );
 
-    if (!history) {
-      history = generateMarketFallbackHistory(definition, timeframe);
+    if (!history || history.points.length === 0) {
+      return res.status(503).json({
+        success: false,
+        error: `Historical market data is temporarily unavailable for ${definition.yahooTicker}.`
+      });
     }
 
     const points = history.points;
