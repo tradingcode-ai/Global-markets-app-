@@ -141,6 +141,7 @@ export function GlobalNewsAgentView({
   // Helpers
   const formatEditionLabel = (ed: NewsEdition) => {
     switch (ed) {
+      case 'ASIA_OPEN': return 'Asia Open (02:30 CET)';
       case 'MORNING_EUROPE': return 'Ochtend Europa (07:00 CET)';
       case 'US_OPEN': return 'US Market Open (15:30 CET)';
       case 'MARKET_CLOSE': return 'Beursafsluiting (21:30 CET)';
@@ -225,7 +226,7 @@ export function GlobalNewsAgentView({
               Global News Agent
             </h1>
             <p className="text-sm text-slate-300 max-w-3xl leading-relaxed">
-              Feitelijk geverifieerde marktberichten op basis van institutionele bronnen (Financial Times, Bloomberg, Reuters, CNBC). Automatisch getriggerd op de 3 vaste beurstijdstippen met Google Search Grounding en een temperatuur van 0.1 voor nul hallucinaties.
+              Feitelijk geverifieerde marktberichten op basis van institutionele bronnen (Financial Times, Bloomberg, Reuters, CNBC). Automatisch getriggerd op de 4 vaste beurstijdstippen met Google Search Grounding en een temperatuur van 0.1 voor nul hallucinaties.
             </p>
           </div>
 
@@ -294,6 +295,7 @@ export function GlobalNewsAgentView({
             </span>
             {[
               { id: 'ALL', label: 'Alle Edities' },
+              { id: 'ASIA_OPEN', label: 'Asia Open (02:30)' },
               { id: 'MORNING_EUROPE', label: 'Ochtend Europa (07:00)' },
               { id: 'US_OPEN', label: 'US Open (15:30)' },
               { id: 'MARKET_CLOSE', label: 'Beursafsluiting (21:30)' }
