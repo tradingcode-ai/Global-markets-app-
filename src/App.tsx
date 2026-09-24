@@ -492,6 +492,8 @@ export default function App() {
       'TTF': 'dutch-ttf',
       'NG': 'henry-hub', 'HENRY-HUB': 'henry-hub',
       'JKM': 'jkm-lng',
+      'MRBC': 'murban-crude',
+      'OQD': 'oman-crude',
       'MURBAN': 'murban-crude',
       'GOLD': 'gold', 'GC': 'gold', 'XAU': 'gold',
       'SILVER': 'silver', 'SI': 'silver', 'XAG': 'silver',
