@@ -3276,6 +3276,66 @@ app.post('/api/analyze-earnings', async (req, res) => {
     const { company, quarter, epsEstimate, epsActual, revenueEstimate, revenueActual, guidance, highlights, segments, aiCapex } = req.body;
 
     const client = getAiClient();
+
+    // Interactive Executive Strategic Advisory Desk question flow.
+    // Unlike the earnings debrief path below, this accepts a free-form user question.
+    const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
+    if (question) {
+      if (!client) {
+        return res.status(503).json({
+          success: false,
+          isAiGenerated: false,
+          error: 'Strategic advisory analysis is temporarily unavailable because the AI provider is not configured.'
+        });
+      }
+
+      const advisoryPrompt = `You are an institutional corporate strategy and markets research analyst.
+Answer the user's question factually and concisely. Use only information you can substantiate from the
+context supplied to you; clearly state uncertainty where data is unavailable. Do not invent market
+prices, analyst targets, company figures, or named-firm endorsements. Do not present personalized
+investment advice.
+
+User question:
+${question}
+
+Return JSON with exactly:
+{
+  "summaryVerdict": "concise executive answer",
+  "keyDrivers": ["3-5 factual drivers or considerations"],
+  "guidanceAndOutlook": "forward-looking considerations with uncertainty clearly stated",
+  "marketImplication": "neutral market implications, without a buy/sell recommendation"
+}`;
+
+      const advisoryResult = await generateContentWithFallback(client, {
+        contents: advisoryPrompt,
+        config: { responseMimeType: 'application/json' }
+      });
+
+      if (!advisoryResult?.text) {
+        return res.status(502).json({
+          success: false,
+          isAiGenerated: false,
+          error: 'No advisory analysis was returned by the AI provider.'
+        });
+      }
+
+      try {
+        const analysis = JSON.parse(advisoryResult.text);
+        return res.json({
+          success: true,
+          isAiGenerated: true,
+          analysis,
+          generatedAt: new Date().toISOString()
+        });
+      } catch {
+        return res.status(502).json({
+          success: false,
+          isAiGenerated: true,
+          error: 'The advisory provider returned invalid JSON.'
+        });
+      }
+    }
+
     if (!client) {
       // Return structured fallback analysis when GEMINI_API_KEY is not configured
       return res.json({
