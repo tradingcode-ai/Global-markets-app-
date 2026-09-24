@@ -1,4 +1,4 @@
-export type NewsEdition = 'MORNING_EUROPE' | 'US_OPEN' | 'MARKET_CLOSE';
+export type NewsEdition = 'ASIA_OPEN' | 'MORNING_EUROPE' | 'US_OPEN' | 'MARKET_CLOSE';
 
 export type NewsCategory = 
   | 'MACRO' 
