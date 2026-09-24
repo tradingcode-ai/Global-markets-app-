@@ -158,7 +158,6 @@ If a ticker has no new material news since earlier editions, completely omit tha
     contents: prompt,
     config: {
       systemInstruction,
-      temperature: CONFIG.TEMPERATURE,
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: triStreamSchema,
