@@ -120,12 +120,12 @@ export async function fetchAgentStatus(): Promise<NewsAgentStatus> {
   const minute = Number(amsterdamTime.find(p => p.type === 'minute')?.value || 0);
   const minutes = hour * 60 + minute;
 
-  let currentEdition: NewsEdition = 'MORNING_EUROPE';
-  let nextEdition: NewsEdition = 'US_OPEN';
-  let nextScheduledTime = '15:30 CET';
+  let currentEdition: NewsEdition = 'ASIA_OPEN';
+  let nextEdition: NewsEdition = 'MORNING_EUROPE';
+  let nextScheduledTime = '07:00 CET';
 
   if (minutes < 7 * 60) {
-    currentEdition = 'MARKET_CLOSE';
+    currentEdition = 'ASIA_OPEN';
     nextEdition = 'MORNING_EUROPE';
     nextScheduledTime = '07:00 CET';
   } else if (minutes < 15 * 60 + 30) {
@@ -138,8 +138,8 @@ export async function fetchAgentStatus(): Promise<NewsAgentStatus> {
     nextScheduledTime = '21:30 CET';
   } else {
     currentEdition = 'MARKET_CLOSE';
-    nextEdition = 'MORNING_EUROPE';
-    nextScheduledTime = '07:00 CET (volgende handelsdag)';
+    nextEdition = 'ASIA_OPEN';
+    nextScheduledTime = '02:30 CET (volgende handelsdag)';
   }
 
   return {
