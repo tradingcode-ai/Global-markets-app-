@@ -967,64 +967,7 @@ const STOCK_TECHNICAL_MAP: Record<string, { high52: number; low52: number; dma20
   CBRS: { high52: 210.00, low52: 80.00, dma200: 165.00 }
 };
 
-// Fetch Murban Crude Oil from OilPrice.com or ICE IFAD
-async function fetchMurbanOilPrice(): Promise<CachedQuote | null> {
-  try {
-    const res = await fetch('https://oilprice.com/oil-price-charts', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-    if (res.ok) {
-      const html = await res.text();
-      const match = html.match(/Murban[\s\S]*?data-price=["']?([\d.]+)["']?/i) ||
-                    html.match(/Murban[\s\S]*?class=["'][^"']*last_price[^"']*["'][^>]*>([\d.]+)/i) ||
-                    html.match(/Murban[\s\S]*?>\$?\s*([\d]{2,3}\.[\d]{2})/i);
-      if (match && match[1]) {
-        const price = parseFloat(match[1]);
-        if (!isNaN(price) && price >= 50 && price <= 160) {
-          const change = -1.70;
-          const changePercent = Number(((change / (price - change)) * 100).toFixed(2));
-          return {
-            symbol: 'MURBAN',
-            price,
-            change,
-            changePercent,
-            dayHigh: Number((price + 1.80).toFixed(2)),
-            dayLow: Number((price - 1.20).toFixed(2)),
-            volume: 124800,
-            previousClose: Number((price - change).toFixed(2)),
-            currency: 'USD',
-            lastUpdated: new Date().toISOString(),
-            isLive: true,
-            provider: 'OilPrice.com Live Index (ICE IFAD)',
-            sparkline: [price + 1.6, price + 0.8, price - 0.5, price]
-          };
-        }
-      }
-    }
-  } catch (e) {}
-
-  // Authoritative benchmark in alignment with OilPrice.com & ICE IFAD Exchange Futures ($121.39)
-  const price = 121.39;
-  const change = -1.70;
-  const changePercent = -1.38;
-  return {
-    symbol: 'MURBAN',
-    price,
-    change,
-    changePercent,
-    dayHigh: 124.20,
-    dayLow: 120.50,
-    volume: 124800,
-    previousClose: 123.09,
-    currency: 'USD',
-    lastUpdated: new Date().toISOString(),
-    isLive: true,
-    provider: 'OilPrice.com Live Index (ICE IFAD Futures)',
-    sparkline: [123.10, 122.80, 123.40, 122.10, 121.75, 121.39]
-  };
-}
+// Murban and Oman futures use the standard CNBC/Yahoo commodity quote pipeline.
 
 // Multi-Source Live Market Quote Fetcher
 async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
@@ -2535,20 +2478,8 @@ async function fetchYahooMarketHistory(
       }
     }
 
-    // 4. Graceful fallback generation if Yahoo Finance doesn't carry full historical candles
-    if (definition) {
-      const fallbackData = generateMarketFallbackHistory(definition, timeframe);
-      marketHistoryCache[cacheKey] = { data: fallbackData, timestamp: now };
-      return fallbackData;
-    }
-
     return null;
-  } catch (err) {
-    if (definition) {
-      const fallbackData = generateMarketFallbackHistory(definition, timeframe);
-      marketHistoryCache[cacheKey] = { data: fallbackData, timestamp: now };
-      return fallbackData;
-    }
+  } catch {
     return null;
   }
 }
