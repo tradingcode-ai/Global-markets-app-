@@ -206,18 +206,7 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            <a
-              href="https://oilprice.com/oil-price-charts/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50/80 text-orange-900 hover:bg-orange-100 text-xs font-semibold transition shadow-2xs"
-              title="Open real-time energy benchmarks on OilPrice.com"
-            >
-              <Globe2 className="w-3.5 h-3.5 text-orange-600" />
-              <span>OilPrice.com Feed ↗</span>
-            </a>
-
-            <button
+<button
               id="btn-refresh-commodities"
               onClick={onRefreshQuotes}
               disabled={isLoadingQuotes}
@@ -534,9 +523,15 @@ export const CommoditiesSection: React.FC<CommoditiesSectionProps> = ({
             {/* Visual Spread Bar */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
               <div className="flex items-center justify-between text-xs text-slate-500 mb-2 font-mono-code">
-                <span>Bear Low: <strong>{getCurrencySymbol(selectedCommodity.currency)}{selectedCommodity.consensusRange.low.toFixed(2)}</strong></span>
-                <span>Consensus Mean: <strong>{getCurrencySymbol(selectedCommodity.currency)}{selectedCommodity.consensusRange.avg.toFixed(2)}</strong></span>
-                <span>Bull High: <strong>{getCurrencySymbol(selectedCommodity.currency)}{selectedCommodity.consensusRange.high.toFixed(2)}</strong></span>
+                {selectedCommodity.consensusRange.avg > 0 ? (
+                  <>
+                    <span>Bear Low: <strong>{getCurrencySymbol(selectedCommodity.currency)}{selectedCommodity.consensusRange.low.toFixed(2)}</strong></span>
+                    <span>Consensus Mean: <strong>{getCurrencySymbol(selectedCommodity.currency)}{selectedCommodity.consensusRange.avg.toFixed(2)}</strong></span>
+                    <span>Bull High: <strong>{getCurrencySymbol(selectedCommodity.currency)}{selectedCommodity.consensusRange.high.toFixed(2)}</strong></span>
+                  </>
+                ) : (
+                  <span>Geen geverifieerde consensus beschikbaar.</span>
+                )}
               </div>
 
               {/* Progress track visual */}
