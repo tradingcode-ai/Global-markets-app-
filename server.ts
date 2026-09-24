@@ -1131,12 +1131,6 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           ? Number(meta.postMarketPrice.toFixed(priceDecimals)) 
           : undefined;
 
-        if (marketState === 'PRE' && !preMarketPrice) {
-          preMarketPrice = Number((price * 1.004).toFixed(priceDecimals));
-        } else if (marketState === 'POST' && !postMarketPrice) {
-          postMarketPrice = Number((price * 0.996).toFixed(priceDecimals));
-        }
-
         const preMarketChange = preMarketPrice !== undefined ? Number((preMarketPrice - previousClose).toFixed(priceDecimals)) : undefined;
         const preMarketChangePercent = preMarketPrice !== undefined ? Number(((preMarketChange! / previousClose) * 100).toFixed(2)) : undefined;
 
@@ -1148,8 +1142,8 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           price,
           change,
           changePercent,
-          dayHigh: Number((meta.regularMarketDayHigh || price * 1.01).toFixed(priceDecimals)),
-          dayLow: Number((meta.regularMarketDayLow || price * 0.99).toFixed(priceDecimals)),
+          dayHigh: Number((meta.regularMarketDayHigh ?? price).toFixed(priceDecimals)),
+          dayLow: Number((meta.regularMarketDayLow ?? price).toFixed(priceDecimals)),
           volume: meta.regularMarketVolume || 0,
           previousClose: Number(previousClose.toFixed(priceDecimals)),
           currency,
