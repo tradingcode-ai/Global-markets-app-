@@ -7,6 +7,11 @@ import { runAgentCycle, getCurrentEdition } from "./marketNewsAgent.js";
 const app = express();
 app.use(express.json());
 
+// Lightweight health endpoint for Render and monitoring.
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", service: "global-markets-news-agent" });
+});
+
 // 1. Live Timeline Feed Endpoint voor de Global Markets App
 app.get("/api/v1/news/timeline", async (req, res) => {
   try {
@@ -92,7 +97,7 @@ app.post("/api/v1/agent/run", async (req, res) => {
   }
 });
 
-app.listen(CONFIG.PORT, () => {
+app.listen(CONFIG.PORT, "0.0.0.0", () => {
   console.log(`[Markets News API] Actief op http://localhost:${CONFIG.PORT}`);
   initScheduler();
 });
