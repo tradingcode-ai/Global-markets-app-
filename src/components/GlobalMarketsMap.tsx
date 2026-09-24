@@ -950,9 +950,14 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   const volumeHeight = 32;
 
   const gridCount = 6;
-  const dateTickCount = Math.min(7, Math.max(3, chartData.length));
-  const dateTickIndices = Array.from({ length: dateTickCount }, (_, i) =>
-    Math.round((i / (dateTickCount - 1)) * (points.length - 1))
+  const dateTickCount = Math.min(7, Math.max(2, points.length));
+  const rawTickIndices = points.length <= 1
+    ? [0]
+    : Array.from({ length: dateTickCount }, (_, i) =>
+        Math.round((i / Math.max(1, dateTickCount - 1)) * (points.length - 1))
+      );
+  const dateTickIndices = Array.from(new Set(rawTickIndices)).filter(
+    idx => idx >= 0 && idx < points.length
   );
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -1037,10 +1042,10 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
           })}
 
           {/* Vertical guide lines */}
-          {dateTickIndices.map((idx) => {
+          {dateTickIndices.map((idx, i) => {
             const p = points[idx];
             return (
-              <line key={`v-${idx}`} x1={p.x} y1={topPad} x2={p.x} y2={topPad + plotHeight}
+              <line key={`v-guideline-${i}-${idx}`} x1={p.x} y1={topPad} x2={p.x} y2={topPad + plotHeight}
                 stroke="#1b2a3d" strokeOpacity="0.5" strokeWidth="1" />
             );
           })}
@@ -1072,7 +1077,7 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
             const isFirst = i === 0;
             const isLast = i === dateTickIndices.length - 1;
             return (
-              <text key={`date-${idx}`} x={p.x} y={height - 14}
+              <text key={`date-label-${i}-${idx}`} x={p.x} y={height - 14}
                 textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'}
                 fill="#64748b" fontSize="10"
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace">

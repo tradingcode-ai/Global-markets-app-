@@ -76,6 +76,45 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     return () => { cancelled = true; };
   }, [result?.ticker]);
 
+  // Subtle entrance and exit animation state
+  const [isMounted, setIsMounted] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      setIsMounted(true);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 200);
+  };
+
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isClosing]);
+
   if (!result) return null;
 
   const meta = TECH_COMPANIES[result.ticker] || SHOVEL_SELLERS_COMPANIES[result.ticker] || FINANCIAL_COMPANIES[result.ticker];
@@ -197,10 +236,24 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   }).join(' ');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div 
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200 ease-out ${
+        isMounted && !isClosing ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div 
         id="company-detail-modal"
-        className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="company-detail-modal-title"
+        className={`bg-white border border-slate-200 rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden transform transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          isMounted && !isClosing 
+            ? 'opacity-100 translate-y-0 scale-100' 
+            : 'opacity-0 translate-y-4 scale-[0.985]'
+        }`}
       >
         {/* Soft Header */}
         <div className="p-5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
@@ -208,7 +261,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             <StockLogo ticker={result.ticker} size="lg" className="w-10 h-10 rounded-xl" />
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900 font-mono-code">
+                <h3 id="company-detail-modal-title" className="text-base font-bold text-slate-900 font-mono-code">
                   {result.ticker} • {result.companyName}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
@@ -221,7 +274,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </div>
           </div>
           <button 
-            onClick={onClose} 
+            onClick={handleClose} 
             className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition p-2 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -769,7 +822,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           </button>
 
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-xs transition cursor-pointer"
           >
             Close Breakdown

@@ -949,6 +949,7 @@ export default function App() {
       {/* Modals */}
       {selectedResultForModal && (
         <CompanyDetailModal
+          key={`company-modal-${selectedResultForModal.ticker}`}
           result={selectedResultForModal}
           quote={resolveLiveQuote(selectedResultForModal.ticker, quotes)}
           onClose={() => setSelectedResultForModal(null)}
