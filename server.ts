@@ -1153,7 +1153,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           fiftyTwoWeekHigh,
           fiftyTwoWeekLow,
           twoHundredDayAverage,
-          sparkline: []
+          sparkline: [],
           preMarketPrice,
           preMarketChange,
           preMarketChangePercent,
