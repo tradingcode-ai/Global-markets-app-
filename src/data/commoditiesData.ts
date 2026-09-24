@@ -351,7 +351,7 @@ export const COMMODITIES_DATA: CommodityItem[] = [
     macroFactors: [
       'Murban futures are monitored through the standard CNBC/Yahoo commodity quote pipeline.',
       'ICE IFAD / ADNOC benchmark structure and Asia-Pacific refinery demand are key market drivers.',
-      'No OilPrice.com-derived synthetic quote is used by the application.'
+      'Murban futures use the standard exchange quote pipeline; no synthetic intraday series is generated.'
     ],
     analystOutlooks: [
       {
