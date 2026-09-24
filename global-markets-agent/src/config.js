@@ -3,10 +3,8 @@ dotenv.config();
 
 export const CONFIG = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  // Modelkeuze: 'gemini-3.8-flash' met medium thinking voor snelle en diepgaande redenering
   GEMINI_MODEL: process.env.GEMINI_NEWS_MODEL || "gemini-3.8-flash",
   GEMINI_THINKING_LEVEL: process.env.GEMINI_THINKING_LEVEL || "MEDIUM",
-  // Temperatuur: 0.1 voor maximale feitelijkheid, deterministische getallen en nul hallucinaties
   TEMPERATURE: parseFloat(process.env.GEMINI_TEMPERATURE || "0.1"),
   DATABASE_URL: process.env.DATABASE_URL,
   TIMEZONE: process.env.MARKET_NEWS_TIMEZONE || "Europe/Amsterdam",
@@ -16,6 +14,7 @@ export const CONFIG = {
     .map(t => t.trim().toUpperCase())
     .filter(Boolean),
   EDITION_SCHEDULES: {
+    ASIA_OPEN: { hour: 2, minute: 30, label: "Asia Open" },
     MORNING_EUROPE: { hour: 7, minute: 0, label: "Morning Europe" },
     US_OPEN: { hour: 15, minute: 30, label: "US Open" },
     MARKET_CLOSE: { hour: 21, minute: 30, label: "Market Close" }
