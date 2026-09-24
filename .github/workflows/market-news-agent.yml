@@ -1,22 +1,19 @@
-name: Global Markets News Agent Scheduler
+name: Global Markets News Agent Manual Runner
+
+# Production scheduling is handled by the always-on Render service (server.js).
+# Render runs the agent automatically at:
+#   07:00 Europe/Amsterdam  -> MORNING_EUROPE
+#   15:30 Europe/Amsterdam  -> US_OPEN
+#   21:30 Europe/Amsterdam  -> MARKET_CLOSE
+#
+# This workflow intentionally has NO cron schedule, so GitHub Actions cannot
+# create duplicate news editions. It remains available for manual tests/reruns.
 
 on:
-  schedule:
-    # GitHub Actions draait standaard in UTC (Universal Time Coordinated).
-    #
-    # Tijden afgestemd op Europe/Amsterdam (maandag t/m vrijdag):
-    # - Ochtendeditie (07:00 Amsterdam): 05:00 UTC (zomertijd) / 06:00 UTC (wintertijd)
-    # - US Beursopening (15:30 Amsterdam): 13:30 UTC (zomertijd) / 14:30 UTC (wintertijd)
-    # - Beursafsluiting (21:30 Amsterdam): 19:30 UTC (zomertijd) / 20:30 UTC (wintertijd)
-    - cron: '0 5 * * 1-5'    # 07:00 Amsterdam (Ochtend Europa)
-    - cron: '30 13 * * 1-5'  # 15:30 Amsterdam (US Open)
-    - cron: '30 19 * * 1-5'  # 21:30 Amsterdam (Beursafsluiting)
-
-  # Maakt het mogelijk om de agent altijd direct handmatig te testen via de GitHub Actions knop:
   workflow_dispatch:
     inputs:
       edition:
-        description: 'Te draaien editie (kies AUTO voor automatische tijdscorrelatie)'
+        description: 'Te draaien editie'
         required: false
         default: 'AUTO'
         type: choice
@@ -28,7 +25,7 @@ on:
 
 jobs:
   run-agent:
-    name: Execute Market News Agent
+    name: Manual News Agent Run
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -40,10 +37,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'global-markets-agent/package-lock.json'
 
       - name: Install dependencies
         working-directory: global-markets-agent
-        run: npm install
+        run: npm ci
 
       - name: Run Global Markets News Agent
         working-directory: global-markets-agent
@@ -51,7 +50,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_NEWS_MODEL: "gemini-3.8-flash"
           GEMINI_THINKING_LEVEL: "MEDIUM"
-          GEMINI_TEMPERATURE: "0.1"
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MARKET_NEWS_TIMEZONE: "Europe/Amsterdam"
           ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
