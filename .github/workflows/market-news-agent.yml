@@ -43,7 +43,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: global-markets-agent
-        run: npm ci
+        run: npm install
 
       - name: Run Global Markets News Agent
         working-directory: global-markets-agent
