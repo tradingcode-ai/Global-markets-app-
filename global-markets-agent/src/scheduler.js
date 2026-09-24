@@ -5,6 +5,12 @@ import { CONFIG } from "./config.js";
 export function initScheduler() {
   console.log(`[Scheduler] Geactiveerd voor tijdzone ${CONFIG.TIMEZONE}`);
 
+  // 02:30 Amsterdamse tijd (Asia Open) — APAC-specifieke researchcyclus
+  cron.schedule("30 2 * * 1-5", async () => {
+    console.log("[Scheduler] Start 02:30 ASIA_OPEN cyclus...");
+    await executeWithRetry("ASIA_OPEN");
+  }, { timezone: CONFIG.TIMEZONE });
+
   // 07:00 Amsterdamse tijd (Morning Europe)
   cron.schedule("0 7 * * 1-5", async () => {
     console.log("[Scheduler] Start 07:00 MORNING_EUROPE cyclus...");
