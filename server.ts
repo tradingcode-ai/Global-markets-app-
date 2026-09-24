@@ -866,7 +866,7 @@ async function fetchMortgageRateFromFred(): Promise<CachedQuote | null> {
             lastUpdated: new Date().toISOString(),
             isLive: true,
             provider: 'Freddie Mac PMMS (FRED)',
-            sparkline: [rate + 0.08, rate + 0.04, rate + 0.01, rate]
+            sparkline: []
           };
         }
       }
