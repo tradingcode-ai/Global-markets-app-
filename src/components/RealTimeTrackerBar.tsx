@@ -608,7 +608,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                   {/* 52-Week High Indicator Pill with Icon */}
                   {is52WHigh && (
                     <span 
-                      title={`52-Week High: ${sym} (${curSym}${q.price.toFixed(2)}) bereikt 52-weken hoogtepunt (${curSym}${tech?.fiftyTwoWeekHigh.toFixed(2)})`}
+                      title={`52-Week High: ${sym} (${curSym}${q.price.toFixed(2)}) reached a new 52-week high (${curSym}${tech?.fiftyTwoWeekHigh.toFixed(2)})`}
                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[9px] font-bold"
                     >
                       <Sparkles className="w-2.5 h-2.5 text-emerald-700" />
@@ -619,7 +619,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                   {/* 52-Week Low Indicator Pill with Icon */}
                   {is52WLow && (
                     <span 
-                      title={`52-Week Low: ${sym} (${curSym}${q.price.toFixed(2)}) bereikt 52-weken dieptepunt (${curSym}${tech?.fiftyTwoWeekLow.toFixed(2)})`}
+                      title={`52-Week Low: ${sym} (${curSym}${q.price.toFixed(2)}) reached a new 52-week low (${curSym}${tech?.fiftyTwoWeekLow.toFixed(2)})`}
                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 text-[9px] font-bold"
                     >
                       <AlertCircle className="w-2.5 h-2.5 text-rose-700" />

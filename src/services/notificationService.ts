@@ -1,27 +1,55 @@
-import { PushNotificationItem, AlertPreferences } from '../types';
+import { PushNotificationItem, AlertPreferences, NotificationEventType } from '../types';
 
 const STORAGE_KEY_NOTIFS = 'veritas_earnings_push_notifications';
 const STORAGE_KEY_PREFS = 'veritas_earnings_alert_preferences';
+const STORAGE_KEY_FIRED_ALERTS = 'veritas_institutional_fired_alerts_v2';
 
 export const DEFAULT_PREFERENCES: AlertPreferences = {
   browserNotificationsEnabled: false,
   soundEnabled: true,
   subscribedTickers: ['NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'META', 'TSM', 'AVGO', 'ORCL', 'AMD', 'CRM', 'NFLX'],
+  alertOnEarningsBeat: true,
+  alertOnEarningsMiss: true,
+  alertOnSec8K: true,
+  alertOnMomentumUp: true,
+  alertOnMomentumDown: true,
+  alertOnFiftyTwoWeekHighLow: true,
+  // Backwards compatibility defaults
   alertOnRelease: true,
   alertOnMajorSurprise: true,
   alertOnGuidanceChange: true,
   alertOnAiCapex: true,
   reminderBeforeCall: true,
-  alertOnFiftyTwoWeekHighLow: true,
   alertOnFivePercentMove: true,
 };
 
-const SESSION_ALERT_STORAGE_PREFIX = 'veritas_market_session_alerts_';
-
-export function getMarketSessionId(): string {
-  const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
+/**
+ * Returns the current calendar trading day in America/New_York (Eastern Time).
+ * Format: YYYY-MM-DD
+ * This calendar day stays constant across PRE-MARKET, REGULAR, and AFTER-HOURS sessions.
+ */
+export function getTradingDayKey(date: Date = new Date()): string {
   try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(date);
+  } catch {
+    return date.toISOString().split('T')[0];
+  }
+}
+
+/**
+ * Backward compatibility session ID function.
+ * Note: For robust once-per-day deduplication, use getTradingDayKey() or dedupe keys instead.
+ */
+export function getMarketSessionId(): string {
+  const dateStr = getTradingDayKey();
+  try {
+    const now = new Date();
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/New_York',
       hour: 'numeric',
@@ -45,29 +73,55 @@ export function getMarketSessionId(): string {
   }
 }
 
-export function hasAlertFiredInSession(sessionId: string, alertKey: string): boolean {
+/**
+ * Checks whether an alert deduplication key has already been dispatched.
+ * Persisted in localStorage so it survives polling cycles, session changes, and page refreshes.
+ */
+export function hasAlertFired(dedupeKey: string): boolean {
+  if (!dedupeKey) return false;
   try {
-    const raw = sessionStorage.getItem(`${SESSION_ALERT_STORAGE_PREFIX}${sessionId}`);
+    const raw = localStorage.getItem(STORAGE_KEY_FIRED_ALERTS);
     if (!raw) return false;
-    const list: string[] = JSON.parse(raw);
-    return list.includes(alertKey);
+    const map: Record<string, number> = JSON.parse(raw);
+    return Boolean(map[dedupeKey]);
   } catch {
     return false;
   }
 }
 
-export function recordAlertFiredInSession(sessionId: string, alertKey: string): void {
+/**
+ * Records that an alert deduplication key has been fired.
+ * Prunes records older than 14 days to keep storage clean.
+ */
+export function recordAlertFired(dedupeKey: string): void {
+  if (!dedupeKey) return;
   try {
-    const key = `${SESSION_ALERT_STORAGE_PREFIX}${sessionId}`;
-    const raw = sessionStorage.getItem(key);
-    const list: string[] = raw ? JSON.parse(raw) : [];
-    if (!list.includes(alertKey)) {
-      list.push(alertKey);
-      sessionStorage.setItem(key, JSON.stringify(list));
+    const raw = localStorage.getItem(STORAGE_KEY_FIRED_ALERTS);
+    const map: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const now = Date.now();
+    map[dedupeKey] = now;
+
+    const cutoff = now - 14 * 86400 * 1000;
+    for (const key of Object.keys(map)) {
+      if (map[key] < cutoff) {
+        delete map[key];
+      }
     }
+    localStorage.setItem(STORAGE_KEY_FIRED_ALERTS, JSON.stringify(map));
   } catch (e) {
-    console.error('Failed to record session alert', e);
+    console.warn('Failed to record fired alert key', e);
   }
+}
+
+/**
+ * Backward compatibility helpers using persistent store
+ */
+export function hasAlertFiredInSession(sessionId: string, alertKey: string): boolean {
+  return hasAlertFired(`${sessionId}:${alertKey}`);
+}
+
+export function recordAlertFiredInSession(sessionId: string, alertKey: string): void {
+  recordAlertFired(`${sessionId}:${alertKey}`);
 }
 
 // Play discreet corporate audio chime via Web Audio API
@@ -105,7 +159,7 @@ export function playCorporateChime() {
     osc1.stop(ctx.currentTime + 0.4);
     osc2.start(ctx.currentTime + 0.08);
     osc2.stop(ctx.currentTime + 0.48);
-  } catch (err) {
+  } catch {
     // Audio might be blocked until user gesture, ignore silently
   }
 }
@@ -117,7 +171,7 @@ export async function requestBrowserPushPermission(): Promise<NotificationPermis
   try {
     const permission = await Notification.requestPermission();
     return permission;
-  } catch (e) {
+  } catch {
     return 'denied';
   }
 }
@@ -126,7 +180,26 @@ export function getStoredNotifications(): PushNotificationItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_NOTIFS);
     if (raw) {
-      return JSON.parse(raw);
+      const items: PushNotificationItem[] = JSON.parse(raw);
+      return items.map(item => {
+        let type = item.type;
+        // Normalize any legacy types stored before the new taxonomy
+        if (type === ('miss' as any) || type === ('beat' as any)) {
+          if (item.metrics?.priceMove !== undefined) {
+            type = item.metrics.priceMove >= 0 ? 'momentum-up' : 'momentum-down';
+          } else if (item.title?.toLowerCase().includes('momentum') || item.title?.toLowerCase().includes('average') || item.title?.toLowerCase().includes('breakdown')) {
+            type = item.title?.includes('-') || item.body?.includes('-') ? 'momentum-down' : 'momentum-up';
+          } else if (type === ('beat' as any)) {
+            type = 'earnings-beat';
+          } else if (type === ('miss' as any)) {
+            type = 'earnings-miss';
+          }
+        }
+        return {
+          ...item,
+          type
+        };
+      });
     }
   } catch (e) {
     console.error('Failed to parse notifications', e);
@@ -146,7 +219,18 @@ export function getStoredPreferences(): AlertPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFS);
     if (raw) {
-      return { ...DEFAULT_PREFERENCES, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_PREFERENCES,
+        ...parsed,
+        // Map legacy keys to new taxonomy if missing
+        alertOnEarningsBeat: parsed.alertOnEarningsBeat ?? parsed.alertOnRelease ?? true,
+        alertOnEarningsMiss: parsed.alertOnEarningsMiss ?? parsed.alertOnRelease ?? true,
+        alertOnSec8K: parsed.alertOnSec8K ?? parsed.alertOnRelease ?? true,
+        alertOnMomentumUp: parsed.alertOnMomentumUp ?? parsed.alertOnFivePercentMove ?? true,
+        alertOnMomentumDown: parsed.alertOnMomentumDown ?? parsed.alertOnFivePercentMove ?? true,
+        alertOnFiftyTwoWeekHighLow: parsed.alertOnFiftyTwoWeekHighLow ?? true,
+      };
     }
   } catch (e) {
     console.error('Failed to parse preferences', e);
@@ -162,14 +246,37 @@ export function savePreferences(prefs: AlertPreferences) {
   }
 }
 
+/**
+ * Dispatches a push notification with deterministic event ID and strict deduplication.
+ * Returns true if dispatched, false if suppressed as a duplicate.
+ */
 export function dispatchPushNotification(
   item: Omit<PushNotificationItem, 'id' | 'timestamp' | 'read'>,
   prefs: AlertPreferences,
   onNewNotification: (notif: PushNotificationItem) => void
-) {
+): boolean {
+  const tradingDay = item.tradingDate || getTradingDayKey();
+
+  // 1. Strict deduplication check
+  if (item.dedupeKey && hasAlertFired(item.dedupeKey)) {
+    return false; // Suppress duplicate!
+  }
+
+  // 2. Mark as fired in persistent storage
+  if (item.dedupeKey) {
+    recordAlertFired(item.dedupeKey);
+  }
+
+  // 3. Generate deterministic ID (no Math.random)
+  const cleanKey = item.dedupeKey
+    ? item.dedupeKey.toLowerCase().replace(/[^a-z0-9_-]/g, '_')
+    : `${item.ticker.toLowerCase()}_${item.type}_${Date.now()}`;
+  const deterministicId = `notif_${cleanKey}`;
+
   const newNotif: PushNotificationItem = {
     ...item,
-    id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    id: deterministicId,
+    tradingDate: tradingDay,
     timestamp: 'Just now',
     read: false,
   };
@@ -186,10 +293,10 @@ export function dispatchPushNotification(
     prefs.browserNotificationsEnabled
   ) {
     try {
-      new Notification(`[TECH EARNINGS] ${newNotif.title}`, {
+      new Notification(`[GLOBAL MARKETS] ${newNotif.title}`, {
         body: newNotif.body,
         icon: '/favicon.ico',
-        tag: newNotif.ticker,
+        tag: newNotif.dedupeKey || newNotif.ticker,
         silent: !prefs.soundEnabled
       });
     } catch (err) {
@@ -198,4 +305,5 @@ export function dispatchPushNotification(
   }
 
   onNewNotification(newNotif);
+  return true;
 }

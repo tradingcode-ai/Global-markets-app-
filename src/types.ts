@@ -262,6 +262,20 @@ export interface CompanyMeta {
   localCurrency?: string;
 }
 
+export type NotificationEventType =
+  | 'earnings-beat'
+  | 'earnings-miss'
+  | 'momentum-up'
+  | 'momentum-down'
+  | '52w-high'
+  | '52w-low'
+  | 'sec-8k'
+  | 'upcoming'
+  | 'breaking'
+  | 'beat'
+  | 'miss'
+  | 'guidance';
+
 export interface PushNotificationItem {
   id: string;
   ticker: string;
@@ -269,8 +283,11 @@ export interface PushNotificationItem {
   title: string;
   body: string;
   timestamp: string;
-  type: 'beat' | 'miss' | 'guidance' | 'upcoming' | 'breaking';
+  tradingDate?: string;
+  type: NotificationEventType;
   read: boolean;
+  dedupeKey?: string;
+  source?: string;
   metrics?: {
     epsActual?: number;
     epsEstimate?: number;
@@ -278,18 +295,38 @@ export interface PushNotificationItem {
     revenueEstimate?: number;
     priceMove?: number;
   };
+  metadata?: {
+    epsActual?: number;
+    epsEstimate?: number;
+    revenueActual?: number;
+    revenueEstimate?: number;
+    filingAccession?: string;
+    filingUrl?: string;
+    fiscalQuarter?: string;
+    currentPrice?: number;
+    percentageChange?: number;
+    quoteTimestamp?: string;
+    source?: string;
+    guidanceNote?: string;
+  };
 }
 
 export interface AlertPreferences {
   browserNotificationsEnabled: boolean;
   soundEnabled: boolean;
   subscribedTickers: string[]; // empty means all tech
-  alertOnRelease: boolean;
-  alertOnMajorSurprise: boolean; // > 3% EPS beat/miss
-  alertOnGuidanceChange: boolean;
-  alertOnAiCapex: boolean;
-  reminderBeforeCall: boolean;
+  alertOnEarningsBeat: boolean;
+  alertOnEarningsMiss: boolean;
+  alertOnSec8K: boolean;
+  alertOnMomentumUp: boolean; // > +5.0%
+  alertOnMomentumDown: boolean; // < -5.0%
   alertOnFiftyTwoWeekHighLow?: boolean;
+  // Legacy backwards compatibility fields
+  alertOnRelease?: boolean;
+  alertOnMajorSurprise?: boolean;
+  alertOnGuidanceChange?: boolean;
+  alertOnAiCapex?: boolean;
+  reminderBeforeCall?: boolean;
   alertOnFivePercentMove?: boolean;
 }
 
@@ -314,15 +351,20 @@ export interface AiEarningsAnalysis {
 export interface QuarterlyFinancialPoint {
   quarter: string; // e.g. "Q2 '26", etc.
   releaseLabel?: string; // e.g. "jul'2026", "apr'2026", etc.
+  displayLabel?: string; // clean regular calendar date on X-axis, e.g. "jul'2026"
   fiscalDate: string; // e.g. "2026-07-26"
   fiscalYear: number;
   quarterNum: 1 | 2 | 3 | 4;
+  fiscalQuarterLabel?: string; // e.g. "Fiscaal Q2 2027" or "Fiscaal Q3 2026"
+  reportedReleaseDate?: string; // exact date when figures were released e.g. "2026-08-26"
   revenue: number; // in Billions
   freeCashFlow: number; // in Billions
   eps: number; // in $/€
   netIncome: number; // in Billions
   isEstimated?: boolean;
   isPrePublic?: boolean;
+  currency?: string;
+  sourceCurrency?: string;
 }
 
 export type FinancialMetricKey = 'revenue' | 'freeCashFlow' | 'eps' | 'netIncome';
@@ -343,10 +385,19 @@ export interface CompanyFinancialHistory {
 export interface QuarterlyAnalystOutlook {
   bankName: string;
   rating: string;
-  targetPrice?: number;
+  targetPrice?: number | string;
+  targetPriceNumeric?: number;
   previousTargetPrice?: number;
   currency?: string;
   asOfDate?: string;
+  logoColor?: string;
+  lastUpdated?: string;
+  timeHorizon?: string;
+  nextQuarterEpsEst?: string;
+  nextQuarterRevEst?: string;
+  thesis?: string;
+  catalysts?: string[];
+  provider?: string;
 }
 
 export interface QuarterlyConsensusSnapshot {
@@ -377,7 +428,7 @@ export interface QuarterlyConsensusSnapshot {
   yearAgoEps?: number;
   yearAgoRevenue?: number;
   analystsCount?: number;
-  outlooks: QuarterlyAnalystOutlook[];
+  outlooks: (QuarterlyAnalystOutlook | EquityBankOutlook)[];
   provider?: string;
   monthlyRevisionDate?: string;
   twelveMonthHorizon?: string;
@@ -386,6 +437,7 @@ export interface QuarterlyConsensusSnapshot {
   originalCurrency?: string;
   conversionNote?: string;
   revenueIsAnalystConsensus?: boolean;
+  isLiveFeed?: boolean;
 }
 
 export interface EarningsConsensusData {

@@ -25,29 +25,25 @@ import {
   Table as TableIcon,
   ChevronDown,
   ChevronUp,
-  Info
+  Info,
+  MousePointerClick,
+  FileText
 } from 'lucide-react';
 import { CompanyFinancialHistory, QuarterlyFinancialPoint, FinancialMetricKey } from '../types';
 import { getCurrencySymbol } from '../utils/formatters';
+import {
+  isSameFiscalQuarter,
+  getOfficialFiscalQuarterLabel,
+  getOfficialReportedReleaseDate,
+  formatQuarterReleaseLabel,
+  formatDutchDate,
+  formatDutchShortDate
+} from '../utils/fiscalUtils';
 
 interface FinancialHistoryChartProps {
   ticker: string;
   companyName?: string;
   currency?: string;
-}
-
-const DUTCH_MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
-
-function formatReleaseDateToMonthYear(fiscalDateStr?: string, existingReleaseLabel?: string): string {
-  if (existingReleaseLabel && !existingReleaseLabel.toLowerCase().includes('q') && existingReleaseLabel.includes("'")) {
-    return existingReleaseLabel.toLowerCase();
-  }
-  if (!fiscalDateStr) return existingReleaseLabel || '';
-  const d = new Date(fiscalDateStr);
-  if (isNaN(d.getTime())) return existingReleaseLabel || fiscalDateStr;
-  const month = DUTCH_MONTH_SHORT[d.getUTCMonth()];
-  const year = d.getUTCFullYear();
-  return `${month}'${year}`;
 }
 
 export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
@@ -66,6 +62,8 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showTable, setShowTable] = useState<boolean>(false);
+  // Interactive selected quarter clicked by the user
+  const [selectedQuarter, setSelectedQuarter] = useState<QuarterlyFinancialPoint | null>(null);
 
   // Fetch financial history
   const fetchFinancials = async (force: boolean = false) => {
@@ -89,27 +87,84 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
 
   useEffect(() => {
     if (ticker) {
+      setSelectedQuarter(null);
       fetchFinancials(false);
     }
   }, [ticker]);
 
-  // Filter quarters based on time range
-  // Original array is chronological (earliest -> newest)
+  // Robust deduplication and time range slicing:
+  // Ensures strictly ONE bar per quarter on the X-axis with standard calendar dates (e.g. jul'2026),
+  // while attaching the company's official fiscal quarter label and exact earnings disclosure date.
   const filteredQuarters = useMemo(() => {
     if (!data || !data.quarters) return [];
-    const total = data.quarters.length;
+
+    const deduped: QuarterlyFinancialPoint[] = [];
+    for (const rawQ of data.quarters) {
+      const displayLabel = rawQ.displayLabel || formatQuarterReleaseLabel(rawQ.fiscalDate, rawQ.releaseLabel || rawQ.quarter);
+      const fiscalQuarterLabel = rawQ.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(
+        ticker,
+        rawQ.fiscalDate,
+        rawQ.quarter,
+        rawQ.fiscalYear,
+        rawQ.quarterNum
+      );
+      const reportedReleaseDate = rawQ.reportedReleaseDate || getOfficialReportedReleaseDate(ticker, rawQ.fiscalDate);
+
+      const q: QuarterlyFinancialPoint = {
+        ...rawQ,
+        displayLabel,
+        releaseLabel: displayLabel,
+        fiscalQuarterLabel,
+        reportedReleaseDate
+      };
+
+      // Check if an existing quarter in our deduped list represents the same quarterly report
+      const existingIdx = deduped.findIndex(item => 
+        (item.fiscalDate && q.fiscalDate && isSameFiscalQuarter(item.fiscalDate, q.fiscalDate)) ||
+        (item.displayLabel && q.displayLabel && item.displayLabel === q.displayLabel)
+      );
+
+      if (existingIdx >= 0) {
+        const cur = deduped[existingIdx];
+        deduped[existingIdx] = {
+          ...cur,
+          ...q,
+          // Preserve non-zero verified numbers
+          revenue: (q.revenue && q.revenue > 0) ? q.revenue : cur.revenue,
+          freeCashFlow: (q.freeCashFlow && q.freeCashFlow !== 0) ? q.freeCashFlow : cur.freeCashFlow,
+          netIncome: (q.netIncome && q.netIncome !== 0) ? q.netIncome : cur.netIncome,
+          eps: (q.eps !== undefined && q.eps !== null && q.eps !== 0) ? q.eps : cur.eps,
+          fiscalQuarterLabel: cur.fiscalQuarterLabel || q.fiscalQuarterLabel,
+          reportedReleaseDate: cur.reportedReleaseDate || q.reportedReleaseDate,
+          displayLabel: cur.displayLabel || q.displayLabel,
+          releaseLabel: cur.releaseLabel || q.releaseLabel
+        };
+      } else {
+        deduped.push(q);
+      }
+    }
+
+    const total = deduped.length;
     let sliceCount = 20; // 5 years = 20 quarters
     if (timeRange === '3Y') sliceCount = 12;
     if (timeRange === '1Y') sliceCount = 4;
-    return data.quarters.slice(Math.max(0, total - sliceCount)).map(q => {
-      const displayLabel = formatReleaseDateToMonthYear(q.fiscalDate, q.releaseLabel);
-      return {
-        ...q,
-        displayLabel,
-        releaseLabel: displayLabel
-      };
-    });
-  }, [data, timeRange]);
+    return deduped.slice(Math.max(0, total - sliceCount));
+  }, [data, timeRange, ticker]);
+
+  // Set default selected quarter to the latest public quarter if none is selected yet
+  useEffect(() => {
+    if (filteredQuarters.length > 0) {
+      const publicQ = filteredQuarters.filter(q => !q.isPrePublic);
+      const latest = publicQ.length > 0 ? publicQ[publicQ.length - 1] : filteredQuarters[filteredQuarters.length - 1];
+      
+      // Update selectedQuarter if not set or if current selected quarter is not in the filtered quarters
+      setSelectedQuarter(prev => {
+        if (!prev) return latest;
+        const stillInList = filteredQuarters.find(q => q.fiscalDate === prev.fiscalDate || q.displayLabel === prev.displayLabel);
+        return stillInList || latest;
+      });
+    }
+  }, [filteredQuarters]);
 
   // Metric configuration
   const displayCurrency = data?.currency ? getCurrencySymbol(data.currency) : currency;
@@ -298,7 +353,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
 
       {data?.publicFinancialStartDate && (
         <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-2">
-          <strong className="text-slate-700">Publieke historie:</strong> financiële kwartaaldata start bij {formatReleaseDateToMonthYear(data.publicFinancialStartDate)}. Periodes vóór de eerste publieke kwartaalcijfers staan in de grafiek bewust op 0 en worden niet meegenomen in gemiddelden of YoY-berekeningen.
+          <strong className="text-slate-700">Publieke historie:</strong> financiële kwartaaldata start bij {formatQuarterReleaseLabel(data.publicFinancialStartDate)}. Periodes vóór de eerste publieke kwartaalcijfers staan in de grafiek bewust op 0 en worden niet meegenomen in gemiddelden of YoY-berekeningen.
         </div>
       )}
 
@@ -392,6 +447,106 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
         </div>
       )}
 
+      {/* USER REQUIREMENT:
+          "als ik op de staaf klik dat ik dan in het kaartje te zien krijg bijvoorbeeld fiscaal q2 2027 als dat het geval maar dan wel de precieze datum er naast van wanneer de kwartaalcijfers waren uitgekomen"
+          -> Interactive Selected Quarter Detail Card ("kaartje") pinned on click/selection */}
+      {selectedQuarter && (
+        <div className="bg-slate-900 text-white rounded-xl p-3.5 sm:p-4 shadow-md border border-slate-800 transition-all animate-in fade-in">
+          {/* Top row: Official Fiscal Quarter & Official Disclosure/Release Date directly next to it */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-800">
+            <div className="flex items-center flex-wrap gap-2">
+              {/* Fiscal Quarter Badge (e.g. "Fiscaal Q2 2027") */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/30 text-blue-300 font-bold text-xs border border-blue-500/40 font-mono-code shadow-xs">
+                <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                <span>
+                  {selectedQuarter.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(
+                    ticker,
+                    selectedQuarter.fiscalDate,
+                    selectedQuarter.quarter,
+                    selectedQuarter.fiscalYear,
+                    selectedQuarter.quarterNum
+                  )}
+                </span>
+              </div>
+
+              {/* Exact Earnings Release Date directly next to it */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold text-xs border border-emerald-500/30 font-mono-code">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>
+                  Cijfers uitgekomen: <strong>{formatDutchDate(selectedQuarter.reportedReleaseDate || getOfficialReportedReleaseDate(ticker, selectedQuarter.fiscalDate))}</strong>
+                </span>
+              </div>
+
+              {/* Fiscal Period End Date */}
+              <span className="text-[11px] text-slate-400 font-mono-code">
+                (Boekperiode eindigde: {formatDutchShortDate(selectedQuarter.fiscalDate)})
+              </span>
+            </div>
+
+            {/* X-Axis standard date identifier */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400 font-mono-code">
+                X-as staaf: <strong className="text-white font-bold">{selectedQuarter.releaseLabel || selectedQuarter.displayLabel}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800/80">
+                Geselecteerd
+              </span>
+            </div>
+          </div>
+
+          {/* Core financial metrics for this selected quarter */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3">
+            <div className="bg-slate-800/70 rounded-lg p-2.5 border border-slate-700/60">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                Omzet (Revenue)
+              </span>
+              <div className="text-base font-bold font-mono-code text-blue-400 mt-0.5">
+                {displayCurrency}{selectedQuarter.revenue.toFixed(2)}B
+              </div>
+            </div>
+
+            <div className="bg-slate-800/70 rounded-lg p-2.5 border border-slate-700/60">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                Free Cash Flow
+              </span>
+              <div className="text-base font-bold font-mono-code text-emerald-400 mt-0.5">
+                {displayCurrency}{selectedQuarter.freeCashFlow.toFixed(2)}B
+              </div>
+            </div>
+
+            <div className="bg-slate-800/70 rounded-lg p-2.5 border border-slate-700/60">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                EPS (Winst / Aandeel)
+              </span>
+              <div className="text-base font-bold font-mono-code text-amber-400 mt-0.5">
+                {displayCurrency}{selectedQuarter.eps.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="bg-slate-800/70 rounded-lg p-2.5 border border-slate-700/60">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                Netto Winst
+              </span>
+              <div className={`text-base font-bold font-mono-code mt-0.5 ${
+                selectedQuarter.netIncome >= 0 ? 'text-purple-300' : 'text-rose-400'
+              }`}>
+                {displayCurrency}{selectedQuarter.netIncome.toFixed(2)}B
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2.5 text-[10px] text-slate-400 flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
+            <span className="flex items-center gap-1 text-slate-300">
+              <MousePointerClick className="w-3 h-3 text-blue-400" />
+              <span>Klik op een andere staaf in de grafiek om direct de officiële fiscale periode en precieze publicatiedatum van dat kwartaal te zien.</span>
+            </span>
+            {selectedQuarter.isPrePublic && (
+              <span className="text-amber-400 font-semibold font-mono-code">Vóór officiële beursnotering</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Single Chart Area (Max 5 years of quarters) */}
       <div className="relative pt-2">
         <div className="flex items-center justify-between mb-2">
@@ -439,7 +594,16 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               {chartType === 'bar' ? (
-                <BarChart data={filteredQuarters} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>
+                <BarChart 
+                  data={filteredQuarters} 
+                  margin={{ top: 10, right: 10, left: -10, bottom: 20 }}
+                  onClick={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      const item = state.activePayload[0].payload;
+                      if (item) setSelectedQuarter(item);
+                    }
+                  }}
+                >
                   <defs>
                     <linearGradient id="metricGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={activeConfig.color} stopOpacity={0.9} />
@@ -464,28 +628,47 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
                     tickFormatter={(val) => activeMetric === 'eps' ? `${currency}${val}` : `${currency}${val}B`}
                   />
                   <Tooltip 
-                    content={<CustomFinancialTooltip activeConfig={activeConfig} currency={currency} />} 
+                    content={<CustomFinancialTooltip activeConfig={activeConfig} currency={currency} ticker={ticker} />} 
                   />
                   <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
                   <Bar 
                     dataKey={activeMetric} 
                     radius={[4, 4, 0, 0]}
                     maxBarSize={36}
+                    cursor="pointer"
+                    onClick={(entry: any) => {
+                      const q = entry?.payload || entry;
+                      if (q) setSelectedQuarter(q);
+                    }}
                   >
                     {filteredQuarters.map((entry, index) => {
                       const val = entry[activeMetric];
                       const isNegative = val < 0;
+                      const isSelected = selectedQuarter?.fiscalDate === entry.fiscalDate || 
+                        (selectedQuarter?.displayLabel === entry.displayLabel && Boolean(entry.displayLabel));
                       return (
                         <Cell 
                           key={`cell-${index}`} 
                           fill={isNegative ? 'url(#negativeGradient)' : 'url(#metricGradient)'} 
+                          stroke={isSelected ? '#1e293b' : 'none'}
+                          strokeWidth={isSelected ? 2.5 : 0}
+                          className="transition-all hover:opacity-85 cursor-pointer"
                         />
                       );
                     })}
                   </Bar>
                 </BarChart>
               ) : (
-                <AreaChart data={filteredQuarters} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>
+                <AreaChart 
+                  data={filteredQuarters} 
+                  margin={{ top: 10, right: 10, left: -10, bottom: 20 }}
+                  onClick={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      const item = state.activePayload[0].payload;
+                      if (item) setSelectedQuarter(item);
+                    }
+                  }}
+                >
                   <defs>
                     <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={activeConfig.color} stopOpacity={0.4} />
@@ -506,7 +689,7 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
                     tickFormatter={(val) => activeMetric === 'eps' ? `${currency}${val}` : `${currency}${val}B`}
                   />
                   <Tooltip 
-                    content={<CustomFinancialTooltip activeConfig={activeConfig} currency={currency} />} 
+                    content={<CustomFinancialTooltip activeConfig={activeConfig} currency={currency} ticker={ticker} />} 
                   />
                   <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
                   <Area 
@@ -516,8 +699,15 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
                     strokeWidth={2.5}
                     fillOpacity={1} 
                     fill="url(#areaGradient)" 
-                    dot={{ r: 3, fill: activeConfig.color, strokeWidth: 1, stroke: '#fff' }}
-                    activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
+                    dot={{ r: 3, fill: activeConfig.color, strokeWidth: 1, stroke: '#fff', cursor: 'pointer' }}
+                    activeDot={{ 
+                      r: 6, 
+                      strokeWidth: 2.5, 
+                      stroke: '#fff',
+                      onClick: (_e: any, payload: any) => {
+                        if (payload?.payload) setSelectedQuarter(payload.payload);
+                      }
+                    }}
                   />
                 </AreaChart>
               )}
@@ -577,21 +767,46 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
 };
 
 // Custom interactive Tooltip for the chart
-const CustomFinancialTooltip = ({ active, payload, label, activeConfig, currency }: any) => {
+const CustomFinancialTooltip = ({ active, payload, label, activeConfig, currency, ticker }: any) => {
   if (active && payload && payload.length) {
     const dataPoint: QuarterlyFinancialPoint = payload[0].payload;
     const value = payload[0].value;
     const isNegative = value < 0;
 
+    const fiscalLabel = dataPoint.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(
+      ticker,
+      dataPoint.fiscalDate,
+      dataPoint.quarter,
+      dataPoint.fiscalYear,
+      dataPoint.quarterNum
+    );
+    const releaseDate = dataPoint.reportedReleaseDate || getOfficialReportedReleaseDate(ticker, dataPoint.fiscalDate);
+
     return (
-      <div className="bg-slate-900 text-white rounded-xl p-3 shadow-xl border border-slate-800 text-xs font-mono-code min-w-[170px] z-50">
-        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800">
-          <span className="font-bold text-slate-200">{dataPoint.releaseLabel || dataPoint.quarter}</span>
-          <span className="text-[10px] text-slate-400">{dataPoint.fiscalDate}</span>
+      <div className="bg-slate-900 text-white rounded-xl p-3 shadow-xl border border-slate-800 text-xs font-mono-code min-w-[210px] z-50">
+        <div className="flex flex-col gap-1 pb-2 mb-2 border-b border-slate-800">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-blue-400 bg-blue-950/90 px-2 py-0.5 rounded text-[11px] border border-blue-800/80">
+              {fiscalLabel}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              X-as: {dataPoint.releaseLabel || dataPoint.displayLabel}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-emerald-400 pt-0.5">
+            <span className="text-slate-400 text-[10px]">Cijfers uitgekomen:</span>
+            <span className="font-bold">{formatDutchShortDate(releaseDate)}</span>
+          </div>
+
+          <div className="flex items-center justify-between text-[10px] text-slate-400">
+            <span>Boekperiode eind:</span>
+            <span>{formatDutchShortDate(dataPoint.fiscalDate)}</span>
+          </div>
         </div>
 
         {dataPoint.isPrePublic && (
-          <div className="text-[10px] text-slate-400 mb-2">Voor beursnotering / geen publieke kwartaalcijfers</div>
+          <div className="text-[10px] text-amber-400 mb-2">Voor beursnotering / geen publieke kwartaalcijfers</div>
         )}
 
         <div className="space-y-1">
@@ -620,6 +835,10 @@ const CustomFinancialTooltip = ({ active, payload, label, activeConfig, currency
               <span>Netto Winst:</span>
               <span className="text-slate-300 font-semibold">{currency}{dataPoint.netIncome.toFixed(2)}B</span>
             </div>
+          </div>
+
+          <div className="text-[9px] text-slate-400 pt-1.5 text-center border-t border-slate-800/60">
+            Klik op staaf om kaartje vast te zetten
           </div>
         </div>
       </div>

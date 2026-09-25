@@ -10,6 +10,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { TECH_COMPANIES } from '../data/earningsData';
+import MomentumIcon from './MomentumIcon';
 
 interface AlertSettingsModalProps {
   preferences: AlertPreferences;
@@ -157,104 +158,137 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
           {/* 3. Notification Triggers & Filter Rules */}
           <div>
             <h4 className="font-bold text-slate-800 uppercase text-[11px] tracking-wider mb-2 font-mono-code">
-              Automated Push Trigger Rules
+              Verified Alert Rules & Triggers
             </h4>
-            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
-              <label className="flex items-center justify-between cursor-pointer py-1">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">Initial 8-K Release</span>
-                  <span className="text-[11px] text-slate-500">Push within 30s of official SEC filing disclosure</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={preferences.alertOnRelease}
-                  onChange={(e) => onUpdatePreferences({
-                    ...preferences,
-                    alertOnRelease: e.target.checked
-                  })}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
-                />
-              </label>
 
-              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">Significant Consensus Surprise</span>
-                  <span className="text-[11px] text-slate-500">Fires when actual EPS deviates &gt; 3.0% from street consensus</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={preferences.alertOnMajorSurprise}
-                  onChange={(e) => onUpdatePreferences({
-                    ...preferences,
-                    alertOnMajorSurprise: e.target.checked
-                  })}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
-                />
-              </label>
+            {/* Earnings Category */}
+            <div className="mb-3">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">
+                A. Verified Corporate Earnings Results
+              </div>
+              <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <label className="flex items-center justify-between cursor-pointer py-1">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">Earnings Beat</span>
+                    <span className="text-[11px] text-slate-500">Only on reported quarterly results that beat analyst consensus</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.alertOnEarningsBeat}
+                    onChange={(e) => onUpdatePreferences({
+                      ...preferences,
+                      alertOnEarningsBeat: e.target.checked
+                    })}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
+                  />
+                </label>
 
-              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">Forward Guidance Alteration</span>
-                  <span className="text-[11px] text-slate-500">Immediate alert when management raises or lowers guidance</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={preferences.alertOnGuidanceChange}
-                  onChange={(e) => onUpdatePreferences({
-                    ...preferences,
-                    alertOnGuidanceChange: e.target.checked
-                  })}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
-                />
-              </label>
+                <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">Earnings Miss</span>
+                    <span className="text-[11px] text-slate-500">Only on reported quarterly results that miss analyst consensus</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.alertOnEarningsMiss}
+                    onChange={(e) => onUpdatePreferences({
+                      ...preferences,
+                      alertOnEarningsMiss: e.target.checked
+                    })}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
+                  />
+                </label>
 
-              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">AI Infrastructure & CapEx Surges</span>
-                  <span className="text-[11px] text-slate-500">Highlights hyperscaler GPU capex increases</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={preferences.alertOnAiCapex}
-                  onChange={(e) => onUpdatePreferences({
-                    ...preferences,
-                    alertOnAiCapex: e.target.checked
-                  })}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
-                />
-              </label>
+                <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">Official SEC Form 8-K Filings</span>
+                    <span className="text-[11px] text-slate-500">Verified SEC EDGAR Item 2.02 earnings releases and material filings</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.alertOnSec8K}
+                    onChange={(e) => onUpdatePreferences({
+                      ...preferences,
+                      alertOnSec8K: e.target.checked
+                    })}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
 
-              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">52-Week High & Low Alerts</span>
-                  <span className="text-[11px] text-slate-500">Notificatie 1x per marktsessie bij nieuw 52-weken hoogte- of dieptepunt</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={preferences.alertOnFiftyTwoWeekHighLow ?? true}
-                  onChange={(e) => onUpdatePreferences({
-                    ...preferences,
-                    alertOnFiftyTwoWeekHighLow: e.target.checked
-                  })}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
-                />
-              </label>
+            {/* Market Momentum Category */}
+            <div className="mb-3">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">
+                B. Market & Price Momentum (Tiered Thresholds: 1x per threshold per day)
+              </div>
+              <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <label className="flex items-center justify-between cursor-pointer py-1">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                      <MomentumIcon direction="up" size={16} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-800 block">Momentum Up (+5.0%, then every +2.5%)</span>
+                      <span className="text-[11px] text-slate-500">Triggers 1x per threshold (+5.0%, +7.5%, +10.0%, +12.5%, etc.) per trading day for active equities</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.alertOnMomentumUp}
+                    onChange={(e) => onUpdatePreferences({
+                      ...preferences,
+                      alertOnMomentumUp: e.target.checked
+                    })}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer ml-3"
+                  />
+                </label>
 
-              <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">Grote Koersbeweging (&gt; 5%)</span>
-                  <span className="text-[11px] text-slate-500">Notificatie 1x per marktsessie wanneer een aandeel of asset &gt; 5% beweegt</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={preferences.alertOnFivePercentMove ?? true}
-                  onChange={(e) => onUpdatePreferences({
-                    ...preferences,
-                    alertOnFivePercentMove: e.target.checked
-                  })}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
-                />
-              </label>
+                <label className="flex items-center justify-between cursor-pointer py-1.5 border-t border-slate-200">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-300 text-rose-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                      <MomentumIcon direction="down" size={16} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-800 block">Momentum Down (-5.0%, then every -2.5%)</span>
+                      <span className="text-[11px] text-slate-500">Triggers 1x per threshold (-5.0%, -7.5%, -10.0%, -12.5%, etc.) per trading day for active equities</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.alertOnMomentumDown}
+                    onChange={(e) => onUpdatePreferences({
+                      ...preferences,
+                      alertOnMomentumDown: e.target.checked
+                    })}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer ml-3"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Technical Category */}
+            <div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">
+                C. Technical Price Extremes
+              </div>
+              <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <label className="flex items-center justify-between cursor-pointer py-1">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">52-Week High & Low Alerts</span>
+                    <span className="text-[11px] text-slate-500">New 52-week high or low reached (max 1x per trading day per ticker)</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.alertOnFiftyTwoWeekHighLow ?? true}
+                    onChange={(e) => onUpdatePreferences({
+                      ...preferences,
+                      alertOnFiftyTwoWeekHighLow: e.target.checked
+                    })}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-0 h-4 w-4 cursor-pointer"
+                  />
+                </label>
+              </div>
             </div>
           </div>
 

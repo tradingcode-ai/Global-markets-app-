@@ -3,6 +3,7 @@ import {
   QuarterlyResult, 
   AlertPreferences, 
   PushNotificationItem,
+  NotificationEventType,
   LiveQuote
 } from './types';
 import { 
@@ -26,9 +27,9 @@ import {
   requestBrowserPushPermission, 
   dispatchPushNotification, 
   playCorporateChime,
-  getMarketSessionId,
-  hasAlertFiredInSession,
-  recordAlertFiredInSession
+  getTradingDayKey,
+  hasAlertFired,
+  recordAlertFired
 } from './services/notificationService';
 import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar, fetchQuarterlyAnalystOutlook } from './services/marketDataService';
 import { CorporateHeader } from './components/CorporateHeader';
@@ -186,12 +187,17 @@ export default function App() {
   }, []);
 
   // Check Market Session Technical & Momentum Alerts (52-week high/low, > 5% movement)
-  // Ensures alerts fire at most once per market session per asset
+  // Ensures alerts fire at most once per calendar trading day per asset/event direction
   const checkMarketSessionAlerts = useCallback((liveData: Record<string, LiveQuote>) => {
-    const sessionId = getMarketSessionId();
+    const tradingDay = getTradingDayKey();
 
     for (const [sym, quote] of Object.entries(liveData)) {
       if (!quote || typeof quote.price !== 'number' || quote.price <= 0) continue;
+
+      // Filter by subscribed tickers if configured
+      if (preferences.subscribedTickers.length > 0 && !preferences.subscribedTickers.includes(sym)) {
+        continue;
+      }
 
       // Resolve company or asset name
       const companyName = 
@@ -208,20 +214,26 @@ export default function App() {
       // Technical 52W High & Low Metrics
       const tech = getStockTechnicalMetrics(sym, quote.price, quote);
 
-      // 1. 52-Week High Alert
+      // 1. 52-Week High Alert (Strictly 52w-high, NEVER beat)
       if (tech.is52WeekHigh && (preferences.alertOnFiftyTwoWeekHighLow ?? true)) {
-        const alertKey = `${sym}_52W_HIGH`;
-        if (!hasAlertFiredInSession(sessionId, alertKey)) {
-          recordAlertFiredInSession(sessionId, alertKey);
+        const dedupeKey = `52W_HIGH:${sym}:${tradingDay}`;
+        if (!hasAlertFired(dedupeKey)) {
           dispatchPushNotification(
             {
               ticker: sym,
               companyName,
-              title: `52-WEEK HIGH: ${sym} bereikt nieuw 52-weken hoogtepunt`,
-              body: `${companyName} (${sym}) heeft een nieuw 52-weken hoogtepunt bereikt op ${curSym}${quote.price.toFixed(2)} (Range: ${curSym}${tech.fiftyTwoWeekLow.toFixed(2)} - ${curSym}${tech.fiftyTwoWeekHigh.toFixed(2)}).`,
-              type: 'beat',
+              title: `${sym} — 52-Week High (${curSym}${quote.price.toFixed(2)})`,
+              body: `${companyName} (${sym}) reached a new 52-week high of ${curSym}${quote.price.toFixed(2)} (Range: ${curSym}${tech.fiftyTwoWeekLow.toFixed(2)} - ${curSym}${tech.fiftyTwoWeekHigh.toFixed(2)}).`,
+              type: '52w-high',
+              dedupeKey,
+              tradingDate: tradingDay,
               metrics: {
                 priceMove: quote.changePercent
+              },
+              metadata: {
+                currentPrice: quote.price,
+                percentageChange: quote.changePercent,
+                source: quote.provider || 'Live Market Feed'
               }
             },
             preferences,
@@ -237,20 +249,26 @@ export default function App() {
         }
       }
 
-      // 2. 52-Week Low Alert
+      // 2. 52-Week Low Alert (Strictly 52w-low, NEVER miss)
       if (tech.is52WeekLow && (preferences.alertOnFiftyTwoWeekHighLow ?? true)) {
-        const alertKey = `${sym}_52W_LOW`;
-        if (!hasAlertFiredInSession(sessionId, alertKey)) {
-          recordAlertFiredInSession(sessionId, alertKey);
+        const dedupeKey = `52W_LOW:${sym}:${tradingDay}`;
+        if (!hasAlertFired(dedupeKey)) {
           dispatchPushNotification(
             {
               ticker: sym,
               companyName,
-              title: `52-WEEK LOW: ${sym} bereikt nieuw 52-weken dieptepunt`,
-              body: `${companyName} (${sym}) heeft een nieuw 52-weken dieptepunt geraakt op ${curSym}${quote.price.toFixed(2)} (Range: ${curSym}${tech.fiftyTwoWeekLow.toFixed(2)} - ${curSym}${tech.fiftyTwoWeekHigh.toFixed(2)}).`,
-              type: 'miss',
+              title: `${sym} — 52-Week Low (${curSym}${quote.price.toFixed(2)})`,
+              body: `${companyName} (${sym}) reached a new 52-week low of ${curSym}${quote.price.toFixed(2)} (Range: ${curSym}${tech.fiftyTwoWeekLow.toFixed(2)} - ${curSym}${tech.fiftyTwoWeekHigh.toFixed(2)}).`,
+              type: '52w-low',
+              dedupeKey,
+              tradingDate: tradingDay,
               metrics: {
                 priceMove: quote.changePercent
+              },
+              metadata: {
+                currentPrice: quote.price,
+                percentageChange: quote.changePercent,
+                source: quote.provider || 'Live Market Feed'
               }
             },
             preferences,
@@ -266,35 +284,144 @@ export default function App() {
         }
       }
 
-      // 3. Volatility / Momentum > 5% Alert (Fires at most once per session)
-      if (Math.abs(quote.changePercent) >= 5.0 && (preferences.alertOnFivePercentMove ?? true)) {
-        const alertKey = `${sym}_5PCT_MOVE`;
-        if (!hasAlertFiredInSession(sessionId, alertKey)) {
-          recordAlertFiredInSession(sessionId, alertKey);
-          const isUp = quote.changePercent >= 0;
-          dispatchPushNotification(
-            {
-              ticker: sym,
-              companyName,
-              title: `${isUp ? 'MOMENTUM STIJGING (+5%)' : 'SCHERPE DALING (-5%)'}: ${sym} ${isUp ? '+' : ''}${quote.changePercent.toFixed(2)}%`,
-              body: `${companyName} (${sym}) noteert een sterke sessiebeweging van ${isUp ? '+' : ''}${quote.changePercent.toFixed(2)}% op ${curSym}${quote.price.toFixed(2)}.`,
-              type: isUp ? 'beat' : 'miss',
-              metrics: {
-                priceMove: quote.changePercent
-              }
-            },
-            preferences,
-            (newNotif) => {
-              setNotifications(prev => {
-                const next = [newNotif, ...prev];
-                saveNotifications(next);
-                return next;
-              });
-              setActiveToast(newNotif);
+      // 3. Multi-tier Momentum Up: starts at +5.0%, then every +2.5% (+7.5%, +10.0%, +12.5%, etc.)
+      const MOMENTUM_UP_THRESHOLDS = [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25.0, 27.5, 30.0, 35.0, 40.0, 50.0];
+      if (quote.changePercent >= 5.0 && (preferences.alertOnMomentumUp ?? preferences.alertOnFivePercentMove ?? true)) {
+        for (const threshold of MOMENTUM_UP_THRESHOLDS) {
+          if (quote.changePercent >= threshold) {
+            const dedupeKey = `MOMENTUM_UP:${sym}:+${threshold.toFixed(1)}%:${tradingDay}`;
+            if (!hasAlertFired(dedupeKey)) {
+              dispatchPushNotification(
+                {
+                  ticker: sym,
+                  companyName,
+                  title: `${sym} — Momentum Up (+${quote.changePercent.toFixed(2)}%)`,
+                  body: `${companyName} (${sym}) crossed the +${threshold.toFixed(1)}% threshold with an active price of ${curSym}${quote.price.toFixed(2)} (+${quote.changePercent.toFixed(2)}%).`,
+                  type: 'momentum-up',
+                  dedupeKey,
+                  tradingDate: tradingDay,
+                  metrics: {
+                    priceMove: quote.changePercent
+                  },
+                  metadata: {
+                    currentPrice: quote.price,
+                    percentageChange: quote.changePercent,
+                    source: quote.provider || 'Live Market Feed'
+                  }
+                },
+                preferences,
+                (newNotif) => {
+                  setNotifications(prev => {
+                    const next = [newNotif, ...prev];
+                    saveNotifications(next);
+                    return next;
+                  });
+                  setActiveToast(newNotif);
+                }
+              );
             }
-          );
+          }
         }
       }
+
+      // 4. Multi-tier Momentum Down: starts at -5.0%, then every -2.5% (-7.5%, -10.0%, -12.5%, etc.)
+      const MOMENTUM_DOWN_THRESHOLDS = [-5.0, -7.5, -10.0, -12.5, -15.0, -17.5, -20.0, -22.5, -25.0, -27.5, -30.0, -35.0, -40.0, -50.0];
+      if (quote.changePercent <= -5.0 && (preferences.alertOnMomentumDown ?? preferences.alertOnFivePercentMove ?? true)) {
+        for (const threshold of MOMENTUM_DOWN_THRESHOLDS) {
+          if (quote.changePercent <= threshold) {
+            const dedupeKey = `MOMENTUM_DOWN:${sym}:${threshold.toFixed(1)}%:${tradingDay}`;
+            if (!hasAlertFired(dedupeKey)) {
+              dispatchPushNotification(
+                {
+                  ticker: sym,
+                  companyName,
+                  title: `${sym} — Momentum Down (${quote.changePercent.toFixed(2)}%)`,
+                  body: `${companyName} (${sym}) fell through the ${threshold.toFixed(1)}% threshold with an active price of ${curSym}${quote.price.toFixed(2)} (${quote.changePercent.toFixed(2)}%).`,
+                  type: 'momentum-down',
+                  dedupeKey,
+                  tradingDate: tradingDay,
+                  metrics: {
+                    priceMove: quote.changePercent
+                  },
+                  metadata: {
+                    currentPrice: quote.price,
+                    percentageChange: quote.changePercent,
+                    source: quote.provider || 'Live Market Feed'
+                  }
+                },
+                preferences,
+                (newNotif) => {
+                  setNotifications(prev => {
+                    const next = [newNotif, ...prev];
+                    saveNotifications(next);
+                    return next;
+                  });
+                  setActiveToast(newNotif);
+                }
+              );
+            }
+          }
+        }
+      }
+    }
+  }, [preferences]);
+
+  // Sync real-time SEC EDGAR 8-K Regulatory Filings Pipeline
+  const loadSec8kFilings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sec-8k-filings');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success || !Array.isArray(json.filings)) return;
+
+      for (const filing of json.filings) {
+        if (preferences.subscribedTickers.length > 0 && !preferences.subscribedTickers.includes(filing.ticker)) {
+          continue;
+        }
+
+        // Filter based on preferences
+        if (filing.classification === 'earnings-beat' && !(preferences.alertOnEarningsBeat ?? true)) continue;
+        if (filing.classification === 'earnings-miss' && !(preferences.alertOnEarningsMiss ?? true)) continue;
+        if (filing.classification === 'sec-8k' && !(preferences.alertOnSec8K ?? true)) continue;
+
+        const dedupeKey = filing.id; // e.g. SEC_8K:NVDA:0001045810-26-000078
+        if (hasAlertFired(dedupeKey)) continue;
+
+        dispatchPushNotification(
+          {
+            ticker: filing.ticker,
+            companyName: filing.companyName,
+            title: filing.title,
+            body: filing.body,
+            type: filing.classification,
+            dedupeKey,
+            source: 'SEC EDGAR Official Form 8-K',
+            tradingDate: filing.filingDate,
+            metrics: filing.metrics,
+            metadata: {
+              epsActual: filing.metrics?.epsActual,
+              epsEstimate: filing.metrics?.epsEstimate,
+              revenueActual: filing.metrics?.revenueActual,
+              revenueEstimate: filing.metrics?.revenueEstimate,
+              filingAccession: filing.accessionNumber,
+              filingUrl: filing.docUrl,
+              fiscalQuarter: filing.fiscalQuarter,
+              source: 'SEC EDGAR Form 8-K'
+            }
+          },
+          preferences,
+          (newNotif) => {
+            setNotifications(prev => {
+              const next = [newNotif, ...prev];
+              saveNotifications(next);
+              return next;
+            });
+            setActiveToast(newNotif);
+          }
+        );
+      }
+    } catch (err) {
+      console.warn('Could not sync SEC 8-K filings:', err);
     }
   }, [preferences]);
 
@@ -362,15 +489,24 @@ export default function App() {
   useEffect(() => {
     loadMarketQuotes(true);
     loadEarningsCalendar();
-  }, [loadMarketQuotes, loadEarningsCalendar]);
+    loadSec8kFilings();
+  }, [loadMarketQuotes, loadEarningsCalendar, loadSec8kFilings]);
 
   useEffect(() => {
     if (!isStreaming) return;
     const interval = setInterval(() => {
       loadMarketQuotes(false);
-    }, 8000);
+    }, 2500);
     return () => clearInterval(interval);
   }, [isStreaming, loadMarketQuotes]);
+
+  // SEC EDGAR 8-K Regulatory Filings Polling (every 60s)
+  useEffect(() => {
+    const secInterval = setInterval(() => {
+      loadSec8kFilings();
+    }, 60000);
+    return () => clearInterval(secInterval);
+  }, [loadSec8kFilings]);
 
   // Persist preferences
   const handleUpdatePreferences = (newPrefs: AlertPreferences) => {
@@ -425,14 +561,19 @@ export default function App() {
       return item;
     }));
 
+    const mappedType: NotificationEventType = 
+      scenario.scenarioType === 'beat' ? 'earnings-beat' :
+      scenario.scenarioType === 'miss' ? 'earnings-miss' :
+      'sec-8k';
+
     const company = TECH_COMPANIES[scenario.ticker];
     dispatchPushNotification(
       {
         ticker: scenario.ticker,
         companyName: company?.name || scenario.ticker,
-        title: scenario.customTitle || `${scenario.ticker} Q3 Results Released`,
+        title: scenario.customTitle || `${scenario.ticker} — ${mappedType === 'earnings-beat' ? 'Earnings Beat' : mappedType === 'earnings-miss' ? 'Earnings Miss' : 'SEC 8-K Disclosure'}`,
         body: scenario.customBody || `${scenario.ticker} reported quarterly earnings. Check the institutional matrix for full numbers.`,
-        type: scenario.scenarioType,
+        type: mappedType,
         metrics: {
           epsActual: scenario.updatedResult.epsActual,
           epsEstimate: scenario.updatedResult.epsEstimate,
@@ -456,9 +597,9 @@ export default function App() {
       {
         ticker: target.ticker,
         companyName: target.companyName,
-        title: `[TEST PUSH] ${target.ticker} ${target.quarter}: ${isBeat ? 'EPS BEAT' : 'CONSENSUS UPDATE'}`,
-        body: `${target.ticker} reported EPS of $${target.epsActual?.toFixed(2) || target.epsEstimate.toFixed(2)} and revenue of $${target.revenueActual?.toFixed(2) || target.revenueEstimate.toFixed(2)}B. Guidance: ${target.guidanceRating.toUpperCase()}.`,
-        type: isBeat ? 'beat' : 'guidance',
+        title: `${target.ticker} — ${isBeat ? 'Earnings Beat' : 'Earnings Miss'} (${target.quarter})`,
+        body: `${target.ticker} reported EPS of $${target.epsActual?.toFixed(2) || target.epsEstimate.toFixed(2)} vs consensus $${target.epsEstimate.toFixed(2)} and revenue of $${target.revenueActual?.toFixed(2) || target.revenueEstimate.toFixed(2)}B.`,
+        type: isBeat ? 'earnings-beat' : 'earnings-miss',
         metrics: {
           epsActual: target.epsActual,
           epsEstimate: target.epsEstimate,
@@ -630,19 +771,29 @@ export default function App() {
   ) => {
     const company = TECH_COMPANIES[ticker];
     const diffPct = (((currentPrice - dma200) / dma200) * 100).toFixed(2);
+    const tradingDay = getTradingDayKey();
+    const dedupeKey = `DMA_BREAKDOWN:${ticker}:${tradingDay}`;
+
     dispatchPushNotification(
       {
         ticker,
         companyName: company?.name || ticker,
-        title: `[TECHNICAL ALERT] ${ticker} Below 200-Day Moving Average`,
-        body: `${ticker} ($${currentPrice.toFixed(2)}) is trading ${diffPct}% below its 200-day moving average ($${dma200.toFixed(2)}). 52-Week Range: $${low52.toFixed(2)} - $${high52.toFixed(2)}. Momentum breakdown active.`,
-        type: 'miss',
+        title: `${ticker} — 200 DMA Breakdown (${diffPct}%)`,
+        body: `${ticker} ($${currentPrice.toFixed(2)}) is trading ${diffPct}% below its 200-day moving average ($${dma200.toFixed(2)}). 52-Week Range: $${low52.toFixed(2)} - $${high52.toFixed(2)}.`,
+        type: 'momentum-down',
+        dedupeKey,
+        tradingDate: tradingDay,
         metrics: {
           epsActual: undefined,
           epsEstimate: 0,
           revenueActual: undefined,
           revenueEstimate: 0,
           priceMove: Number(diffPct)
+        },
+        metadata: {
+          currentPrice,
+          percentageChange: Number(diffPct),
+          source: '200-Day Moving Average Model'
         }
       },
       preferences,

@@ -39,8 +39,8 @@ export const SimulateReleaseModal: React.FC<SimulateReleaseModalProps> = ({
       const actualRev = Number(((targetResult?.revenueEstimate || 20.0) * 1.06).toFixed(2));
       const surprise = Number((((actualEps - (targetResult?.epsEstimate || 1.0)) / (targetResult?.epsEstimate || 1.0)) * 100).toFixed(1));
       
-      title = `${selectedTicker} Q3 Earnings: RESOUNDING BEAT & GUIDANCE RAISED`;
-      body = `${selectedTicker} beats consensus with EPS $${actualEps} vs $${targetResult?.epsEstimate} est (+${surprise}%). Revenue $${actualRev}B. Hyperscaler AI demand accelerating.`;
+      title = `${selectedTicker} — Earnings Beat (Q3 Results)`;
+      body = `${selectedTicker} beats consensus with actual EPS $${actualEps} vs $${targetResult?.epsEstimate} est (+${surprise}%). Revenue $${actualRev}B.`;
       
       updatedResult = {
         status: 'reported',
@@ -57,8 +57,8 @@ export const SimulateReleaseModal: React.FC<SimulateReleaseModalProps> = ({
       const actualRev = Number(((targetResult?.revenueEstimate || 20.0) * 0.98).toFixed(2));
       const surprise = Number((((actualEps - (targetResult?.epsEstimate || 1.0)) / (targetResult?.epsEstimate || 1.0)) * 100).toFixed(1));
 
-      title = `${selectedTicker} Q3 Earnings: TOP-LINE MISS & GUIDANCE CAUTION`;
-      body = `${selectedTicker} drops -4.8% post-market as revenue of $${actualRev}B and EPS $${actualEps} trail whisper numbers. Full-year guidance trimmed.`;
+      title = `${selectedTicker} — Earnings Miss (Q3 Results)`;
+      body = `${selectedTicker} missed consensus with actual EPS $${actualEps} vs $${targetResult?.epsEstimate} est (${surprise}%). Revenue $${actualRev}B.`;
 
       updatedResult = {
         status: 'reported',
