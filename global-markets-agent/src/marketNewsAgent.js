@@ -89,6 +89,47 @@ const triStreamSchema = {
   required: ["edition", "macro_news", "earnings_news", "company_news"]
 };
 
+async function fetchLiveRssStories() {
+  const rssFeeds = [
+    { url: 'https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=10000664', source: 'CNBC Markets' },
+    { url: 'https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=100003114', source: 'CNBC Top News' },
+    { url: 'https://finance.yahoo.com/news/rssindex', source: 'Yahoo Finance' }
+  ];
+
+  const stories = [];
+  for (const feed of rssFeeds) {
+    try {
+      const res = await fetch(feed.url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+      let match;
+      while ((match = itemRegex.exec(xml)) !== null && stories.length < 25) {
+        const itemXml = match[1];
+        const titleMatch = /<title>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/title>/i.exec(itemXml);
+        const linkMatch = /<link>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/link>/i.exec(itemXml);
+        const descMatch = /<description>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/description>/i.exec(itemXml);
+        const pubDateMatch = /<pubDate>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/pubDate>/i.exec(itemXml);
+
+        const title = (titleMatch?.[1] || titleMatch?.[2] || '').trim();
+        const link = (linkMatch?.[1] || linkMatch?.[2] || '').trim();
+        const desc = (descMatch?.[1] || descMatch?.[2] || '').replace(/<[^>]+>/g, '').trim();
+        const pubDate = pubDateMatch?.[1] || pubDateMatch?.[2] || new Date().toISOString();
+
+        if (title && link) {
+          stories.push({ source: feed.source, title, link, description: desc.slice(0, 300), pubDate });
+        }
+      }
+    } catch {
+      // Continue to next feed
+    }
+  }
+  return stories;
+}
+
 export function getCurrentEdition() {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: CONFIG.TIMEZONE,
@@ -139,6 +180,8 @@ export async function runAgentCycle(targetEdition = getCurrentEdition()) {
     .map(ticker => `- ${ticker}: ${getAliasesForTicker(ticker).join(", ")}`)
     .join("\n");
 
+  const liveStories = await fetchLiveRssStories();
+
   // 4. Master Prompt samenstellen
   const systemInstruction = buildSystemInstruction({
     edition: targetEdition,
@@ -152,29 +195,66 @@ Execute the research cycle for ${targetEdition} on ${todayDateStr}.
 Focus your equity research specifically on companies that have active app alerts enabled:
 ${activeAlertTickers.join(", ")}
 
-Apply all 20 research rules strictly. Ground every fact using Google Search.
-If a ticker has no new material news since earlier editions, completely omit that ticker.
+Live Verified Market Stories (CNBC & Yahoo Finance):
+${liveStories.map((s, idx) => `[${idx + 1}] Source: ${s.source} | Title: ${s.title} | Link: ${s.link} | Summary: ${s.description}`).join('\n')}
+
+Apply all 20 research rules strictly. Synthesize findings into macro_news, earnings_news, and company_news.
+Provide the real source_url for each item.
 `;
 
-  // 5. Aanroep van Gemini 3.8 Flash met Search Grounding en Medium Thinking
-  const response = await ai.models.generateContent({
-    model: CONFIG.GEMINI_MODEL,
-    contents: prompt,
-    config: {
-      systemInstruction,
-      tools: [{ googleSearch: {} }],
-      responseMimeType: "application/json",
-      responseSchema: triStreamSchema,
-      thinkingConfig: {
-        thinkingLevel: ThinkingLevel.MEDIUM
+  // 5. Aanroep van Gemini met fallback modellen en rate limit retry
+  let response;
+  const modelsToTry = [CONFIG.GEMINI_MODEL, 'gemini-3.1-flash-lite'];
+  
+  for (const currentModel of modelsToTry) {
+    if (response) break;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      if (response) break;
+      try {
+        response = await ai.models.generateContent({
+          model: currentModel,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: triStreamSchema,
+            thinkingConfig: {
+              thinkingLevel: ThinkingLevel.MEDIUM
+            }
+          }
+        });
+      } catch (err) {
+        if (err?.status === 429 || err?.status === 503 || err?.message?.includes("quota") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("high demand")) {
+          console.warn(`[Agent Warning] Model ${currentModel} (poging ${attempt}) gaf ${err.status || 'rate limit'}. Probeert RSS-analyse modus...`);
+          try {
+            response = await ai.models.generateContent({
+              model: currentModel,
+              contents: prompt,
+              config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: triStreamSchema
+              }
+            });
+          } catch (innerErr) {
+            console.warn(`[Agent Warning] RSS analyse met ${currentModel} gaf: ${innerErr.message}`);
+            if (attempt === 1) {
+              await new Promise(r => setTimeout(r, 2500));
+            }
+          }
+        } else {
+          console.warn(`[Agent Warning] Onverwachte fout met ${currentModel}: ${err.message}`);
+        }
       }
     }
-  });
+  }
+
+  if (!response || !response.text) {
+    throw new Error("Geen antwoord ontvangen van de beschikbare Gemini modellen.");
+  }
 
   const rawJson = response.text;
-  if (!rawJson) {
-    throw new Error("Geen antwoord ontvangen van Gemini model.");
-  }
 
   const payload = JSON.parse(rawJson);
   const verifiedChunks = extractVerifiedGroundingChunks(response);

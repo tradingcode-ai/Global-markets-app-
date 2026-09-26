@@ -1,6 +1,7 @@
 import { runAgentCycle, getCurrentEdition } from "./marketNewsAgent.js";
 
-const edition = process.argv[2] || getCurrentEdition();
+const rawEdition = (process.argv[2] || "").trim().toUpperCase();
+const edition = (!rawEdition || rawEdition === "AUTO") ? getCurrentEdition() : rawEdition;
 console.log(`[CLI] Handmatige start voor editie: ${edition}`);
 
 runAgentCycle(edition)

@@ -5,7 +5,7 @@ const { Pool } = pg;
 
 export const pool = new Pool({
   connectionString: CONFIG.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  ssl: (CONFIG.DATABASE_URL && !CONFIG.DATABASE_URL.includes("localhost")) ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30000
 });

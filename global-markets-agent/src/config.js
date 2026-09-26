@@ -1,12 +1,25 @@
 import dotenv from "dotenv";
-dotenv.config();
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../.env"), override: true });
+dotenv.config({ override: true });
+
+function getValidDatabaseUrl() {
+  const envUrl = process.env.DATABASE_URL;
+  if (envUrl && (envUrl.startsWith("postgres://") || envUrl.startsWith("postgresql://"))) {
+    return envUrl;
+  }
+  return "postgresql://thecreator:gqD02DGaFbThHMgJIsiIqrvTYP2zrp7G@dpg-daq83h97lnhs73c1f75g-a.frankfurt-postgres.render.com/markets_xp9o";
+}
 
 export const CONFIG = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_NEWS_MODEL || "gemini-3.8-flash",
   GEMINI_THINKING_LEVEL: process.env.GEMINI_THINKING_LEVEL || "MEDIUM",
   TEMPERATURE: parseFloat(process.env.GEMINI_TEMPERATURE || "0.1"),
-  DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_URL: getValidDatabaseUrl(),
   TIMEZONE: process.env.MARKET_NEWS_TIMEZONE || "Europe/Amsterdam",
   PORT: process.env.PORT || 3000,
   FALLBACK_WATCHLIST: (process.env.DEFAULT_NEWS_WATCHLIST || "ASML,NVDA,MSFT,AAPL,GOOGL,TSM,SHEL.AS")
