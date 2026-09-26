@@ -101,9 +101,13 @@ export function getCurrentEdition() {
   const minute = Number(parts.find(p => p.type === "minute").value);
   const minutes = hour * 60 + minute;
 
-  // 02:30 (150m), 07:00 (420m), 15:30 (930m), 21:30 (1290m)
+  // 02:30 - 07:00 Amsterdam (Asia Open)
   if (minutes < 7 * 60) return "ASIA_OPEN";
-  if (minutes < 18 * 60) return "US_OPEN";
+  // 07:00 - 15:30 Amsterdam (Morning Europe)
+  if (minutes < 15 * 60 + 30) return "MORNING_EUROPE";
+  // 15:30 - 21:30 Amsterdam (US Open)
+  if (minutes < 21 * 60 + 30) return "US_OPEN";
+  // 21:30 - 02:30 Amsterdam (Market Close)
   return "MARKET_CLOSE";
 }
 
@@ -158,7 +162,6 @@ If a ticker has no new material news since earlier editions, completely omit tha
     contents: prompt,
     config: {
       systemInstruction,
-      temperature: CONFIG.TEMPERATURE,
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: triStreamSchema,
