@@ -1,16 +1,22 @@
-name: Global Markets News Agent Manual Runner
+name: Global Markets News Agent Scheduled Runner
 
-# Production scheduling is handled by the always-on Render service (server.js).
-# Render runs the agent automatically at:
-#   02:30 Europe/Amsterdam  -> ASIA_OPEN
-#   07:00 Europe/Amsterdam  -> MORNING_EUROPE
-#   15:30 Europe/Amsterdam  -> US_OPEN
-#   21:30 Europe/Amsterdam  -> MARKET_CLOSE
-#
-# This workflow intentionally has NO cron schedule, so GitHub Actions cannot
-# create duplicate news editions. It remains available for manual tests/reruns.
+# Automatic schedule for Global Markets News Agent:
+# Runs Monday through Friday across all 4 market editions (Amsterdam time):
+#   02:30 Europe/Amsterdam (00:30 UTC CEST) -> ASIA_OPEN
+#   07:00 Europe/Amsterdam (05:00 UTC CEST) -> MORNING_EUROPE
+#   15:30 Europe/Amsterdam (13:30 UTC CEST) -> US_OPEN
+#   21:30 Europe/Amsterdam (19:30 UTC CEST) -> MARKET_CLOSE
 
 on:
+  schedule:
+    # ASIA_OPEN: 02:30 Amsterdam time (Ma-Vr)
+    - cron: '30 0 * * 1-5'
+    # MORNING_EUROPE: 07:00 Amsterdam time (Ma-Vr)
+    - cron: '0 5 * * 1-5'
+    # US_OPEN: 15:30 Amsterdam time (Ma-Vr)
+    - cron: '30 13 * * 1-5'
+    # MARKET_CLOSE: 21:30 Amsterdam time (Ma-Vr)
+    - cron: '30 19 * * 1-5'
   workflow_dispatch:
     inputs:
       edition:
@@ -27,7 +33,7 @@ on:
 
 jobs:
   run-agent:
-    name: Manual News Agent Run
+    name: Run Market News Agent Edition
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -41,11 +47,13 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        working-directory: global-markets-agent
-        run: npm install
+        run: |
+          if [ -d "global-markets-agent" ]; then
+            cd global-markets-agent
+          fi
+          npm install
 
       - name: Run Global Markets News Agent
-        working-directory: global-markets-agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_NEWS_MODEL: "gemini-3.8-flash"
@@ -54,10 +62,13 @@ jobs:
           MARKET_NEWS_TIMEZONE: "Europe/Amsterdam"
           ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
         run: |
+          if [ -d "global-markets-agent" ]; then
+            cd global-markets-agent
+          fi
           if [ "${{ github.event.inputs.edition }}" != "" ] && [ "${{ github.event.inputs.edition }}" != "AUTO" ]; then
             echo "Running specified edition: ${{ github.event.inputs.edition }}"
             node src/cli.js "${{ github.event.inputs.edition }}"
           else
-            echo "Running with automatic time-based edition detection"
+            echo "Running with automatic Amsterdam time-based edition detection"
             node src/cli.js
           fi

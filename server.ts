@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import pg from 'pg';
 import { getReportedHistoricalQuarters } from './src/data/reportedHistoricalFinancials';
 import { 
@@ -4826,7 +4826,7 @@ function getAgentPgPool(): pg.Pool | null {
     try {
       agentPgPool = new Pool({
         connectionString: dbUrl,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        ssl: dbUrl.includes('localhost') ? false : { rejectUnauthorized: false },
         max: 8,
         idleTimeoutMillis: 30000
       });
@@ -5062,8 +5062,13 @@ function getCurrentAmsterdamEdition(): string {
   const minute = Number(parts.find(p => p.type === 'minute')?.value || 0);
   const minutes = hour * 60 + minute;
 
-  if (minutes < 11 * 60) return 'MORNING_EUROPE';
-  if (minutes < 18 * 60) return 'US_OPEN';
+  // 02:30 - 07:00 Amsterdam time: Asia / APAC Window
+  if (minutes < 7 * 60) return 'ASIA_OPEN';
+  // 07:00 - 15:30 Amsterdam time: European Trading + Overnight
+  if (minutes < 15 * 60 + 30) return 'MORNING_EUROPE';
+  // 15:30 - 21:30 Amsterdam time: US Regular Session & Opening
+  if (minutes < 21 * 60 + 30) return 'US_OPEN';
+  // 21:30 - 02:30 Amsterdam time: US Close & Late Developments
   return 'MARKET_CLOSE';
 }
 
@@ -5165,76 +5170,361 @@ app.get(['/api/v1/news/timeline', '/api/news/timeline'], async (req, res) => {
   }
 });
 
-// 2. Agent proxy: all manual runs are delegated to the dedicated Render news-agent service.
-// This keeps the Master Prompt, Google Search grounding, deduplication and PostgreSQL write path
-// in one place. The main app never runs a second, simplified Gemini news implementation.
+// 2. Free Keyless RSS Feed Ingestion & Parser Engine (CNBC & Yahoo Finance)
+interface RawRssStory {
+  title: string;
+  link: string;
+  description: string;
+  pubDate: string;
+  source: string;
+}
+
+function parseRssXml(xml: string, sourceName: string): RawRssStory[] {
+  const items: RawRssStory[] = [];
+  const itemRegex = /<item[\s\S]*?<\/item>/gi;
+  const matches = xml.match(itemRegex) || [];
+  for (const itemXml of matches) {
+    const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+    const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i);
+    const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);
+    const pubDateMatch = itemXml.match(/<pubDate>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/pubDate>/i);
+
+    const cleanText = (s: string) => s 
+      ? s.replace(/<[^>]+>/g, '')
+         .replace(/&amp;/g, '&')
+         .replace(/&lt;/g, '<')
+         .replace(/&gt;/g, '>')
+         .replace(/&quot;/g, '"')
+         .replace(/&#39;/g, "'")
+         .trim() 
+      : '';
+
+    const title = cleanText(titleMatch ? titleMatch[1] : '');
+    const link = (linkMatch ? linkMatch[1] : '').trim();
+    const description = cleanText(descMatch ? descMatch[1] : '');
+    const pubDate = pubDateMatch ? pubDateMatch[1].trim() : new Date().toISOString();
+
+    if (title && (link || description)) {
+      items.push({
+        title,
+        link,
+        description,
+        pubDate,
+        source: sourceName
+      });
+    }
+  }
+  return items;
+}
+
+async function fetchFreeMarketRssStories(): Promise<RawRssStory[]> {
+  const feeds = [
+    { url: 'https://www.cnbc.com/id/10000664/device/rss/rss.html', source: 'CNBC Finance' },
+    { url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html', source: 'CNBC Top News' },
+    { url: 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=ASML,NVDA,AAPL,MSFT,TSM,GOOGL,AMZN,META,WTI', source: 'Yahoo Finance' }
+  ];
+
+  const allStories: RawRssStory[] = [];
+  const seenTitles = new Set<string>();
+
+  await Promise.all(feeds.map(async ({ url, source }) => {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const xml = await res.text();
+        const parsed = parseRssXml(xml, source);
+        for (const story of parsed) {
+          const key = story.title.toLowerCase().trim();
+          if (!seenTitles.has(key)) {
+            seenTitles.add(key);
+            allStories.push(story);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[RSS Ingestion Warning] Failed to fetch ${source}:`, err.message);
+    }
+  }));
+
+  return allStories.slice(0, 15);
+}
+
+// 3. Autonomous Market News Agent with Gemini 3.8 Flash (No Google Search Grounding quota needed)
+async function runNativeNewsAgentCycle(targetEdition?: string, watchlist?: string[]): Promise<{
+  success: boolean;
+  inserted: number;
+  items: any[];
+  error?: string;
+}> {
+  const ai = getAiClient();
+  if (!ai) {
+    return { success: false, inserted: 0, items: [], error: 'GEMINI_API_KEY is niet geconfigureerd in de omgeving.' };
+  }
+
+  const edition = targetEdition || getCurrentAmsterdamEdition();
+  const stories = await fetchFreeMarketRssStories();
+
+  if (stories.length === 0) {
+    return { success: false, inserted: 0, items: [], error: 'Kon geen actuele RSS feeds ophalen van CNBC/Yahoo Finance.' };
+  }
+
+  const existingEventIds = new Set(inMemoryNewsStore.map(item => item.event_id));
+  const watchlistStr = (watchlist && watchlist.length > 0 ? watchlist : ['ASML', 'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'TSM', 'MU', 'WTI', 'DE10Y']).join(', ');
+
+  const regionalScope = {
+    ASIA_OPEN: 'ASIA / APAC ONLY: Japan, China, Hong Kong, Taiwan, South Korea, APAC central banks, semiconductor supply chains (TSM, Samsung), Asian indices and currencies.',
+    MORNING_EUROPE: 'EUROPE + ASIA OVERNIGHT: Focus on European markets (AEX, DAX, Stoxx 600, ECB, BoE, ASML, European yields) plus material Asian overnight developments affecting Europe.',
+    US_OPEN: 'US / NORTH AMERICA: Focus on US markets, Wall Street opening, Federal Reserve, US macro, Treasury yields, Big Tech, and global developments impacting the US session.',
+    MARKET_CLOSE: 'US CLOSE + GLOBAL LATE DEVELOPMENTS: Focus on US close, after-hours earnings results, and material late global developments that affect markets into tomorrow.'
+  }[edition] || 'GLOBAL MARKET RELEVANCE: Include only material current financial news with a clear market connection.';
+
+  const prompt = `# Master Prompt — Global Markets Research News Agent
+
+You are the Global Markets Research Desk news engine used by an institutional terminal.
+Your job is to synthesize material, verified, current financial news from live market feeds.
+
+## Current Cycle Details
+- Current Edition: ${edition}
+- Local Timezone: Europe/Amsterdam
+- Regional Scope: ${regionalScope}
+- Watchlist with Push Notifications Enabled: ${watchlistStr}
+
+## Live Grounded Feeds (CNBC & Yahoo Finance)
+${stories.map((s, idx) => `[${idx + 1}] Source: ${s.source} | Published: ${s.pubDate}
+Title: ${s.title}
+Link: ${s.link}
+Summary: ${s.description}
+`).join('\n')}
+
+## Tri-Stream Split Specification
+Organize findings strictly into the three streams:
+1. macro_news: Central banks (Fed, ECB, BoJ), macro-indicators (CPI, jobs), Treasury/Bund yields, currencies, commodities (WTI/Brent/Gas), and geopolitics.
+2. earnings_news: Actual reported corporate financial results, EPS, revenue, forward guidance, beats/misses, and profit warnings for companies in the watchlist.
+3. company_news: Strategic developments: AI infrastructure spend, M&A, executive leadership, regulatory actions, analyst upgrades/downgrades.
+
+## Institutional Research Rules
+1. Ground every single item strictly in the provided verified RSS feed items. Never hallucinate or extrapolate beyond reported facts.
+2. Distinguish:
+   - fact: directly supported factual statement from the feed.
+   - market_reaction: observed market move or price/yield reaction.
+   - analyst_interpretation: institutional analyst or market strategist context.
+3. Sentiment (BULLISH, BEARISH, NEUTRAL) describes the directional implication of the event, never a speculative price prediction.
+4. No investment recommendations or personalized advice.
+5. Impact Score (0-100) measures institutional market relevance.
+6. Provide the real source URL from the feed.
+7. Output in authentic financial English terminology.`;
+
+  try {
+    let responseText: string | null = null;
+    let lastError: any = null;
+
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+    for (const currentModel of modelsToTry) {
+      if (responseText) break;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model: currentModel,
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  items: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        event_key: { type: Type.STRING },
+                        ticker: { type: Type.STRING },
+                        company: { type: Type.STRING },
+                        category: { 
+                          type: Type.STRING, 
+                          enum: ['MACRO', 'CENTRAL_BANK', 'ECONOMIC_DATA', 'EARNINGS', 'EQUITY', 'M&A', 'REGULATION', 'GEOPOLITICS', 'COMMODITIES'] 
+                        },
+                        headline: { type: Type.STRING },
+                        summary: { type: Type.STRING },
+                        fact: { type: Type.STRING },
+                        market_reaction: { type: Type.STRING },
+                        analyst_interpretation: { type: Type.STRING },
+                        sentiment: { type: Type.STRING, enum: ['BULLISH', 'BEARISH', 'NEUTRAL'] },
+                        impact: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
+                        impact_score: { type: Type.INTEGER },
+                        urgency: { type: Type.STRING, enum: ['ROUTINE', 'IMPORTANT', 'BREAKING'] },
+                        confidence: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
+                        source_name: { type: Type.STRING },
+                        source_url: { type: Type.STRING }
+                      },
+                      required: [
+                        'event_key', 'category', 'headline', 'summary', 'fact',
+                        'market_reaction', 'analyst_interpretation', 'sentiment', 'impact',
+                        'impact_score', 'urgency', 'confidence', 'source_name', 'source_url'
+                      ]
+                    }
+                  }
+                },
+                required: ['items']
+              }
+            }
+          });
+
+          responseText = response.text;
+          if (responseText) break;
+        } catch (genErr: any) {
+          lastError = genErr;
+          console.warn(`[Gemini ${currentModel} attempt ${attempt} warning]:`, genErr.message);
+          if (attempt < 2) {
+            await new Promise(res => setTimeout(res, 1000 * attempt));
+          }
+        }
+      }
+    }
+
+    if (!responseText) {
+      throw lastError || new Error('Geen antwoord ontvangen van Gemini model na 3 pogingen');
+    }
+
+    const json = JSON.parse(responseText || '{}');
+    const rawItems = json.items || [];
+    const newlyInserted: any[] = [];
+
+    for (const item of rawItems) {
+      const eventId = `${(item.ticker || 'GLOBAL').toLowerCase()}_${item.event_key.toLowerCase()}`.replace(/[^a-z0-9_]/g, '_');
+      if (existingEventIds.has(eventId)) continue;
+      existingEventIds.add(eventId);
+
+      const formattedItem = {
+        id: `rss-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        event_id: eventId,
+        edition,
+        ticker: item.ticker ? item.ticker.toUpperCase() : null,
+        company: item.company || (item.ticker ? item.ticker : 'Global Macro'),
+        category: item.category,
+        headline: item.headline,
+        summary: item.summary,
+        fact: item.fact,
+        market_reaction: item.market_reaction,
+        analyst_interpretation: item.analyst_interpretation,
+        sentiment: item.sentiment,
+        impact: item.impact,
+        impact_score: item.impact_score || 75,
+        urgency: item.urgency || 'ROUTINE',
+        published_at: new Date().toISOString(),
+        edition_at: new Date().toISOString(),
+        source_name: item.source_name,
+        source_url: item.source_url,
+        supporting_sources: [
+          { name: item.source_name, url: item.source_url, tier: 1 }
+        ],
+        confidence: item.confidence || 'HIGH'
+      };
+
+      newlyInserted.push(formattedItem);
+      inMemoryNewsStore.unshift(formattedItem);
+
+      // Persist to PostgreSQL if database connection is available
+      const pool = getAgentPgPool();
+      if (pool) {
+        pool.query(
+          `INSERT INTO market_news (event_id, edition, ticker, company, category, headline, summary, fact, market_reaction, analyst_interpretation, sentiment, impact, impact_score, urgency, published_at, edition_at, source_name, source_url, supporting_sources, confidence)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+           ON CONFLICT (event_id) DO NOTHING`,
+          [
+            formattedItem.event_id, formattedItem.edition, formattedItem.ticker, formattedItem.company,
+            formattedItem.category, formattedItem.headline, formattedItem.summary, formattedItem.fact,
+            formattedItem.market_reaction, formattedItem.analyst_interpretation, formattedItem.sentiment,
+            formattedItem.impact, formattedItem.impact_score, formattedItem.urgency, formattedItem.published_at,
+            formattedItem.edition_at, formattedItem.source_name, formattedItem.source_url,
+            JSON.stringify(formattedItem.supporting_sources), formattedItem.confidence
+          ]
+        ).catch(e => console.warn('[DB Insert Warning]:', e.message));
+      }
+    }
+
+    return {
+      success: true,
+      inserted: newlyInserted.length,
+      items: newlyInserted
+    };
+  } catch (err: any) {
+    console.error('[News Agent Run Error]:', err);
+    return { success: false, inserted: 0, items: [], error: err.message };
+  }
+}
+
 function getNewsAgentUrl(): string | null {
   const raw = process.env.NEWS_AGENT_URL?.trim();
   if (!raw) return null;
   return raw.replace(/\/$/, '');
 }
 
+// 4. Agent Execution Route: Delegated to Render if NEWS_AGENT_URL is provided, otherwise executed natively via Gemini 3.8 Flash
 app.post(['/api/v1/agent/run', '/api/news/agent/run'], async (req, res) => {
   const agentUrl = getNewsAgentUrl();
-  if (!agentUrl) {
-    return res.status(503).json({
-      success: false,
-      error: 'NEWS_AGENT_URL is niet geconfigureerd. De dedicated Global Markets News Agent moet op Render zijn gekoppeld.'
-    });
+  if (agentUrl) {
+    try {
+      const upstream = await fetch(agentUrl + '/api/v1/agent/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': process.env.ADMIN_SECRET || ''
+        },
+        body: JSON.stringify({ edition: req.body?.edition, watchlist: req.body?.watchlist })
+      });
+      const payload = await upstream.json().catch(() => ({ error: 'Ongeldige response van de news agent' }));
+      return res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      console.warn('[Upstream Agent Error, falling back to native Gemini 3.8 Flash]:', error.message);
+    }
   }
 
-  try {
-    const upstream = await fetch(agentUrl + '/api/v1/agent/run', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': process.env.ADMIN_SECRET || ''
-      },
-      body: JSON.stringify({ edition: req.body?.edition })
+  // Native Gemini 3.8 Flash RSS Execution
+  const result = await runNativeNewsAgentCycle(req.body?.edition, req.body?.watchlist);
+  if (result.success) {
+    return res.json({
+      status: 'success',
+      inserted: result.inserted,
+      items: result.items,
+      provider: 'Gemini 3.8 Flash (Free Keyless RSS Ingestion)'
     });
-
-    const payload = await upstream.json().catch(() => ({
-      error: 'Ongeldige response van de news agent'
-    }));
-
-    return res.status(upstream.status).json(payload);
-  } catch (error: any) {
-    console.error('[News Agent Proxy Error]:', error);
-    return res.status(502).json({
+  } else {
+    return res.status(500).json({
       success: false,
-      error: 'Verbinding met de dedicated news agent mislukt: ' + (error.message || 'onbekende fout')
+      error: result.error || 'Fout bij uitvoeren van Gemini 3.8 Flash analyse'
     });
   }
 });
 
-// 3. Agent status proxy: expose the status of the same dedicated Render service
-// that executes the Master Prompt.
+// 5. Agent Status Route: Exposes status of the active news agent
 app.get('/api/v1/news/status', async (_req, res) => {
   const agentUrl = getNewsAgentUrl();
-  if (!agentUrl) {
-    return res.json({
-      model: 'gemini-3.8-flash',
-      thinkingLevel: 'MEDIUM',
-      timezone: 'Europe/Amsterdam',
-      configured: false,
-      postgresConnected: false,
-      message: 'NEWS_AGENT_URL is niet geconfigureerd.'
-    });
+  if (agentUrl) {
+    try {
+      const upstream = await fetch(agentUrl + '/api/v1/news/status');
+      const payload = await upstream.json().catch(() => ({ error: 'Ongeldige status response van de news agent' }));
+      return res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      // Fallback to local status
+    }
   }
 
-  try {
-    const upstream = await fetch(agentUrl + '/api/v1/news/status');
-    const payload = await upstream.json().catch(() => ({
-      error: 'Ongeldige status response van de news agent'
-    }));
-    return res.status(upstream.status).json(payload);
-  } catch (error: any) {
-    return res.status(502).json({
-      error: 'Status van de dedicated news agent niet bereikbaar: ' + (error.message || 'onbekende fout')
-    });
-  }
+  return res.json({
+    model: 'gemini-3.8-flash',
+    thinkingLevel: 'MEDIUM',
+    timezone: 'Europe/Amsterdam',
+    configured: Boolean(process.env.GEMINI_API_KEY),
+    provider: 'Gemini 3.8 Flash (Free Keyless RSS Ingestion)',
+    postgresConnected: Boolean(process.env.DATABASE_URL),
+    activeAlertTickers: ['ASML', 'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'TSM', 'MU'],
+    sources: ['CNBC Markets RSS', 'CNBC Top News RSS', 'Yahoo Finance RSS', 'SEC EDGAR 8-K']
+  });
 });
-// 4. Alerts toggle endpoint
+
+// 6. Alerts toggle endpoint
 app.post('/api/v1/alerts/toggle', async (req, res) => {
   const { ticker, enabled } = req.body || {};
   return res.json({

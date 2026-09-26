@@ -95,7 +95,7 @@ export function GlobalNewsAgentView({
   // Handle manual trigger run
   const handleRunAgent = async () => {
     setIsTriggering(true);
-    setTriggerMessage('Gemini 3.8 Flash activeert Medium Thinking en doorzoekt realtime bronnen via Google Search...');
+    setTriggerMessage('Gemini 3.8 Flash activeert Medium Thinking en analyseert actuele beurs- & marktfeeds...');
     try {
       const targetEdition = selectedEdition !== 'ALL' ? selectedEdition : undefined;
       const res = await triggerAgentRun(targetEdition, subscribedTickers);
