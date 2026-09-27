@@ -61,3 +61,58 @@ export function getAliasesForTicker(ticker) {
   const norm = String(ticker || "").trim().toUpperCase();
   return STATIC_TICKER_ALIASES[norm] || [norm];
 }
+
+export const RSS_FEEDS_CONFIG = {
+  US_GLOBAL: [
+    { name: "CNBC Top News", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=100003114", category: "GLOBAL" },
+    { name: "CNBC Markets", url: "https://www.cnbc.com/id/10000664/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=10000664", category: "MARKETS" },
+    { name: "Yahoo Finance Top News", url: "https://finance.yahoo.com/news/rssindex", category: "GLOBAL" },
+    { name: "MarketWatch Top Stories", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories", category: "MARKETS" },
+    { name: "MarketWatch MarketPulse", url: "https://feeds.content.dowjones.io/public/rss/mw_marketpulse", category: "MARKETS" },
+    { name: "MarketWatch Real-time", url: "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines", category: "MARKETS" }
+  ],
+  APAC: [
+    { name: "CNBC Asia-Pacific News", url: "https://www.cnbc.com/id/19832390/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=19832390", category: "APAC" },
+    { name: "Investing.com Asian Markets", url: "https://www.investing.com/rss/news_25.rss", category: "APAC" }
+  ],
+  EUROPE: [
+    { name: "CNBC Europe News", url: "https://www.cnbc.com/id/19794221/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=19794221", category: "EUROPE" }
+  ],
+  MACRO_COMMODITIES: [
+    { name: "Investing.com Commodities", url: "https://www.investing.com/rss/news_11.rss", category: "COMMODITIES" },
+    { name: "Investing.com Stock Market", url: "https://www.investing.com/rss/news_25.rss", category: "MACRO" },
+    { name: "Investing.com Economy & Rates", url: "https://www.investing.com/rss/news_14.rss", category: "MACRO" },
+    { name: "Investing.com Central Banks", url: "https://www.investing.com/rss/news_301.rss", category: "CENTRAL_BANKS" }
+  ]
+};
+
+export function getFeedsForEdition(edition) {
+  const norm = String(edition || "").toUpperCase();
+
+  if (norm === "ASIA_OPEN") {
+    // Prioritize APAC & Global Macro feeds
+    return [
+      ...RSS_FEEDS_CONFIG.APAC,
+      ...RSS_FEEDS_CONFIG.MACRO_COMMODITIES,
+      ...RSS_FEEDS_CONFIG.US_GLOBAL
+    ];
+  }
+
+  if (norm === "MORNING_EUROPE") {
+    // Include Europe, Asia overnight, and Global feeds
+    return [
+      ...RSS_FEEDS_CONFIG.EUROPE,
+      ...RSS_FEEDS_CONFIG.APAC,
+      ...RSS_FEEDS_CONFIG.US_GLOBAL,
+      ...RSS_FEEDS_CONFIG.MACRO_COMMODITIES
+    ];
+  }
+
+  // US_OPEN / MARKET_CLOSE / default: prioritize US & Global feeds + Macro
+  return [
+    ...RSS_FEEDS_CONFIG.US_GLOBAL,
+    ...RSS_FEEDS_CONFIG.MACRO_COMMODITIES,
+    ...RSS_FEEDS_CONFIG.EUROPE
+  ];
+}
+

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import crypto from "node:crypto";
-import { CONFIG, getAliasesForTicker } from "./config.js";
+import { CONFIG, getAliasesForTicker, getFeedsForEdition } from "./config.js";
 import { 
   getActiveAlertTickers, 
   getRecentEventKeys, 
@@ -89,45 +89,136 @@ const triStreamSchema = {
   required: ["edition", "macro_news", "earnings_news", "company_news"]
 };
 
-async function fetchLiveRssStories() {
-  const rssFeeds = [
-    { url: 'https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=10000664', source: 'CNBC Markets' },
-    { url: 'https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=100003114', source: 'CNBC Top News' },
-    { url: 'https://finance.yahoo.com/news/rssindex', source: 'Yahoo Finance' }
-  ];
+function cleanHtmlText(text) {
+  if (!text) return "";
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x201c;|&#x201d;|&ldquo;|&rdquo;/g, '"')
+    .replace(/&#x2018;|&#x2019;|&lsquo;|&rsquo;/g, "'")
+    .replace(/&#x2014;|&mdash;/g, "—")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  const stories = [];
-  for (const feed of rssFeeds) {
-    try {
-      const res = await fetch(feed.url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(5000)
+function normalizeUrlKey(url) {
+  try {
+    const u = new URL(url);
+    return (u.origin + u.pathname).toLowerCase().replace(/\/$/, "");
+  } catch {
+    return String(url || "").split("?")[0].toLowerCase().trim();
+  }
+}
+
+function normalizeTitleKey(title) {
+  return String(title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 50);
+}
+
+async function fetchSingleRssFeed(feedUrl, sourceName) {
+  const res = await fetch(feedUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+      "Accept": "application/rss+xml, application/xml, text/xml, */*"
+    },
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!res.ok) return [];
+  const xml = await res.text();
+  if (!xml || xml.length < 50) return [];
+
+  const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
+  const items = [];
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null && items.length < 20) {
+    const itemXml = match[1];
+    const titleMatch = /<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i.exec(itemXml);
+    const linkMatch = /<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i.exec(itemXml);
+    const descMatch = /<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i.exec(itemXml);
+    const pubDateMatch = /<pubDate>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/pubDate>/i.exec(itemXml);
+
+    const title = cleanHtmlText(titleMatch?.[1] || titleMatch?.[2] || "");
+    const link = (linkMatch?.[1] || linkMatch?.[2] || "").trim();
+    const desc = cleanHtmlText(descMatch?.[1] || descMatch?.[2] || "").slice(0, 160);
+    const pubDateStr = (pubDateMatch?.[1] || pubDateMatch?.[2] || "").trim();
+
+    if (title && link) {
+      items.push({
+        source: sourceName,
+        title,
+        link,
+        description: desc,
+        pubDate: pubDateStr || new Date().toISOString()
       });
-      if (!res.ok) continue;
-      const xml = await res.text();
-      const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
-      let match;
-      while ((match = itemRegex.exec(xml)) !== null && stories.length < 25) {
-        const itemXml = match[1];
-        const titleMatch = /<title>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/title>/i.exec(itemXml);
-        const linkMatch = /<link>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/link>/i.exec(itemXml);
-        const descMatch = /<description>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/description>/i.exec(itemXml);
-        const pubDateMatch = /<pubDate>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))<\/pubDate>/i.exec(itemXml);
-
-        const title = (titleMatch?.[1] || titleMatch?.[2] || '').trim();
-        const link = (linkMatch?.[1] || linkMatch?.[2] || '').trim();
-        const desc = (descMatch?.[1] || descMatch?.[2] || '').replace(/<[^>]+>/g, '').trim();
-        const pubDate = pubDateMatch?.[1] || pubDateMatch?.[2] || new Date().toISOString();
-
-        if (title && link) {
-          stories.push({ source: feed.source, title, link, description: desc.slice(0, 300), pubDate });
-        }
-      }
-    } catch {
-      // Continue to next feed
     }
   }
-  return stories;
+  return items;
+}
+
+async function fetchLiveRssStories(edition = "US_OPEN") {
+  const feeds = getFeedsForEdition(edition);
+  const t0 = Date.now();
+  const now = Date.now();
+  // 36 hours maximum window (covers weekend sessions, overnight APAC moves, and market closes)
+  const maxAgeMs = 36 * 60 * 60 * 1000;
+
+  const seenUrls = new Set();
+  const seenTitles = new Set();
+  const allCandidates = [];
+
+  const results = await Promise.allSettled(feeds.map(async feed => {
+    try {
+      let feedItems = await fetchSingleRssFeed(feed.url, feed.name);
+      if (feedItems.length === 0 && feed.fallbackUrl) {
+        feedItems = await fetchSingleRssFeed(feed.fallbackUrl, feed.name);
+      }
+      return feedItems;
+    } catch {
+      if (feed.fallbackUrl) {
+        try {
+          return await fetchSingleRssFeed(feed.fallbackUrl, feed.name);
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+  }));
+
+  for (const r of results) {
+    if (r.status === "fulfilled" && Array.isArray(r.value)) {
+      for (const item of r.value) {
+        // 1. Recency filter in code (zero tokens wasted)
+        if (item.pubDate) {
+          const parsed = new Date(item.pubDate).getTime();
+          if (!isNaN(parsed) && (now - parsed) > maxAgeMs) {
+            continue;
+          }
+        }
+
+        // 2. URL & Title deduplication in code
+        const normUrl = normalizeUrlKey(item.link);
+        const normTitle = normalizeTitleKey(item.title);
+        if (seenUrls.has(normUrl) || seenTitles.has(normTitle)) {
+          continue;
+        }
+
+        seenUrls.add(normUrl);
+        seenTitles.add(normTitle);
+        allCandidates.push(item);
+      }
+    }
+  }
+
+  console.log(`[RSS Ingestion] Fetched ${allCandidates.length} unique verified candidate stories in ${Date.now() - t0}ms for edition ${edition}`);
+  return allCandidates;
 }
 
 export function getCurrentEdition() {
@@ -183,9 +274,19 @@ export async function runAgentCycle(targetEdition = getCurrentEdition()) {
     .map(ticker => `- ${ticker}: ${getAliasesForTicker(ticker).join(", ")}`)
     .join("\n");
 
-  const liveStories = await fetchLiveRssStories();
+  // 4. Robuuste parallelle RSS ingestion afgestemd op de huidige editie
+  const liveStories = await fetchLiveRssStories(targetEdition);
 
-  // 4. Master Prompt samenstellen
+  // 5. Ultra-efficiënte, token-besparende batch candidate block samenstellen (~30 tokens per candidate)
+  const candidateBlock = liveStories.map((s, idx) => {
+    const pubTime = s.pubDate 
+      ? new Date(s.pubDate).toISOString().replace("T", " ").slice(0, 16) 
+      : todayDateStr;
+    const descPart = s.description ? ` - ${s.description.slice(0, 140)}` : "";
+    return `[ID: #${idx + 1}] (Source: ${s.source} | Published: ${pubTime}) ${s.title}${descPart} | Link: ${s.link}`;
+  }).join("\n");
+
+  // 6. Master Prompt samenstellen
   const systemInstruction = buildSystemInstruction({
     edition: targetEdition,
     date: todayDateStr,
@@ -194,18 +295,27 @@ export async function runAgentCycle(targetEdition = getCurrentEdition()) {
   });
 
   const prompt = `
-Execute the research cycle for ${targetEdition} on ${todayDateStr}.
+Execute the institutional research cycle for ${targetEdition} on ${todayDateStr}.
 Focus your equity research specifically on companies that have active app alerts enabled:
 ${activeAlertTickers.join(", ")}
 
-Live Verified Market Stories (CNBC & Yahoo Finance):
-${liveStories.map((s, idx) => `[${idx + 1}] Source: ${s.source} | Title: ${s.title} | Link: ${s.link} | Summary: ${s.description}`).join('\n')}
+You have been provided with ${liveStories.length} fresh, pre-filtered financial news candidate stories from verified institutional sources (CNBC, Yahoo Finance, MarketWatch, Investing.com):
 
-Apply all 20 research rules strictly. Synthesize findings into macro_news, earnings_news, and company_news.
+=== VERIFIED FINANCIAL RSS CANDIDATE HEADLINES (${liveStories.length} CANDIDATES) ===
+${candidateBlock}
+=== END CANDIDATE HEADLINES ===
+
+Your editorial objectives for this cycle:
+1. SCREEN CANDIDATES: Screen all candidate headlines against the active edition scope (${targetEdition}) and the active watchlist (${activeAlertTickers.join(", ")}).
+2. SELECT & SYNTHESIZE: Select the most critical market-moving developments and synthesize them directly into the tri-stream format (macro_news, earnings_news, company_news).
+3. VERIFIABLE SOURCE URLS: You MUST set the candidate's real "Link" as the "source_url" in each generated news item. Do NOT invent URLs.
+4. STRICT REGIONAL SCOPE: Ensure regional compliance for ${targetEdition} as mandated in your instructions.
+5. GROUNDING & FACTS: Use Google Search grounding to enrich missing financial metrics (EPS, revenue beats, consensus, percentage changes, market reactions) for the top selected stories. If Google Search is unavailable or throttled (429/503 fallback), synthesize strictly from the candidate facts provided above.
+6. COMPLIANCE: Every item must have real factual backing, correct sentiment, and strictly adhere to all 20 research rules.
 Provide the real source_url for each item.
 `;
 
-  // 5. Aanroep van Gemini met fallback modellen en rate limit retry
+  // 7. Aanroep van Gemini met fallback modellen en rate limit retry
   let response;
   const modelsToTry = [CONFIG.GEMINI_MODEL, 'gemini-3.1-flash-lite'];
   
@@ -262,7 +372,7 @@ Provide the real source_url for each item.
   const payload = JSON.parse(rawJson);
   const verifiedChunks = extractVerifiedGroundingChunks(response);
 
-  // 6. Tri-Stream samenvoegen
+  // 8. Tri-Stream samenvoegen
   const combinedStream = [
     ...(payload.macro_news || []).map(x => ({ ...x, ticker: null, company: x.company || "Global Macro" })),
     ...(payload.earnings_news || []),
@@ -320,7 +430,7 @@ Provide the real source_url for each item.
     }
   }
 
-  // 7. Append-only opslag in PostgreSQL
+  // 9. Append-only opslag in PostgreSQL
   const insertedCount = await insertNewsBatch(recordsToInsert);
   console.log(`[Market News Agent] Run succesvol: ${insertedCount} toegevoegd, ${duplicatesSkipped} deduplicaties.`);
 
@@ -333,3 +443,4 @@ Provide the real source_url for each item.
     items: recordsToInsert
   };
 }
+
