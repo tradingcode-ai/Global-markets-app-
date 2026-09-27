@@ -17,7 +17,7 @@ import { FINANCIAL_COMPANIES, FINANCIAL_RESULTS } from './data/financialsData';
 import { AEROSPACE_DEFENSE_RESULTS, AEROSPACE_DEFENSE_COMPANIES } from './data/aerospaceDefenseData';
 import { COMMODITIES_DATA } from './data/commoditiesData';
 import { getStockTechnicalMetrics } from './data/technicalData';
-import { getStockQuarterlyConsensus, getStockAnalystOutlooks } from './data/analystCoverageData';
+import { getStoredAnalystSnapshots, saveAnalystSnapshots, mergeAnalystSnapshots } from './services/marketDataService';
 import { getCurrencySymbol } from './utils/formatters';
 import { resolveLiveQuote } from './utils/marketSession';
 import { 
@@ -73,14 +73,10 @@ export default function App() {
       const base = HYPERSCALER_TICKERS.has(item.ticker) 
         ? { ...item, sector: 'Hyperscalers & Neo Clouds' as any, subSector: item.subSector || (['GOOGL','MSFT','AMZN','ORCL','META'].includes(item.ticker) ? 'Hyperscalers' : 'Neo Clouds') } 
         : item;
-      const cur = getCurrencySymbol(base.currency || 'USD');
-      const estPrice = base.epsEstimate ? base.epsEstimate * 25 : 120;
       return {
         ...base,
-        quarterlyConsensus: base.quarterlyConsensus || getStockQuarterlyConsensus(base.ticker, estPrice, cur, base),
-        analystOutlooks: (base.analystOutlooks && base.analystOutlooks.length > 0)
-          ? base.analystOutlooks
-          : getStockAnalystOutlooks(base.ticker, estPrice, cur, base)
+        quarterlyConsensus: undefined,
+        analystOutlooks: undefined
       };
     });
   });
@@ -126,34 +122,27 @@ export default function App() {
     setQuarterlySnapshots(snapshot);
     setResults(prev => prev.map(item => {
       const snap = snapshot[item.ticker];
-      const cur = getCurrencySymbol(item.currency || 'USD');
-      const livePrice = quotesRef.current[item.ticker]?.price || (item.epsEstimate ? item.epsEstimate * 25 : 120);
+      if (!snap || snap.isLiveFeed !== true) {
+        return {
+          ...item,
+          analystOutlooks: undefined,
+          quarterlyConsensus: undefined
+        };
+      }
 
-      const institutionalConsensus = getStockQuarterlyConsensus(item.ticker, livePrice, cur, item);
-      const institutionalOutlooks = snap?.outlooks?.length
-        ? snap.outlooks
-        : getStockAnalystOutlooks(item.ticker, livePrice, cur, item);
-
-      // Merge backend verification with rich forward consensus
-      const mergedConsensus = snap ? {
-        ...institutionalConsensus,
+      const consensus = {
         ...snap,
-        quarterKey: snap.quarterKey || institutionalConsensus.quarterKey,
-        nextQuarterLabel: snap.nextQuarterLabel || institutionalConsensus.nextQuarterLabel,
-        monthlyRevisionDate: snap.monthlyRevisionDate || institutionalConsensus.monthlyRevisionDate,
-        twelveMonthHorizon: snap.twelveMonthHorizon || institutionalConsensus.twelveMonthHorizon,
         provider: snap.provider || 'Yahoo Finance Analyst Consensus',
-        averagePriceTarget: snap.averagePriceTarget ?? institutionalConsensus.averagePriceTarget,
-        targetCurrency: snap.targetCurrency || institutionalConsensus.targetCurrency,
-        upsidePercent: snap.averagePriceTarget !== undefined && livePrice > 0
-          ? Number((((snap.averagePriceTarget - livePrice) / livePrice) * 100).toFixed(1))
-          : institutionalConsensus.upsidePercent
-      } : institutionalConsensus;
+        dataSource: snap.dataSource || 'Yahoo Finance',
+        isCachedSnapshot: snap.isCachedSnapshot === true
+      };
 
       return {
         ...item,
-        analystOutlooks: institutionalOutlooks,
-        quarterlyConsensus: mergedConsensus
+        analystOutlooks: Array.isArray(consensus.outlooks) && consensus.outlooks.length > 0
+          ? consensus.outlooks
+          : undefined,
+        quarterlyConsensus: consensus
       };
     }));
   }, []);
@@ -171,9 +160,16 @@ export default function App() {
           ...Object.keys(AEROSPACE_DEFENSE_COMPANIES)
         ]));
         const response = await fetchQuarterlyAnalystOutlook(allSymbols);
-        if (cancelled || !response?.data) return;
-        applyQuarterlySnapshot(response.data);
-        if (!cancelled) setQuarterlyOutlookLoaded(true);
+        const stored = getStoredAnalystSnapshots();
+        const merged = mergeAnalystSnapshots(response?.data || {}, stored);
+        if (cancelled) return;
+        if (Object.keys(response?.data || {}).length > 0) {
+          saveAnalystSnapshots(merged);
+        }
+        if (Object.keys(merged).length > 0) {
+          applyQuarterlySnapshot(merged);
+          setQuarterlyOutlookLoaded(true);
+        }
       } catch (error) {
         console.warn('Live Yahoo analyst consensus could not be loaded:', error);
       }
@@ -772,20 +768,6 @@ export default function App() {
         segments: [
           { name: meta.subSector || 'Core Infrastructure', revenue: meta.marketCap, growthYoY: '+18%', beatExpectation: true }
         ],
-        quarterlyConsensus: getStockQuarterlyConsensus(rawSym, livePrice, '$', {
-          ticker: rawSym,
-          companyName: meta.name,
-          quarter: 'Q2 2026',
-          epsEstimate: 1.45,
-          revenueEstimate: 3.85
-        } as any),
-        analystOutlooks: getStockAnalystOutlooks(rawSym, livePrice, '$', {
-          ticker: rawSym,
-          companyName: meta.name,
-          sector: meta.sector || 'The Shovel Sellers',
-          epsEstimate: 1.45,
-          revenueEstimate: 3.85
-        } as any)
       };
       setSelectedResultForModal(syntheticResult);
     }

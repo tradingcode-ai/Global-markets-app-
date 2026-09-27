@@ -3179,61 +3179,6 @@ function generateAnalystThesis(
   };
 }
 
-function generateFallbackOutlooks(
-  ticker: string,
-  targetCurrency = 'USD',
-  quarterLabel = 'Q4 2026',
-  eps?: number,
-  rev?: number,
-  currentPrice = 150
-): any[] {
-  const curSymbol = targetCurrency === 'EUR' ? '€' : '$';
-  const firms = [
-    { name: 'Morgan Stanley', rating: 'Overweight', mult: 1.28 },
-    { name: 'Goldman Sachs', rating: 'Buy', mult: 1.34 },
-    { name: 'Piper Sandler', rating: 'Overweight', mult: 1.25 }
-  ];
-
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const formattedDate = formatEnglishShortDate(dateStr);
-
-  return firms.map(f => {
-    const rawTarget = Math.round(currentPrice * f.mult);
-    const targetFormatted = `${curSymbol}${rawTarget}.00`;
-    const epsStr = eps !== undefined ? `${curSymbol}${eps.toFixed(2)}` : undefined;
-    const revStr = rev !== undefined ? `${curSymbol}${rev.toFixed(1)}B` : undefined;
-    const { thesis, catalysts } = generateAnalystThesis(
-      ticker,
-      f.name,
-      f.rating,
-      targetFormatted,
-      quarterLabel,
-      curSymbol,
-      epsStr,
-      revStr
-    );
-
-    return {
-      bankName: f.name,
-      logoColor: getBankColor(f.name),
-      rating: f.rating,
-      targetPrice: targetFormatted,
-      targetPriceNumeric: rawTarget,
-      previousTargetPrice: Math.round(rawTarget * 0.95),
-      currency: targetCurrency,
-      asOfDate: dateStr,
-      lastUpdated: formattedDate,
-      timeHorizon: '12 Months',
-      nextQuarterEpsEst: epsStr,
-      nextQuarterRevEst: revStr,
-      thesis,
-      catalysts,
-      provider: 'Wall Street Institutional Coverage & SEC Filings'
-    };
-  });
-}
-
 function getQuarterKey(date = new Date()): string {
   const q = Math.floor(date.getUTCMonth() / 3) + 1;
   return `${date.getUTCFullYear()}-Q${q}`;
@@ -3324,7 +3269,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
                 ((counts.strongBuy + counts.buy) / ratingTotal) >= 0.6 ? 'Buy' :
                 ((counts.sell + counts.strongSell) / ratingTotal) >= 0.6 ? 'Sell' : 'Hold'
               )
-            : 'Buy';
+            : undefined;
 
           const future = earningsTrend.filter((t: any) => ['0q', '+1q', '+2q'].includes(t.period));
           const next = earningsTrend.find((t: any) => t.period === '0q')
@@ -3417,17 +3362,6 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
               };
             });
 
-          if (outlooks.length === 0) {
-            outlooks = generateFallbackOutlooks(
-              normalized,
-              analystCurrency,
-              nextQuarterLabel,
-              rawEpsAvg,
-              rawRevAvg,
-              rawNumber(priceModule?.regularMarketPrice) || 150
-            );
-          }
-
           const resultPayload: QuarterlyAnalystOutlookPayload = {
             ticker: normalized,
             quarterKey,
@@ -3453,7 +3387,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
               || rawNumber(financial?.numberOfAnalystOpinions),
             isConvertedToUsd: needsUsdConversion,
             originalCurrency: analystCurrency,
-            revenueIsAnalystConsensus: true,
+            revenueIsAnalystConsensus: rawRevAvg !== undefined,
             isLiveFeed: true,
             conversionNote: needsUsdConversion
               ? `Yahoo Finance omzet- en EPS-consensus genormaliseerd van ${analystCurrency} naar USD; koersdoelen blijven in ${analystCurrency}.`
@@ -3475,29 +3409,8 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
     return quarterlyAnalystCache[normalized].data;
   }
 
-  // Institutional verified fallback when Yahoo is unavailable, throttled, or crumb expired
-  const reg = VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized];
-  const targetCur = isEuropeanFinancialTicker(normalized) ? 'EUR' : 'USD';
-  const nextQ = reg?.quarter || 'Q4 2026';
-  const epsVal = reg?.eps ?? 1.50;
-  const revVal = reg?.rev ?? 15.0;
-
-  const verifiedFallback: QuarterlyAnalystOutlookPayload = {
-    ticker: normalized,
-    quarterKey,
-    nextQuarterLabel: nextQ,
-    snapshotDate: new Date().toISOString(),
-    consensusRating: 'Buy',
-    recommendationCounts: { strongBuy: 25, buy: 18, hold: 4, sell: 1, strongSell: 0 },
-    nextQuarterEps: epsVal,
-    nextQuarterRevenue: revVal,
-    targetCurrency: targetCur,
-    analystsCount: 38,
-    revenueIsAnalystConsensus: true,
-    isLiveFeed: false,
-    outlooks: generateFallbackOutlooks(normalized, targetCur, nextQ, epsVal, revVal)
-  };
-  return verifiedFallback;
+  // No synthetic analyst fallback. The client may use its persisted Yahoo snapshot.
+  return null;
 }
 
 app.get('/api/quarterly-analyst-outlook', async (req, res) => {
