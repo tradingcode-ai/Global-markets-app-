@@ -125,24 +125,26 @@ function normalizeTitleKey(title) {
 async function fetchSingleRssFeed(feedUrl, sourceName) {
   const res = await fetch(feedUrl, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-      "Accept": "application/rss+xml, application/xml, text/xml, */*"
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VeritasMarketTerminal/2.0 (contact@veritas-terminal.internal)",
+      "Accept": "application/rss+xml, application/xml, text/xml, application/atom+xml, */*"
     },
-    signal: AbortSignal.timeout(5000)
+    signal: AbortSignal.timeout(6000)
   });
   if (!res.ok) return [];
   const xml = await res.text();
   if (!xml || xml.length < 50) return [];
 
-  const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
   const items = [];
+
+  // 1. Standard RSS <item> tags
+  const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
   let match;
   while ((match = itemRegex.exec(xml)) !== null && items.length < 20) {
     const itemXml = match[1];
     const titleMatch = /<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i.exec(itemXml);
     const linkMatch = /<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i.exec(itemXml);
     const descMatch = /<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i.exec(itemXml);
-    const pubDateMatch = /<pubDate>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/pubDate>/i.exec(itemXml);
+    const pubDateMatch = /(?:<pubDate>|<dc:date>)(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))(?:<\/pubDate>|<\/dc:date>)/i.exec(itemXml);
 
     const title = cleanHtmlText(titleMatch?.[1] || titleMatch?.[2] || "");
     const link = (linkMatch?.[1] || linkMatch?.[2] || "").trim();
@@ -159,6 +161,34 @@ async function fetchSingleRssFeed(feedUrl, sourceName) {
       });
     }
   }
+
+  // 2. Atom XML <entry> tags (e.g. SEC EDGAR Atom feed)
+  if (items.length === 0) {
+    const entryRegex = /<entry[\s>]([\s\S]*?)<\/entry>/gi;
+    while ((match = entryRegex.exec(xml)) !== null && items.length < 20) {
+      const entryXml = match[1];
+      const titleMatch = /<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i.exec(entryXml);
+      const linkMatch = /<link[^>]+href=["\x27]([^"\x27]+)["\x27]/i.exec(entryXml);
+      const descMatch = /(?:<summary>|<content[^>]*>)(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))(?:<\/summary>|<\/content>)/i.exec(entryXml);
+      const pubDateMatch = /(?:<updated>|<published>)(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))(?:<\/updated>|<\/published>)/i.exec(entryXml);
+
+      const title = cleanHtmlText(titleMatch?.[1] || titleMatch?.[2] || "");
+      const link = (linkMatch?.[1] || "").trim();
+      const desc = cleanHtmlText(descMatch?.[1] || descMatch?.[2] || "").slice(0, 160);
+      const pubDateStr = (pubDateMatch?.[1] || pubDateMatch?.[2] || "").trim();
+
+      if (title && link) {
+        items.push({
+          source: sourceName,
+          title,
+          link,
+          description: desc,
+          pubDate: pubDateStr || new Date().toISOString()
+        });
+      }
+    }
+  }
+
   return items;
 }
 

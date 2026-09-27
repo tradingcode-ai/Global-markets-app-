@@ -412,20 +412,8 @@ export const StockLogo: React.FC<StockLogoProps> = ({
   const cleanTicker = ticker.toUpperCase().trim();
   const sizeClass = SIZE_MAP[size];
 
-  // If a custom vector logo is defined, render immediately without network dependencies
   const baseTicker = cleanTicker.replace(/^(HK|SH|SS|TSE|T):/, '');
   const customRenderer = CUSTOM_INLINE_LOGOS[cleanTicker] || CUSTOM_INLINE_LOGOS[baseTicker];
-  if (customRenderer) {
-    return (
-      <div
-        className={`${sizeClass} rounded-md bg-white border border-slate-200/80 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs ${className}`}
-        title={cleanTicker}
-        aria-label={`${cleanTicker} logo`}
-      >
-        {customRenderer('w-[84%] h-[84%] object-contain')}
-      </div>
-    );
-  }
 
   const [iconFailed, setIconFailed] = useState(false);
   const [faviconFailed, setFaviconFailed] = useState(false);
@@ -449,6 +437,19 @@ export const StockLogo: React.FC<StockLogoProps> = ({
       ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
       : null;
   }, [cleanTicker]);
+
+  // If a custom vector logo is defined, render immediately without network dependencies
+  if (customRenderer) {
+    return (
+      <div
+        className={`${sizeClass} rounded-md bg-white border border-slate-200/80 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs ${className}`}
+        title={cleanTicker}
+        aria-label={`${cleanTicker} logo`}
+      >
+        {customRenderer('w-[84%] h-[84%] object-contain')}
+      </div>
+    );
+  }
 
   // Determine current active source with resilient fallbacks.
   // For explicitly curated tickers, start with the official company website

@@ -319,13 +319,118 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     return Array.from({ length: repeatsNeeded }, () => sortedTickers).flat();
   }, [sortedTickers, repeatsNeeded]);
 
-  // For continuous seamless marquee (-50% CSS translation), duplicate baseItems:
-  const marqueeItems = isGliding ? [...baseItems, ...baseItems] : sortedTickers;
+  // Duration accounts for the lead spacer (equivalent to ~8 ticker widths) plus the baseItems
+  const totalUnits = isGliding ? baseItems.length + 8 : baseItems.length;
+  const animationDurationSec = Number((totalUnits * secondsPerItem).toFixed(2));
 
-  // The duration to translate -50% (which equals baseItems.length).
-  // Because baseItems.length / duration is constant (1 / secondsPerItem),
-  // linear speed across the screen is 100% IDENTICAL for ALL, US TECH, BONDS, COMMODITIES, etc.!
-  const animationDurationSec = Number((baseItems.length * secondsPerItem).toFixed(2));
+  // Render a single borderless, flowing ticker item
+  const renderTickerItem = (sym: string, key: string) => {
+    const q: LiveQuote | null = getQuoteForTicker(sym, quotes);
+    if (!q) return null;
+
+    const tick = recentTicks[sym];
+    const isPositive = q.change >= 0;
+    const isFlashingUp = tick === 'up';
+    const isFlashingDown = tick === 'down';
+    const isCommodity = COMMODITY_TICKERS.includes(sym);
+    const isBond = GOV_BOND_TICKERS.includes(sym);
+    const isEuropean = ['ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SAN', 'BBVA'].includes(sym.toUpperCase());
+    const curSym = isBond ? '' : (isEuropean && (q.currency === 'EUR' || !q.currency) ? '€' : getCurrencySymbol(q.currency));
+    const priceFormatted = isBond ? `${q.price.toFixed(3)}%` : `${curSym}${q.price.toFixed(2)}`;
+    
+    // Market Session & Pre/After-Market Calculation
+    const session = (!isCommodity && !isBond) ? getMarketSessionInfo(sym, q) : null;
+    const showPrePost = session && !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
+
+    // Technical check: 200 DMA and 52-week High/Low
+    const tech = (!isCommodity && !isBond) ? getStockTechnicalMetrics(sym, q.price, q) : null;
+    const isBelow200D = tech?.belowTwoHundredDayAverage;
+    const is52WHigh = tech?.is52WeekHigh;
+    const is52WLow = tech?.is52WeekLow;
+
+    return (
+      <React.Fragment key={key}>
+        <button
+          id={`ticker-pill-${sym.toLowerCase()}-${key}`}
+          onClick={() => onSelectTicker(sym)}
+          className={`inline-flex items-center gap-1.5 py-1 px-2.5 rounded hover:bg-slate-100/80 transition cursor-pointer text-xs font-mono-code shrink-0 select-none group ${
+            isFlashingUp ? 'bg-emerald-50/80' : isFlashingDown ? 'bg-rose-50/80' : ''
+          }`}
+          title={`${sym} - Click to inspect ${isCommodity ? 'commodity metrics' : isBond ? 'sovereign yield curve' : 'earnings, analyst outlook, and 200 DMA'}`}
+        >
+          {/* Logo & Symbol */}
+          <span className="flex items-center gap-1.5 shrink-0">
+            {!isCommodity && !isBond && <StockLogo ticker={sym} size="xs" />}
+            {isCommodity && <Flame className="w-3.5 h-3.5 text-amber-600" />}
+            {isBond && <Landmark className="w-3.5 h-3.5 text-purple-600" />}
+            <span className="font-bold tracking-tight text-slate-900 group-hover:text-blue-700 transition-colors">
+              {sym}
+            </span>
+          </span>
+
+          {/* Price / Yield */}
+          <span className="font-semibold tabular-nums text-slate-900">
+            {priceFormatted}
+          </span>
+
+          {/* Percentage Rate: Clean borderless text with color & arrow */}
+          <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold tabular-nums ${
+            isPositive ? 'text-emerald-600' : 'text-rose-600'
+          }`}>
+            {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+            <span>{isPositive ? `+${q.changePercent.toFixed(2)}%` : `${q.changePercent.toFixed(2)}%`}</span>
+          </span>
+
+          {/* Pre/After-Market change indicator (inline text, no borders) */}
+          {showPrePost && (
+            <span 
+              className="inline-flex items-center gap-0.5 text-[10px] text-slate-400 font-medium"
+              title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
+            >
+              <span>({session.sessionLabel === 'Pre-Market' ? 'Pre' : 'Post'}:</span>
+              <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {session.prePostChangePercent! >= 0 ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%
+              </span>
+              <span>)</span>
+            </span>
+          )}
+
+          {/* Technical signals (clean text badges) */}
+          {isBelow200D && (
+            <span 
+              title={`Warning: ${sym} is trading below its 200 DMA`}
+              className="text-[9.5px] font-bold text-amber-700"
+            >
+              &lt;200D
+            </span>
+          )}
+
+          {is52WHigh && (
+            <span 
+              title={`52-Week High reached`}
+              className="text-[9.5px] font-bold text-emerald-700"
+            >
+              52W-H
+            </span>
+          )}
+
+          {is52WLow && (
+            <span 
+              title={`52-Week Low reached`}
+              className="text-[9.5px] font-bold text-rose-700"
+            >
+              52W-L
+            </span>
+          )}
+        </button>
+
+        {/* Continuous Flowing Line Divider */}
+        <span className="text-slate-300 select-none text-xs font-light shrink-0 px-0.5">
+          |
+        </span>
+      </React.Fragment>
+    );
+  };
 
   return (
     <div 
@@ -494,7 +599,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
       </div>
 
       {/* LAYER 2: REAL-TIME CONTINUOUS MOVING TICKER RIBBON (EXCHANGE MARQUEE) */}
-      <div className="px-4 lg:px-8 py-2.5 bg-white overflow-hidden relative group/ticker">
+      <div className="px-4 lg:px-8 py-2.5 bg-white overflow-hidden relative group/ticker border-b border-slate-200/80">
         {/* Soft edge fade masks for authentic ticker tape look */}
         <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none z-10" />
         <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none z-10" />
@@ -502,7 +607,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
         <div className="max-w-7xl mx-auto overflow-hidden">
           <div 
             key={`${activeCategory}-${glideSpeed}-${sortedTickers.length}`}
-            className={`flex items-center gap-2.5 ${
+            className={`flex items-center ${
               isGliding 
                 ? (glideSpeed === 'slow' ? 'animate-ticker-glide-slow' : 'animate-ticker-glide') 
                 : 'overflow-x-auto no-scrollbar scroll-smooth'
@@ -510,125 +615,31 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
             style={isGliding ? { animationDuration: `${animationDurationSec}s` } : undefined}
             title={isGliding ? 'Hover om de ticker te pauzeren' : ''}
           >
-            {marqueeItems.map((sym, idx) => {
-              // Retrieve live quote with instant fallback to all asset classes (Tech, Shovel Sellers, Banks, Commodities, Bonds)
-              const q: LiveQuote | null = getQuoteForTicker(sym, quotes);
-              if (!q) return null;
+            {isGliding ? (
+              <>
+                {/* Block 1: Lead Spacer (ensures first ticker enters from the right) + Base Items */}
+                <div className="flex items-center shrink-0">
+                  <div className="w-[100vw] max-w-7xl shrink-0 flex items-center justify-end pr-8 text-[11px] font-mono-code font-bold text-slate-400 uppercase tracking-widest select-none">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2.5 animate-pulse" />
+                    <span>REAL-TIME EXCHANGE FEED</span>
+                  </div>
+                  {baseItems.map((sym, idx) => renderTickerItem(sym, `b1-${idx}`))}
+                </div>
 
-              const tick = recentTicks[sym];
-              const isPositive = q.change >= 0;
-              const isFlashingUp = tick === 'up';
-              const isFlashingDown = tick === 'down';
-              const isCommodity = COMMODITY_TICKERS.includes(sym);
-              const isBond = GOV_BOND_TICKERS.includes(sym);
-              const isEuropean = ['ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SAN', 'BBVA'].includes(sym.toUpperCase());
-              const curSym = isBond ? '' : (isEuropean && (q.currency === 'EUR' || !q.currency) ? '€' : getCurrencySymbol(q.currency));
-              const priceFormatted = isBond ? `${q.price.toFixed(3)}%` : `${curSym}${q.price.toFixed(2)}`;
-              
-              // Market Session & Pre/After-Market Calculation
-              const session = (!isCommodity && !isBond) ? getMarketSessionInfo(sym, q) : null;
-              const showPrePost = session && !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
-
-              // Technical check: 200 DMA and 52-week High/Low
-              const tech = (!isCommodity && !isBond) ? getStockTechnicalMetrics(sym, q.price, q) : null;
-              const isBelow200D = tech?.belowTwoHundredDayAverage;
-              const is52WHigh = tech?.is52WeekHigh;
-              const is52WLow = tech?.is52WeekLow;
-
-              return (
-                <button
-                  key={`${sym}-${idx}`}
-                  id={`ticker-pill-${sym.toLowerCase()}-${idx}`}
-                  onClick={() => onSelectTicker(sym)}
-                  className={`flex items-center space-x-2.5 px-3 py-1.5 rounded-lg border text-xs font-mono-code transition cursor-pointer shrink-0 shadow-2xs hover:shadow-xs ${
-                    isFlashingUp 
-                      ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-300' 
-                      : isFlashingDown 
-                      ? 'bg-rose-50 border-rose-400 text-rose-950 ring-1 ring-rose-300' 
-                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
-                  }`}
-                  title={`${sym} - Click to inspect ${isCommodity ? 'commodity metrics' : isBond ? 'sovereign yield curve' : 'earnings, analyst outlook, and 200 DMA'}`}
-                >
-                  {/* Logo & Symbol */}
-                  <span className="flex items-center space-x-1.5">
-                    {!isCommodity && !isBond && <StockLogo ticker={sym} size="xs" />}
-                    {isCommodity && <Flame className="w-3.5 h-3.5 text-amber-600" />}
-                    {isBond && <Landmark className="w-3.5 h-3.5 text-purple-600" />}
-                    <span className="font-bold tracking-tight text-slate-900">
-                      {sym}
-                    </span>
-                  </span>
-
-                  {/* Price / Yield */}
-                  <span className="font-bold tabular-nums text-slate-900">
-                    {priceFormatted}
-                  </span>
-
-                  {/* Percentage Rate of Price Change (Green for up, Red for down) */}
-                  <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
-                    isPositive 
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                      : 'bg-rose-50 text-rose-700 border border-rose-200'
-                  }`}>
-                    {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {isPositive ? `+${q.changePercent.toFixed(2)}%` : `${q.changePercent.toFixed(2)}%`}
-                  </span>
-
-                  {/* Pre/After-Market Change (In grey text/background with red or green numbers; disappears when regular market is open!) */}
-                  {showPrePost && (
-                    <span 
-                      className="inline-flex items-center gap-1 text-[9px] font-mono-code font-medium px-1.5 py-0.5 rounded bg-slate-100/90 border border-slate-200 text-slate-500 shadow-2xs"
-                      title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
-                    >
-                      <span className="text-[8px] uppercase text-slate-400 font-bold tracking-wider">
-                        {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
-                      </span>
-                      {session.prePostPrice !== undefined && (
-                        <span className="text-slate-500 font-normal">
-                          {curSym}{session.prePostPrice.toFixed(2)}
-                        </span>
-                      )}
-                      <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {session.prePostChangePercent! >= 0 ? `+${session.prePostChangePercent!.toFixed(2)}%` : `${session.prePostChangePercent!.toFixed(2)}%`}
-                      </span>
-                    </span>
-                  )}
-
-                  {/* 200 DMA Technical Warning Pill */}
-                  {isBelow200D && (
-                    <span 
-                      title={`Warning: ${sym} (${curSym}${q.price.toFixed(2)}) is trading below its 200 DMA (${curSym}${tech?.twoHundredDayAverage.toFixed(2)})`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold"
-                    >
-                      <AlertTriangle className="w-2.5 h-2.5 text-amber-700" />
-                      <span>&lt;200D</span>
-                    </span>
-                  )}
-
-                  {/* 52-Week High Indicator Pill with Icon */}
-                  {is52WHigh && (
-                    <span 
-                      title={`52-Week High: ${sym} (${curSym}${q.price.toFixed(2)}) reached a new 52-week high (${curSym}${tech?.fiftyTwoWeekHigh.toFixed(2)})`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[9px] font-bold"
-                    >
-                      <Sparkles className="w-2.5 h-2.5 text-emerald-700" />
-                      <span>52W-H</span>
-                    </span>
-                  )}
-
-                  {/* 52-Week Low Indicator Pill with Icon */}
-                  {is52WLow && (
-                    <span 
-                      title={`52-Week Low: ${sym} (${curSym}${q.price.toFixed(2)}) reached a new 52-week low (${curSym}${tech?.fiftyTwoWeekLow.toFixed(2)})`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 text-[9px] font-bold"
-                    >
-                      <AlertCircle className="w-2.5 h-2.5 text-rose-700" />
-                      <span>52W-L</span>
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                {/* Block 2: Identical Lead Spacer + Base Items (for seamless -50% loop) */}
+                <div className="flex items-center shrink-0">
+                  <div className="w-[100vw] max-w-7xl shrink-0 flex items-center justify-end pr-8 text-[11px] font-mono-code font-bold text-slate-400 uppercase tracking-widest select-none">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2.5 animate-pulse" />
+                    <span>REAL-TIME EXCHANGE FEED</span>
+                  </div>
+                  {baseItems.map((sym, idx) => renderTickerItem(sym, `b2-${idx}`))}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center shrink-0">
+                {sortedTickers.map((sym, idx) => renderTickerItem(sym, `static-${idx}`))}
+              </div>
+            )}
           </div>
         </div>
       </div>

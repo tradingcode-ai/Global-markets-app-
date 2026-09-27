@@ -47,6 +47,7 @@ import { BondsSection } from './components/BondsSection';
 import { JPMorganTableView } from './components/JPMorganTableView';
 import { McKinseyExecutiveView } from './components/McKinseyExecutiveView';
 import { GlobalNewsAgentView } from './components/GlobalNewsAgentView';
+import { SPSectorsAndEtfsView } from './components/SPSectorsAndEtfsView';
 import { FloatingAdvisoryBubble } from './components/FloatingAdvisoryBubble';
 import { 
   LayoutGrid, 
@@ -60,7 +61,8 @@ import {
   Layers,
   BookOpen,
   Landmark,
-  Globe
+  Globe,
+  PieChart
 } from 'lucide-react';
 
 export default function App() {
@@ -100,7 +102,7 @@ export default function App() {
   const prevQuotesRef = useRef<Record<string, LiveQuote>>({});
 
   // UI State
-  const [activeTab, setActiveTab] = useState<'jpmorgan' | 'bonds' | 'matrix' | 'calendar' | 'commodities' | 'mckinsey' | 'globalnewsagent'>('jpmorgan');
+  const [activeTab, setActiveTab] = useState<'jpmorgan' | 'bonds' | 'matrix' | 'calendar' | 'commodities' | 'mckinsey' | 'globalnewsagent' | 'sectors'>('jpmorgan');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedBondId, setSelectedBondId] = useState<string>('us-10y-treasury');
@@ -113,6 +115,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeToast, setActiveToast] = useState<PushNotificationItem | null>(null);
 
+  const quotesRef = useRef<Record<string, LiveQuote>>({});
+
   // Analyst consensus is live Yahoo Finance data. The client refreshes it periodically
   // instead of keeping a stale month-long localStorage snapshot.
   const ANALYST_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -122,7 +126,7 @@ export default function App() {
     setResults(prev => prev.map(item => {
       const snap = snapshot[item.ticker];
       const cur = getCurrencySymbol(item.currency || 'USD');
-      const livePrice = quotes[item.ticker]?.price || (item.epsEstimate ? item.epsEstimate * 25 : 120);
+      const livePrice = quotesRef.current[item.ticker]?.price || (item.epsEstimate ? item.epsEstimate * 25 : 120);
 
       const institutionalConsensus = getStockQuarterlyConsensus(item.ticker, livePrice, cur, item);
       const institutionalOutlooks = getStockAnalystOutlooks(item.ticker, livePrice, cur, item);
@@ -149,7 +153,7 @@ export default function App() {
         quarterlyConsensus: mergedConsensus
       };
     }));
-  }, [quotes]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -446,6 +450,7 @@ export default function App() {
         }
 
         prevQuotesRef.current = liveData;
+        quotesRef.current = liveData;
         setQuotes(liveData);
         setLastQuotesUpdated(new Date());
 
@@ -485,25 +490,64 @@ export default function App() {
     }
   }, []);
 
-  // Initial fetch and 8-second interval polling
+  // Initial fetch on mount
   useEffect(() => {
     loadMarketQuotes(true);
     loadEarningsCalendar();
     loadSec8kFilings();
   }, [loadMarketQuotes, loadEarningsCalendar, loadSec8kFilings]);
 
+  // Adaptive background-aware polling loop:
+  // - Pauses when phone screen is locked or tab is hidden (saves battery & prevents crash queues)
+  // - Calibrates interval: 5000ms on mobile devices to prevent thermal throttling, 2500ms on desktop
   useEffect(() => {
     if (!isStreaming) return;
-    const interval = setInterval(() => {
-      loadMarketQuotes(false);
-    }, 2500);
-    return () => clearInterval(interval);
+
+    let intervalId: number | null = null;
+
+    const getPollingDelay = () => {
+      if (typeof window === 'undefined') return 2500;
+      const isMobile = window.innerWidth < 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      return isMobile ? 5000 : 2500;
+    };
+
+    const startPolling = () => {
+      if (intervalId !== null) clearInterval(intervalId);
+      intervalId = window.setInterval(() => {
+        if (!document.hidden) {
+          loadMarketQuotes(false);
+        }
+      }, getPollingDelay());
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      } else {
+        // Returned to tab: clean immediate update, then resume timer
+        loadMarketQuotes(false);
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (intervalId !== null) clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [isStreaming, loadMarketQuotes]);
 
-  // SEC EDGAR 8-K Regulatory Filings Polling (every 60s)
+  // SEC EDGAR 8-K Regulatory Filings Polling (every 60s, pauses if tab hidden)
   useEffect(() => {
     const secInterval = setInterval(() => {
-      loadSec8kFilings();
+      if (!document.hidden) {
+        loadSec8kFilings();
+      }
     }, 60000);
     return () => clearInterval(secInterval);
   }, [loadSec8kFilings]);
@@ -966,6 +1010,20 @@ export default function App() {
               <Globe className="w-3.5 h-3.5 text-cyan-400" />
               <span>Global News Agent</span>
             </button>
+
+            {/* 7. S&P Sectors & Thematic ETFs Desk */}
+            <button
+              id="tab-sectors"
+              onClick={() => setActiveTab('sectors')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer font-medium ${
+                activeTab === 'sectors' 
+                  ? 'bg-[#002d62] text-cyan-300 shadow-2xs font-bold border border-cyan-700' 
+                  : 'text-slate-700 hover:text-slate-950 hover:bg-white/60'
+              }`}
+            >
+              <PieChart className="w-3.5 h-3.5 text-cyan-400" />
+              <span>S&P Sectors & ETFs</span>
+            </button>
           </div>
 
           {/* Institutional Alert Protocol Status Banner */}
@@ -1066,6 +1124,17 @@ export default function App() {
             onToggleSubscription={handleToggleSubscription}
             onSelectTicker={handleSelectTickerFromPill}
             onNavigateToAsset={handleNavigateAsset}
+          />
+        )}
+
+        {/* Tab 7: S&P 500 Macro Sectors & Thematic Industry ETFs Desk */}
+        {activeTab === 'sectors' && (
+          <SPSectorsAndEtfsView
+            quotes={quotes}
+            recentTicks={recentTicks}
+            onSelectTicker={handleSelectTickerFromPill}
+            onRefreshQuotes={() => loadMarketQuotes(true)}
+            isLoadingQuotes={isQuotesLoading}
           />
         )}
       </main>

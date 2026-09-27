@@ -71,18 +71,27 @@ export const RSS_FEEDS_CONFIG = {
     { name: "MarketWatch MarketPulse", url: "https://feeds.content.dowjones.io/public/rss/mw_marketpulse", category: "MARKETS" },
     { name: "MarketWatch Real-time", url: "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines", category: "MARKETS" }
   ],
+  CENTRAL_BANKS_MACRO: [
+    { name: "Federal Reserve Press Releases", url: "https://www.federalreserve.gov/feeds/press_all.xml", category: "CENTRAL_BANKS" },
+    { name: "European Central Bank (ECB)", url: "https://www.ecb.europa.eu/rss/press.html", category: "CENTRAL_BANKS" },
+    { name: "Trading Economics Global Indicators", url: "https://feeds.feedburner.com/TradingEconomics", category: "MACRO" },
+    { name: "Investing.com Central Banks", url: "https://www.investing.com/rss/news_301.rss", category: "CENTRAL_BANKS" },
+    { name: "Investing.com Economy & Rates", url: "https://www.investing.com/rss/news_14.rss", category: "MACRO" },
+    { name: "Investing.com Commodities", url: "https://www.investing.com/rss/news_11.rss", category: "COMMODITIES" },
+    { name: "Investing.com Stock Market", url: "https://www.investing.com/rss/news_25.rss", category: "MACRO" }
+  ],
+  CORPORATE_PRESS_WIRES: [
+    { name: "SEC EDGAR 8-K Regulatory Filings", url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK=&type=8-K&company=&dateb=&owner=include&start=0&count=40&output=atom", category: "REGULATORY" },
+    { name: "PR Newswire Financial Services", url: "https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss", category: "EARNINGS" },
+    { name: "Seeking Alpha Market Currents", url: "https://seekingalpha.com/market_currents.xml", category: "MARKETS" }
+  ],
   APAC: [
     { name: "CNBC Asia-Pacific News", url: "https://www.cnbc.com/id/19832390/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=19832390", category: "APAC" },
     { name: "Investing.com Asian Markets", url: "https://www.investing.com/rss/news_25.rss", category: "APAC" }
   ],
   EUROPE: [
-    { name: "CNBC Europe News", url: "https://www.cnbc.com/id/19794221/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=19794221", category: "EUROPE" }
-  ],
-  MACRO_COMMODITIES: [
-    { name: "Investing.com Commodities", url: "https://www.investing.com/rss/news_11.rss", category: "COMMODITIES" },
-    { name: "Investing.com Stock Market", url: "https://www.investing.com/rss/news_25.rss", category: "MACRO" },
-    { name: "Investing.com Economy & Rates", url: "https://www.investing.com/rss/news_14.rss", category: "MACRO" },
-    { name: "Investing.com Central Banks", url: "https://www.investing.com/rss/news_301.rss", category: "CENTRAL_BANKS" }
+    { name: "CNBC Europe News", url: "https://www.cnbc.com/id/19794221/device/rss/rss.html", fallbackUrl: "https://search.cnbc.com/rs/search/combinedserver/view.xml?partnerId=wrss01&id=19794221", category: "EUROPE" },
+    { name: "European Central Bank (ECB)", url: "https://www.ecb.europa.eu/rss/press.html", category: "CENTRAL_BANKS" }
   ]
 };
 
@@ -90,28 +99,32 @@ export function getFeedsForEdition(edition) {
   const norm = String(edition || "").toUpperCase();
 
   if (norm === "ASIA_OPEN") {
-    // Prioritize APAC & Global Macro feeds
+    // Prioritize APAC & Global Macro, Central Banks, and Corporate Wires
     return [
       ...RSS_FEEDS_CONFIG.APAC,
-      ...RSS_FEEDS_CONFIG.MACRO_COMMODITIES,
+      ...RSS_FEEDS_CONFIG.CENTRAL_BANKS_MACRO,
+      ...RSS_FEEDS_CONFIG.CORPORATE_PRESS_WIRES,
       ...RSS_FEEDS_CONFIG.US_GLOBAL
     ];
   }
 
   if (norm === "MORNING_EUROPE") {
-    // Include Europe, Asia overnight, and Global feeds
+    // Include Europe, ECB, Asia overnight, Global Macro, and Corporate Wires
     return [
       ...RSS_FEEDS_CONFIG.EUROPE,
+      ...RSS_FEEDS_CONFIG.CENTRAL_BANKS_MACRO,
+      ...RSS_FEEDS_CONFIG.CORPORATE_PRESS_WIRES,
       ...RSS_FEEDS_CONFIG.APAC,
-      ...RSS_FEEDS_CONFIG.US_GLOBAL,
-      ...RSS_FEEDS_CONFIG.MACRO_COMMODITIES
+      ...RSS_FEEDS_CONFIG.US_GLOBAL
     ];
   }
 
-  // US_OPEN / MARKET_CLOSE / default: prioritize US & Global feeds + Macro
+  // US_OPEN / MARKET_CLOSE / BREAKING / default:
+  // Prioritize US, Fed, SEC 8-K, Corporate Wires, and Global Macro
   return [
     ...RSS_FEEDS_CONFIG.US_GLOBAL,
-    ...RSS_FEEDS_CONFIG.MACRO_COMMODITIES,
+    ...RSS_FEEDS_CONFIG.CORPORATE_PRESS_WIRES,
+    ...RSS_FEEDS_CONFIG.CENTRAL_BANKS_MACRO,
     ...RSS_FEEDS_CONFIG.EUROPE
   ];
 }

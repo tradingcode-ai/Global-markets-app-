@@ -253,13 +253,52 @@ interface ContinentViewport {
 
 const CONTINENT_VIEWPORTS: Record<string, ContinentViewport> = {
   world: { name: 'Wereld', zoom: 1.25, centerLng: 18, centerLat: 16 },
-  europe: { name: 'Europa', zoom: 2.8, centerLng: 10, centerLat: 50 },
-  north_america: { name: 'Noord-Amerika', zoom: 2.4, centerLng: -95, centerLat: 40 },
-  south_america: { name: 'Zuid-Amerika', zoom: 2.3, centerLng: -58, centerLat: -18 },
-  asia: { name: 'Azië', zoom: 2.3, centerLng: 105, centerLat: 32 },
-  middle_east: { name: 'Midden-Oosten', zoom: 3.2, centerLng: 48, centerLat: 26 },
-  south_asia: { name: 'Zuid-Azië', zoom: 3.0, centerLng: 75, centerLat: 22 },
-  oceania: { name: 'Oceanië', zoom: 2.6, centerLng: 140, centerLat: -28 }
+  europe: { name: 'Europa', zoom: 4.6, centerLng: 4.6, centerLat: 49.6 },
+  north_america: { name: 'Noord-Amerika', zoom: 3.6, centerLng: -82, centerLat: 41 },
+  asia: { name: 'Azië', zoom: 2.85, centerLng: 110, centerLat: 17 },
+  middle_east: { name: 'Midden-Oosten', zoom: 4.2, centerLng: 50, centerLat: 24.5 },
+  oceania: { name: 'Oceanië', zoom: 3.4, centerLng: 145, centerLat: -29 },
+  south_america: { name: 'Zuid-Amerika', zoom: 3.2, centerLng: -52, centerLat: -20 },
+  south_asia: { name: 'Zuid-Azië', zoom: 3.4, centerLng: 75, centerLat: 21 }
+};
+
+// Strategic non-overlapping label placement configuration per city
+interface CityLabelPlacement {
+  dx: number;
+  dy: number;
+  anchor: 'start' | 'middle' | 'end';
+}
+
+const CITY_LABEL_PLACEMENTS: Record<string, CityLabelPlacement> = {
+  // North America (Toronto northwest, New York southeast - completely separated)
+  toronto: { dx: -14, dy: -12, anchor: 'end' },
+  new_york: { dx: 14, dy: 10, anchor: 'start' },
+
+  // Europe (Strict radial distribution: London WNW, Amsterdam NNE, Frankfurt E, Paris SW, Zurich SE, Milan SSE, Madrid WSW)
+  london: { dx: -15, dy: -9, anchor: 'end' },
+  amsterdam: { dx: 14, dy: -14, anchor: 'start' },
+  frankfurt: { dx: 15, dy: -4, anchor: 'start' },
+  paris: { dx: -15, dy: 10, anchor: 'end' },
+  zurich: { dx: 15, dy: 8, anchor: 'start' },
+  milan: { dx: 15, dy: 18, anchor: 'start' },
+  madrid: { dx: -14, dy: 10, anchor: 'end' },
+
+  // Asia (Framed with Singapore prominently visible at the base)
+  seoul: { dx: -14, dy: -10, anchor: 'end' },
+  tokyo: { dx: 14, dy: -6, anchor: 'start' },
+  shanghai: { dx: 14, dy: -8, anchor: 'start' },
+  taipei: { dx: 14, dy: 2, anchor: 'start' },
+  hong_kong: { dx: -14, dy: 8, anchor: 'end' },
+  singapore: { dx: 14, dy: 6, anchor: 'start' },
+  mumbai: { dx: -14, dy: -6, anchor: 'end' },
+
+  // Middle East
+  riyadh: { dx: -14, dy: -8, anchor: 'end' },
+  abu_dhabi: { dx: 14, dy: 8, anchor: 'start' },
+
+  // Oceania & South America
+  sydney: { dx: 14, dy: 8, anchor: 'start' },
+  sao_paulo: { dx: 14, dy: 8, anchor: 'start' }
 };
 
 // Deterministic chart history builder
@@ -1129,7 +1168,12 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
 export const GlobalMarketsMap: React.FC = () => {
   const [markets, setMarkets] = useState<MarketItem[]>(DEFAULT_MARKETS);
 
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768;
+    }
+    return true;
+  });
   const [activeContinent, setActiveContinent] = useState<string>('world');
   const [selectedHub, setSelectedHub] = useState<CityHub | null>(null);
   
@@ -1239,9 +1283,12 @@ export const GlobalMarketsMap: React.FC = () => {
     fetchLiveData();
   }, []);
 
-  // Update World Clocks every second
+  // Update World Clocks every second (only when map is expanded and tab is visible)
   useEffect(() => {
+    if (!isExpanded) return;
+
     const updateClocks = () => {
+      if (document.hidden) return;
       const now = new Date();
 
       // 1. London (24-hour GMT/BST)
@@ -1279,11 +1326,14 @@ export const GlobalMarketsMap: React.FC = () => {
     updateClocks();
     const clockInterval = setInterval(updateClocks, 1000);
     return () => clearInterval(clockInterval);
-  }, []);
+  }, [isExpanded]);
 
   // Auto-refresh countdown & micro-ticks on open markets
   useEffect(() => {
+    if (!isExpanded) return;
+
     const timer = setInterval(() => {
+      if (document.hidden) return;
       setCountdown(prev => {
         if (prev <= 1) {
           fetchLiveData();
@@ -1291,25 +1341,25 @@ export const GlobalMarketsMap: React.FC = () => {
         }
         return prev - 1;
       });
-
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [isExpanded]);
 
-  // Zoom into specific continent viewport (smooth animated transform)
+  // Zoom into specific continent viewport (smooth animated transform with deep Western Europe focus)
   const zoomToContinent = (continentKey: string) => {
-    setActiveContinent(continentKey);
-    const target = CONTINENT_VIEWPORTS[continentKey] || CONTINENT_VIEWPORTS.world;
+    const key = continentKey === 'south_asia' ? 'asia' : continentKey;
+    setActiveContinent(key);
+    const target = CONTINENT_VIEWPORTS[key] || CONTINENT_VIEWPORTS.world;
+
     const coords = projection([target.centerLng, target.centerLat]);
     if (!coords) return;
 
     const [px, py] = coords;
-    const targetZoom = target.zoom;
-    const targetPanX = MAP_WIDTH / 2 - px * targetZoom;
-    const targetPanY = MAP_HEIGHT / 2 - py * targetZoom;
+    const targetPanX = MAP_WIDTH / 2 - px * target.zoom;
+    const targetPanY = MAP_HEIGHT / 2 - py * target.zoom;
 
-    setZoom(targetZoom);
+    setZoom(target.zoom);
     setPan({ x: targetPanX, y: targetPanY });
   };
 
@@ -1711,26 +1761,26 @@ export const GlobalMarketsMap: React.FC = () => {
         <div className="p-3.5 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* LEFT COLUMN: Fixed World Map (Non-moveable, zooms to continent on selection) */}
           <div className="lg:col-span-5 flex flex-col gap-2">
-            {/* Map Header with active continent, plus/min indicator & Reset Button */}
-            <div className="flex items-center justify-between px-1 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-medium">Kaartweergave:</span>
-                <span className="font-semibold text-slate-200 bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800 text-[11px]">
-                  {CONTINENT_VIEWPORTS[activeContinent]?.name || 'Wereld'}
-                </span>
-                {selectedHub && (() => {
-                  const hubCol = getHubColor(selectedHub);
-                  return (
-                    <span className={`text-[11px] ${hubCol.text} font-semibold truncate max-w-[170px]`}>
-                      • {selectedHub.cityName}
-                    </span>
-                  );
-                })()}
-              </div>
+            {/* Map Header with active continent, plus/min indicator & Continent Selector */}
+            <div className="flex flex-col gap-1.5 px-1 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-medium">Kaartweergave:</span>
+                  <span className="font-semibold text-slate-200 bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800 text-[11px]">
+                    {CONTINENT_VIEWPORTS[activeContinent]?.name || 'Wereld'}
+                  </span>
+                  {selectedHub && (() => {
+                    const hubCol = getHubColor(selectedHub);
+                    return (
+                      <span className={`text-[11px] ${hubCol.text} font-semibold truncate max-w-[170px]`}>
+                        • {selectedHub.cityName}
+                      </span>
+                    );
+                  })()}
+                </div>
 
-              <div className="flex items-center gap-2">
                 {/* Subtle indicator: Groen = Plus, Rood = Min, Pre-Mkt, Uit */}
-                <div className="hidden xs:flex items-center gap-1.5 text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800/80">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800/80">
                   <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                     <span>+</span>
@@ -1751,17 +1801,46 @@ export const GlobalMarketsMap: React.FC = () => {
                     <span>Uit</span>
                   </span>
                 </div>
+              </div>
 
-                {activeContinent !== 'world' && (
-                  <button
-                    onClick={handleResetView}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[11px] border border-slate-700/80"
-                    title="Herstel naar de hele wereld"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Wereld</span>
-                  </button>
-                )}
+              {/* All Continent Filter Navigation Buttons in uniform slate gray */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+                <button
+                  onClick={handleResetView}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-medium transition cursor-pointer border shadow-2xs shrink-0 ${
+                    activeContinent === 'world'
+                      ? 'bg-slate-700 text-white border-slate-600 font-semibold ring-1 ring-slate-500/50'
+                      : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/80'
+                  }`}
+                  title="Herstel naar de hele wereld"
+                >
+                  <RotateCcw className="w-2.5 h-2.5" />
+                  <span>Wereld</span>
+                </button>
+                {[
+                  { id: 'europe', label: 'Europa' },
+                  { id: 'north_america', label: 'Noord-Amerika' },
+                  { id: 'asia', label: 'Azië' },
+                  { id: 'middle_east', label: 'Midden-Oosten' },
+                  { id: 'oceania', label: 'Oceanië' },
+                  { id: 'south_america', label: 'Zuid-Amerika' }
+                ].map(c => {
+                  const isActive = activeContinent === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => zoomToContinent(c.id)}
+                      className={`flex items-center px-2 py-0.5 rounded text-[10.5px] font-medium transition cursor-pointer border shadow-2xs shrink-0 ${
+                        isActive
+                          ? 'bg-slate-700 text-white border-slate-600 font-semibold ring-1 ring-slate-500/50'
+                          : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/80'
+                      }`}
+                      title={`Zoom naar ${c.label}`}
+                    >
+                      <span>{c.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1878,9 +1957,71 @@ export const GlobalMarketsMap: React.FC = () => {
                       pinStroke = '#475569';
                     }
 
-                    // Only New York, London, and Shanghai have name tags permanently displayed on the map
-                    const isAlwaysNamed = ['new_york', 'london', 'shanghai'].includes(hub.id);
-                    const showLabel = isAlwaysNamed || isSelected || isHovered;
+                    // Show city labels for all cities belonging to the currently active continent
+                    const isContinentMember = activeContinent !== 'world' && (
+                      hub.continent === activeContinent || 
+                      (activeContinent === 'asia' && hub.continent === 'south_asia')
+                    );
+                    const isGlobalAnchor = activeContinent === 'world' && ['new_york', 'london', 'tokyo', 'shanghai'].includes(hub.id);
+                    const showLabel = isGlobalAnchor || isContinentMember || isSelected || isHovered;
+
+                    // Non-overlapping placement calculations
+                    const placement = CITY_LABEL_PLACEMENTS[hub.id] || { dx: 0, dy: -9, anchor: 'middle' };
+                    const textLen = hub.cityName.length;
+                    const badgeWidth = textLen * 5.2 + 8;
+                    const badgeHeight = 11;
+                    const rectX = placement.anchor === 'start' 
+                      ? placement.dx - 2 
+                      : (placement.anchor === 'end' ? placement.dx - badgeWidth + 2 : placement.dx - badgeWidth / 2);
+                    const rectY = placement.dy - badgeHeight / 2;
+                    const textX = placement.anchor === 'start' 
+                      ? placement.dx + 2 
+                      : (placement.anchor === 'end' ? placement.dx - 2 : placement.dx);
+                    const textY = placement.dy + 2.4;
+
+                    const isContinentZoomed = activeContinent !== 'world';
+
+                    // Dynamic pin dot dimensions: smaller and razor-sharp when zoomed into a continent so they never overlap
+                    const pinRadius = isSelected 
+                      ? (isContinentZoomed ? 2.8 : 4.8) 
+                      : (isContinentZoomed ? 1.7 : (isGlobalAnchor ? 3.0 : 2.5));
+                    const pinStrokeWidth = isSelected 
+                      ? (isContinentZoomed ? 1.2 : 1.8) 
+                      : (isContinentZoomed ? 0.65 : 0.9);
+
+                    // Dynamic subtle beacon wave sizing: scaled down proportionately
+                    const pingRadius = isSelected 
+                      ? (isContinentZoomed ? 5.5 : 9.5) 
+                      : (isContinentZoomed ? 3.4 : 6.0);
+
+                    // Leader callout line target with engineered elbow angle (dogleg)
+                    const hasLeaderLine = showLabel && (isContinentZoomed || isSelected || isHovered);
+                    let lineTargetX = 0;
+                    let lineTargetY = 0;
+                    let elbowX = 0;
+                    let elbowY = 0;
+
+                    if (placement.anchor === 'start') {
+                      lineTargetX = rectX;
+                      lineTargetY = rectY + badgeHeight / 2;
+                      elbowX = Math.max(2, lineTargetX - 4);
+                      elbowY = lineTargetY;
+                    } else if (placement.anchor === 'end') {
+                      lineTargetX = rectX + badgeWidth;
+                      lineTargetY = rectY + badgeHeight / 2;
+                      elbowX = Math.min(-2, lineTargetX + 4);
+                      elbowY = lineTargetY;
+                    } else {
+                      lineTargetX = rectX + badgeWidth / 2;
+                      lineTargetY = placement.dy < 0 ? rectY + badgeHeight : rectY;
+                      elbowX = lineTargetX;
+                      elbowY = lineTargetY;
+                    }
+
+                    // Crisp angled path (from Pin dot at 0,0 -> Elbow bend -> Horizontal into Badge)
+                    const leaderPath = (elbowX !== 0 || elbowY !== 0) && (elbowX !== lineTargetX || elbowY !== lineTargetY)
+                      ? `M 0 0 L ${elbowX.toFixed(1)} ${elbowY.toFixed(1)} L ${lineTargetX.toFixed(1)} ${lineTargetY.toFixed(1)}`
+                      : `M 0 0 L ${lineTargetX.toFixed(1)} ${lineTargetY.toFixed(1)}`;
 
                     return (
                       <g
@@ -1894,31 +2035,51 @@ export const GlobalMarketsMap: React.FC = () => {
                         onMouseLeave={() => setHoveredHub(null)}
                         className="cursor-pointer group"
                       >
+                        {/* Leader Callout Line with engineered elbow bend (Thin, sharp, solid - no dashes) */}
+                        {hasLeaderLine && (
+                          <path
+                            d={leaderPath}
+                            fill="none"
+                            stroke={isSelected 
+                              ? (isPositive ? '#10b981' : '#ef4444') 
+                              : (isOpen ? (isPositive ? '#10b981' : '#ef4444') : '#64748b')}
+                            strokeWidth={isSelected ? "1.0" : "0.65"}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            opacity={isSelected ? "1" : (isContinentMember ? "0.85" : "0.55")}
+                          />
+                        )}
+
                         {/* Animated Pulse Beacon (Flikkeren) for active Open & Pre-Market sessions */}
                         {isFlickering && (
                           <g>
                             {/* Expanding CSS ping wave */}
                             <circle
-                              r={isSelected ? "11" : "7.5"}
+                              r={pingRadius}
                               fill={pingColor}
                               opacity={isPreMarket ? "0.25" : "0.35"}
                               className="animate-ping"
                               style={{ transformOrigin: '0 0' }}
                             />
                             {/* Native SVG expanding wave to guarantee smooth flicker */}
-                            <circle r="3.2" fill="none" stroke={pingColor} strokeWidth="1.2" opacity="0.8">
-                              <animate attributeName="r" values="3.2;9;12" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
+                            <circle r={isContinentZoomed ? "1.6" : "2.6"} fill="none" stroke={pingColor} strokeWidth={isContinentZoomed ? "0.8" : "1.2"} opacity="0.8">
+                              <animate 
+                                attributeName="r" 
+                                values={isContinentZoomed ? "1.6;3.2;4.8" : "2.6;6;8.5"} 
+                                dur={isPreMarket ? "2.2s" : "1.5s"} 
+                                repeatCount="indefinite" 
+                              />
                               <animate attributeName="opacity" values="0.8;0.3;0" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
                             </circle>
                           </g>
                         )}
 
-                        {/* Pin Dot: Purely red/green when open, gray with red/green border in pre-market, plain gray when closed */}
+                        {/* Pin Dot: Scaled down when zoomed into continent so pins never overlap */}
                         <circle
-                          r={isSelected ? "5.5" : (isAlwaysNamed ? "4.0" : "3.2")}
+                          r={pinRadius}
                           fill={pinFill}
                           stroke={isSelected ? (isClosed ? "#94a3b8" : (isPositive ? "#10b981" : "#ef4444")) : pinStroke}
-                          strokeWidth={isSelected ? "2.2" : (isPreMarket ? "1.8" : (isOpen ? "1.2" : "0.8"))}
+                          strokeWidth={pinStrokeWidth}
                           filter={isFlickering ? "url(#cityGlow)" : undefined}
                         >
                           {isFlickering && (
@@ -1926,28 +2087,37 @@ export const GlobalMarketsMap: React.FC = () => {
                           )}
                         </circle>
 
-                        {/* Name Tag Label */}
+                        {/* Name Tag Label with non-overlapping offset - fully clickable to select index */}
                         {showLabel && (
-                          <g transform="translate(0, -9)">
+                          <g 
+                            className="cursor-pointer transition-transform group-hover:scale-105"
+                            style={{ transformOrigin: `${rectX + badgeWidth / 2}px ${rectY + badgeHeight / 2}px` }}
+                          >
                             <rect
-                              x={-(hub.cityName.length * 3.2 + 6)}
-                              y="-11"
-                              width={hub.cityName.length * 6.4 + 12}
-                              height="12"
+                              x={rectX}
+                              y={rectY}
+                              width={badgeWidth}
+                              height={badgeHeight}
                               rx="2.5"
                               fill="#080d19"
-                              fillOpacity="0.94"
-                              stroke={isSelected ? (isClosed ? '#64748b' : (isPositive ? '#10b981' : '#ef4444')) : (isOpen ? (isPositive ? '#065f46' : '#7f1d1d') : (isPreMarket ? (isPositive ? '#065f46' : '#7f1d1d') : '#334155'))}
-                              strokeWidth="0.75"
+                              fillOpacity="0.95"
+                              stroke={isSelected 
+                                ? (isClosed ? '#94a3b8' : (isPositive ? '#10b981' : '#ef4444')) 
+                                : (isOpen 
+                                  ? (isPositive ? '#065f46' : '#7f1d1d') 
+                                  : (isPreMarket ? (isPositive ? '#065f46' : '#7f1d1d') : '#334155'))}
+                              strokeWidth={isSelected ? "1.2" : "0.75"}
+                              className="group-hover:stroke-cyan-400 group-hover:fill-[#0c182c] transition-colors"
                             />
                             <text
-                              x="0"
-                              y="-3"
-                              textAnchor="middle"
+                              x={textX}
+                              y={textY}
+                              textAnchor={placement.anchor}
                               fill="#ffffff"
-                              fontSize="7.5"
+                              fontSize="6.8"
                               fontWeight="700"
                               fontFamily="sans-serif"
+                              className="group-hover:fill-cyan-200 transition-colors select-none"
                             >
                               {hub.cityName}
                             </text>
