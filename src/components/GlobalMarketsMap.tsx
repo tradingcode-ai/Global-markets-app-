@@ -905,6 +905,7 @@ interface MarketHistoryChartProps {
   timeframe: ChartTimeframe;
   loading?: boolean;
   provider?: string;
+  referenceValue?: number;
 }
 
 const formatChartPrice = (value: number, currency: string) => {
@@ -923,7 +924,8 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   ticker,
   timeframe,
   loading = false,
-  provider = 'Yahoo Finance Historical Chart API'
+  provider = 'Yahoo Finance Historical Chart API',
+  referenceValue
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -979,8 +981,10 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
 
   const startVal = points[0].value;
   const endVal = points[points.length - 1].value;
-  const periodChange = endVal - startVal;
-  const periodPct = startVal ? (periodChange / startVal) * 100 : 0;
+  const hasReferenceValue = timeframe === '24U' && Number.isFinite(referenceValue) && Number(referenceValue) > 0;
+  const changeBase = hasReferenceValue ? Number(referenceValue) : startVal;
+  const periodChange = endVal - changeBase;
+  const periodPct = changeBase ? (periodChange / changeBase) * 100 : 0;
   const isPositive = periodChange >= 0;
 
   const volumeValues = chartData.map(d => Number(d.volume || 0));
@@ -2378,6 +2382,7 @@ export const GlobalMarketsMap: React.FC = () => {
                       timeframe={activeTimeframe}
                       loading={chartLoading}
                       provider={chartProvider}
+                      referenceValue={selectedMarket.previousClose}
                     />
                   </div>
                 </div>
