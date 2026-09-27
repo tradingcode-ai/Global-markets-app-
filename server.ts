@@ -442,11 +442,16 @@ const DEFAULT_EU_FINANCIAL_SYMBOLS = [
   'BCS', 'BARC', 'HSBC', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'UBS', 'SAN', 'BBVA', 'SX7P'
 ];
 
-const DEFAULT_HYPERSCALER_SYMBOLS = ['GOOGL', 'MSFT', 'AMZN', 'SPCX', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'];
+const DEFAULT_HYPERSCALER_SYMBOLS = ['GOOGL', 'MSFT', 'AMZN', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'];
+
+const DEFAULT_AEROSPACE_DEFENSE_SYMBOLS = [
+  'SPCX','GE','RTX','BA','LMT','RKLB','DRS','RKGRY','RCAT','RYCEY',
+  'EADSY','RNMBY','BDRBF','KTOS','AVAV','ESLT','UMAC','DRO','ASTS','RDW'
+];
 
 const DEFAULT_SHOVEL_SYMBOLS = [
   'TSM', '2330.TW', 'AMAT', 'LRCX', 'KLAC', '8035.T', 'TOELY', '6857.T', 'ATEYY', 'TER', 
-  'COHR', 'LITE', 'CSCO', 'CIEN', 'ASTS', 'WDC', 'STX', 
+  'COHR', 'LITE', 'CSCO', 'CIEN', 'WDC', 'STX', 
   'DELL', 'SMCI', 'HPE', 'IONQ', 'QBTS', 'INTC', 
   'SSNLF', 'HXSCF', 'MU', 'MRVL', 'CXMT', '0981.HK', 'SMICY', 'SMIC', 
   'TXN', '285A.T', 'KIOXIA', 'NXPI', 'CBRS',
@@ -473,6 +478,7 @@ const DEFAULT_ALL_SYMBOLS = [
   ...DEFAULT_TECH_SYMBOLS,
   ...DEFAULT_HYPERSCALER_SYMBOLS,
   ...DEFAULT_SHOVEL_SYMBOLS,
+  ...DEFAULT_AEROSPACE_DEFENSE_SYMBOLS,
   ...DEFAULT_COMMODITY_SYMBOLS,
   ...DEFAULT_BOND_SYMBOLS,
   ...DEFAULT_US_FINANCIAL_SYMBOLS,
@@ -628,6 +634,8 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'SX7P': 'EXV1.DE',
   // Hyperscalers & Neo Clouds — primary public listings
   'SPCX': 'SPCX',
+  'RKGRY': 'RNKGF',
+  'DRO': 'DRO.AX',
   'CRWV': 'CRWV',
   'NBIS': 'NBIS',
   'IREN': 'IREN'
@@ -2883,6 +2891,19 @@ const SEC_CIK_REGISTRY: Record<string, string> = {
   'COHR': '0000863894',
   'CIEN': '0001036044',
   'ASTS': '0001780312',
+  'SPCX': '0001181412',
+  'GE': '0000040545',
+  'RTX': '0000101829',
+  'BA': '0000012927',
+  'LMT': '0000936468',
+  'RKLB': '0001819994',
+  'DRS': '0001847393',
+  'RCAT': '0001819796',
+  'KTOS': '0001069258',
+  'AVAV': '0001178700',
+  'UMAC': '0001956955',
+  'RDW': '0001819810',
+
   'IONQ': '0001824920',
   'QBTS': '0001907982',
   'BCS': '0000312069',
@@ -3484,7 +3505,7 @@ app.get('/api/quarterly-analyst-outlook', async (req, res) => {
     const symbolsParam = req.query.symbols as string;
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-      : [...DEFAULT_TECH_SYMBOLS, ...DEFAULT_SHOVEL_SYMBOLS, ...DEFAULT_US_FINANCIAL_SYMBOLS, ...DEFAULT_EU_FINANCIAL_SYMBOLS];
+      : [...DEFAULT_TECH_SYMBOLS, ...DEFAULT_SHOVEL_SYMBOLS, ...DEFAULT_AEROSPACE_DEFENSE_SYMBOLS, ...DEFAULT_US_FINANCIAL_SYMBOLS, ...DEFAULT_EU_FINANCIAL_SYMBOLS];
 
     const quarterKey = getQuarterKey();
     const data: Record<string, QuarterlyAnalystOutlookPayload> = {};

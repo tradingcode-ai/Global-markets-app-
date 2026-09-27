@@ -14,6 +14,7 @@ import {
 import { SHOVEL_SELLERS_COMPANIES } from './data/shovelSellersData';
 import { HYPERSCALER_COMPANIES, HYPERSCALER_TICKERS } from './data/hyperscalersData';
 import { FINANCIAL_COMPANIES, FINANCIAL_RESULTS } from './data/financialsData';
+import { AEROSPACE_DEFENSE_RESULTS, AEROSPACE_DEFENSE_COMPANIES } from './data/aerospaceDefenseData';
 import { COMMODITIES_DATA } from './data/commoditiesData';
 import { getStockTechnicalMetrics } from './data/technicalData';
 import { getStockQuarterlyConsensus, getStockAnalystOutlooks } from './data/analystCoverageData';
@@ -67,7 +68,7 @@ import {
 
 export default function App() {
   const [results, setResults] = useState<QuarterlyResult[]>(() => {
-    const combined = [...INITIAL_EARNINGS_RESULTS, ...FINANCIAL_RESULTS];
+    const combined = [...INITIAL_EARNINGS_RESULTS, ...FINANCIAL_RESULTS, ...AEROSPACE_DEFENSE_RESULTS];
     return combined.map(item => {
       const base = HYPERSCALER_TICKERS.has(item.ticker) 
         ? { ...item, sector: 'Hyperscalers & Neo Clouds' as any, subSector: item.subSector || (['GOOGL','MSFT','AMZN','ORCL','META'].includes(item.ticker) ? 'Hyperscalers' : 'Neo Clouds') } 
@@ -129,7 +130,9 @@ export default function App() {
       const livePrice = quotesRef.current[item.ticker]?.price || (item.epsEstimate ? item.epsEstimate * 25 : 120);
 
       const institutionalConsensus = getStockQuarterlyConsensus(item.ticker, livePrice, cur, item);
-      const institutionalOutlooks = getStockAnalystOutlooks(item.ticker, livePrice, cur, item);
+      const institutionalOutlooks = snap?.outlooks?.length
+        ? snap.outlooks
+        : getStockAnalystOutlooks(item.ticker, livePrice, cur, item);
 
       // Merge backend verification with rich forward consensus
       const mergedConsensus = snap ? {
@@ -164,7 +167,8 @@ export default function App() {
           ...Object.keys(TECH_COMPANIES),
           ...Object.keys(SHOVEL_SELLERS_COMPANIES),
           ...Object.keys(HYPERSCALER_COMPANIES),
-          ...Object.keys(FINANCIAL_COMPANIES)
+          ...Object.keys(FINANCIAL_COMPANIES),
+          ...Object.keys(AEROSPACE_DEFENSE_COMPANIES)
         ]));
         const response = await fetchQuarterlyAnalystOutlook(allSymbols);
         if (cancelled || !response?.data) return;
@@ -209,6 +213,7 @@ export default function App() {
         SHOVEL_SELLERS_COMPANIES[sym]?.name ||
         HYPERSCALER_COMPANIES[sym]?.name ||
         FINANCIAL_COMPANIES[sym]?.name ||
+        AEROSPACE_DEFENSE_COMPANIES[sym]?.name ||
         COMMODITIES_DATA.find(c => c.symbol === sym)?.name ||
         quote.companyName ||
         sym;
