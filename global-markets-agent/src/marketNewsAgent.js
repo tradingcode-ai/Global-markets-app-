@@ -159,6 +159,9 @@ function generateDeterministicEventId(ticker, eventKey) {
 }
 
 export async function runAgentCycle(targetEdition = getCurrentEdition()) {
+  if (!CONFIG.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY ontbreekt in de omgevingsvariabelen! Zorg dat de secret 'GEMINI_API_KEY' is ingesteld in je GitHub repository onder Settings -> Secrets and variables -> Actions.");
+  }
   const now = new Date();
   const todayDateStr = now.toISOString().split("T")[0];
 

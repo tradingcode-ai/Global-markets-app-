@@ -15,7 +15,7 @@ function getValidDatabaseUrl() {
 }
 
 export const CONFIG = {
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_KEY || process.env.API_KEY,
   GEMINI_MODEL: process.env.GEMINI_NEWS_MODEL || "gemini-3.8-flash",
   GEMINI_THINKING_LEVEL: process.env.GEMINI_THINKING_LEVEL || "MEDIUM",
   TEMPERATURE: parseFloat(process.env.GEMINI_TEMPERATURE || "0.1"),
