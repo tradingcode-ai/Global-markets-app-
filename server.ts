@@ -2556,15 +2556,20 @@ async function fetchYahooMarketHistory(
     // 1. Primary Yahoo query using timeframe configuration
     let points = await tryYahoo(normalizedTicker, config.interval, config.range);
 
-    // 2. Intelligent fallback for non-standard or Middle East calendars
+    // 2. Real-data-only fallbacks for Yahoo range/interval availability.
+    // Intraday Yahoo windows can vary by instrument; retry with supported
+    // intervals, but never manufacture chart points.
     if (!points) {
-      if (timeframe === '1Y' || timeframe === 'YTD' || timeframe === '3M') {
-        points = await tryYahoo(normalizedTicker, '1h', config.range);
+      if (timeframe === '24U') {
+        points = await tryYahoo(normalizedTicker, '15m', '1d');
+      } else if (timeframe === '1W') {
+        points = await tryYahoo(normalizedTicker, '30m', '5d');
+      } else if (timeframe === '3M' || timeframe === 'YTD') {
+        points = await tryYahoo(normalizedTicker, '1d', config.range);
+      } else if (timeframe === '1Y') {
+        points = await tryYahoo(normalizedTicker, '1d', '1y');
       } else if (timeframe === '5Y' || timeframe === '10Y' || timeframe === 'ALL') {
-        points = await tryYahoo(normalizedTicker, '1mo', 'max') ||
-                 await tryYahoo(normalizedTicker, '3mo', 'max');
-      } else if (timeframe === '24U' || timeframe === '1W') {
-        points = await tryYahoo(normalizedTicker, '1h', config.range);
+        points = await tryYahoo(normalizedTicker, '1mo', config.range === 'max' ? 'max' : config.range);
       }
     }
 
@@ -2703,75 +2708,13 @@ app.get('/api/global-market-history/:symbol', async (req, res) => {
       timeZone
     );
 
-    // If Yahoo returned null or empty points, generate synthetic points anchored to live quote
-    if (!history || history.points.length === 0) {
-      const quote = (await fetchQuote(yahooTicker)) || (await fetchQuote(rawSymbol));
-      const curPrice = quote?.price && quote.price > 0 ? quote.price : 100.0;
-      const prevClose = quote?.previousClose && quote.previousClose > 0 ? quote.previousClose : curPrice;
-      const dayChg = curPrice - prevClose;
-      const dayChgPct = prevClose ? (dayChg / prevClose) * 100 : 0;
-
-      const fallbackPoints: YahooHistoryPoint[] = [];
-      const nowTs = Math.floor(Date.now() / 1000);
-      let numPts = 40;
-      let stepSec = 300; // 5 min for 24U
-
-      if (timeframe === '24U') {
-        numPts = 48;
-        stepSec = 15 * 60;
-      } else if (timeframe === '1W') {
-        numPts = 35;
-        stepSec = 4 * 3600;
-      } else if (timeframe === '3M') {
-        numPts = 60;
-        stepSec = 24 * 3600;
-      } else if (timeframe === 'YTD') {
-        numPts = 70;
-        stepSec = 24 * 3600;
-      } else if (timeframe === '1Y') {
-        numPts = 52;
-        stepSec = 7 * 24 * 3600;
-      } else if (timeframe === '5Y') {
-        numPts = 60;
-        stepSec = 30 * 24 * 3600;
-      } else if (timeframe === '10Y') {
-        numPts = 40;
-        stepSec = 90 * 24 * 3600;
-      } else {
-        numPts = 80;
-        stepSec = 30 * 24 * 3600;
-      }
-
-      // Generate a realistic trend leading to curPrice
-      const totalSpan = numPts * stepSec;
-      const startPrice = timeframe === '24U' ? prevClose : curPrice * (1 - (timeframe === '5Y' || timeframe === '10Y' ? 0.35 : 0.08));
-      
-      for (let i = 0; i < numPts; i++) {
-        const ptTs = nowTs - (numPts - 1 - i) * stepSec;
-        const progress = i / (numPts - 1);
-        // smooth sigmoid + subtle noise
-        const trend = startPrice + (curPrice - startPrice) * progress;
-        const noise = (Math.sin(i * 0.7) * 0.015 + Math.cos(i * 1.3) * 0.01) * trend;
-        const ptVal = i === numPts - 1 ? curPrice : Number((trend + noise).toFixed(2));
-        
-        fallbackPoints.push({
-          timestamp: ptTs,
-          date: formatHistoryPointDate(ptTs, timeframe, timeZone),
-          value: ptVal,
-          close: ptVal,
-          open: ptVal * 0.998,
-          high: ptVal * 1.004,
-          low: ptVal * 0.996,
-          volume: Math.round(50000 + Math.abs(Math.sin(i)) * 150000)
-        });
-      }
-
-      history = {
-        points: fallbackPoints,
-        interval: MARKET_HISTORY_CONFIG[timeframe].interval,
-        provider: 'S&P Institutional Market Data Feed',
-        lastUpdated: new Date().toISOString()
-      };
+    // Historical charts must never be fabricated. If Yahoo has no usable bars,
+    // return an explicit unavailable response rather than synthetic/noise data.
+    if (!history || history.points.length < 2) {
+      return res.status(503).json({
+        success: false,
+        error: `Historical market data is temporarily unavailable for ${yahooTicker}.`
+      });
     }
 
     const points = history.points;
