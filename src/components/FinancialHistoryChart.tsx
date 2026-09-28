@@ -32,7 +32,6 @@ import {
 import { CompanyFinancialHistory, QuarterlyFinancialPoint, FinancialMetricKey } from '../types';
 import { getCurrencySymbol } from '../utils/formatters';
 import {
-  isSameFiscalQuarter,
   getOfficialFiscalQuarterLabel,
   getOfficialReportedReleaseDate,
   formatQuarterReleaseLabel,
@@ -328,8 +327,8 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mt-1">
             <span className="inline-flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <strong className="text-slate-700">Live gesynchroniseerd</strong> via Yahoo Finance
+              <span className={`w-2 h-2 rounded-full \${data?.isLive === false ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}></span>
+              <strong className="text-slate-700">{data?.isLive === false ? 'Snapshot actief' : 'Live gesynchroniseerd'}</strong> via {data?.isLive === false ? 'Yahoo Finance — laatste bekende data' : 'Yahoo Finance'}
             </span>
             <span>•</span>
             <span className="font-mono-code text-slate-400">
