@@ -4702,7 +4702,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
             isLive: true
           };
         } else {
-          const fiscalQuarterLabel = getOfficialFiscalQuarterLabel(rawTicker, yq.fiscalDate, yq.quarter, yq.fiscalYear, yq.quarterNum);
+          const fiscalQuarterLabel = fiscalIdentity;
           const reportedReleaseDate = getOfficialReportedReleaseDate(rawTicker, yq.fiscalDate);
           quartersList.push({
             ...yq,
