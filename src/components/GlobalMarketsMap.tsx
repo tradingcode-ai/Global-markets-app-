@@ -906,6 +906,7 @@ interface MarketHistoryChartProps {
   loading?: boolean;
   provider?: string;
   referenceValue?: number;
+  providerChangePercent?: number;
 }
 
 const formatChartPrice = (value: number, currency: string) => {
@@ -925,7 +926,8 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   timeframe,
   loading = false,
   provider = 'Yahoo Finance Historical Chart API',
-  referenceValue
+  referenceValue,
+  providerChangePercent
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -984,8 +986,12 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   const hasReferenceValue = timeframe === '24U' && Number.isFinite(referenceValue) && Number(referenceValue) > 0;
   const changeBase = hasReferenceValue ? Number(referenceValue) : startVal;
   const periodChange = endVal - changeBase;
-  const periodPct = changeBase ? (periodChange / changeBase) * 100 : 0;
-  const isPositive = periodChange >= 0;
+  const calculatedPeriodPct = changeBase ? (periodChange / changeBase) * 100 : 0;
+  // 24U summary must use the provider's official day-change percentage.
+  // The plotted line remains untouched real historical provider data.
+  const hasProviderChange = timeframe === '24U' && Number.isFinite(providerChangePercent);
+  const periodPct = hasProviderChange ? Number(providerChangePercent) : calculatedPeriodPct;
+  const isPositive = periodPct >= 0;
 
   const volumeValues = chartData.map(d => Number(d.volume || 0));
   const maxVolume = Math.max(...volumeValues, 1);
@@ -2383,6 +2389,7 @@ export const GlobalMarketsMap: React.FC = () => {
                       loading={chartLoading}
                       provider={chartProvider}
                       referenceValue={selectedMarket.previousClose}
+                      providerChangePercent={selectedMarket.changePercent}
                     />
                   </div>
                 </div>

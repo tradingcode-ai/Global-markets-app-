@@ -442,11 +442,16 @@ const DEFAULT_EU_FINANCIAL_SYMBOLS = [
   'BCS', 'BARC', 'HSBC', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'UBS', 'SAN', 'BBVA', 'SX7P'
 ];
 
-const DEFAULT_HYPERSCALER_SYMBOLS = ['GOOGL', 'MSFT', 'AMZN', 'SPCX', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'];
+const DEFAULT_HYPERSCALER_SYMBOLS = ['GOOGL', 'MSFT', 'AMZN', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'];
+
+const DEFAULT_AEROSPACE_DEFENSE_SYMBOLS = [
+  'SPCX','GE','RTX','BA','LMT','RKLB','DRS','RKGRY','RCAT','RYCEY',
+  'EADSY','RNMBY','BDRBF','KTOS','AVAV','ESLT','UMAC','DRO','ASTS','RDW'
+];
 
 const DEFAULT_SHOVEL_SYMBOLS = [
   'TSM', '2330.TW', 'AMAT', 'LRCX', 'KLAC', '8035.T', 'TOELY', '6857.T', 'ATEYY', 'TER', 
-  'COHR', 'LITE', 'CSCO', 'CIEN', 'ASTS', 'WDC', 'STX', 
+  'COHR', 'LITE', 'CSCO', 'CIEN', 'WDC', 'STX', 
   'DELL', 'SMCI', 'HPE', 'IONQ', 'QBTS', 'INTC', 
   'SSNLF', 'HXSCF', 'MU', 'MRVL', 'CXMT', '0981.HK', 'SMICY', 'SMIC', 
   'TXN', '285A.T', 'KIOXIA', 'NXPI', 'CBRS',
@@ -473,6 +478,7 @@ const DEFAULT_ALL_SYMBOLS = [
   ...DEFAULT_TECH_SYMBOLS,
   ...DEFAULT_HYPERSCALER_SYMBOLS,
   ...DEFAULT_SHOVEL_SYMBOLS,
+  ...DEFAULT_AEROSPACE_DEFENSE_SYMBOLS,
   ...DEFAULT_COMMODITY_SYMBOLS,
   ...DEFAULT_BOND_SYMBOLS,
   ...DEFAULT_US_FINANCIAL_SYMBOLS,
@@ -628,6 +634,8 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'SX7P': 'EXV1.DE',
   // Hyperscalers & Neo Clouds — primary public listings
   'SPCX': 'SPCX',
+  'RKGRY': 'RNKGF',
+  'DRO': 'DRO.AX',
   'CRWV': 'CRWV',
   'NBIS': 'NBIS',
   'IREN': 'IREN'
@@ -2883,6 +2891,19 @@ const SEC_CIK_REGISTRY: Record<string, string> = {
   'COHR': '0000863894',
   'CIEN': '0001036044',
   'ASTS': '0001780312',
+  'SPCX': '0001181412',
+  'GE': '0000040545',
+  'RTX': '0000101829',
+  'BA': '0000012927',
+  'LMT': '0000936468',
+  'RKLB': '0001819994',
+  'DRS': '0001847393',
+  'RCAT': '0001819796',
+  'KTOS': '0001069258',
+  'AVAV': '0001178700',
+  'UMAC': '0001956955',
+  'RDW': '0001819810',
+
   'IONQ': '0001824920',
   'QBTS': '0001907982',
   'BCS': '0000312069',
@@ -3158,61 +3179,6 @@ function generateAnalystThesis(
   };
 }
 
-function generateFallbackOutlooks(
-  ticker: string,
-  targetCurrency = 'USD',
-  quarterLabel = 'Q4 2026',
-  eps?: number,
-  rev?: number,
-  currentPrice = 150
-): any[] {
-  const curSymbol = targetCurrency === 'EUR' ? '€' : '$';
-  const firms = [
-    { name: 'Morgan Stanley', rating: 'Overweight', mult: 1.28 },
-    { name: 'Goldman Sachs', rating: 'Buy', mult: 1.34 },
-    { name: 'Piper Sandler', rating: 'Overweight', mult: 1.25 }
-  ];
-
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const formattedDate = formatEnglishShortDate(dateStr);
-
-  return firms.map(f => {
-    const rawTarget = Math.round(currentPrice * f.mult);
-    const targetFormatted = `${curSymbol}${rawTarget}.00`;
-    const epsStr = eps !== undefined ? `${curSymbol}${eps.toFixed(2)}` : undefined;
-    const revStr = rev !== undefined ? `${curSymbol}${rev.toFixed(1)}B` : undefined;
-    const { thesis, catalysts } = generateAnalystThesis(
-      ticker,
-      f.name,
-      f.rating,
-      targetFormatted,
-      quarterLabel,
-      curSymbol,
-      epsStr,
-      revStr
-    );
-
-    return {
-      bankName: f.name,
-      logoColor: getBankColor(f.name),
-      rating: f.rating,
-      targetPrice: targetFormatted,
-      targetPriceNumeric: rawTarget,
-      previousTargetPrice: Math.round(rawTarget * 0.95),
-      currency: targetCurrency,
-      asOfDate: dateStr,
-      lastUpdated: formattedDate,
-      timeHorizon: '12 Months',
-      nextQuarterEpsEst: epsStr,
-      nextQuarterRevEst: revStr,
-      thesis,
-      catalysts,
-      provider: 'Wall Street Institutional Coverage & SEC Filings'
-    };
-  });
-}
-
 function getQuarterKey(date = new Date()): string {
   const q = Math.floor(date.getUTCMonth() / 3) + 1;
   return `${date.getUTCFullYear()}-Q${q}`;
@@ -3303,7 +3269,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
                 ((counts.strongBuy + counts.buy) / ratingTotal) >= 0.6 ? 'Buy' :
                 ((counts.sell + counts.strongSell) / ratingTotal) >= 0.6 ? 'Sell' : 'Hold'
               )
-            : 'Buy';
+            : undefined;
 
           const future = earningsTrend.filter((t: any) => ['0q', '+1q', '+2q'].includes(t.period));
           const next = earningsTrend.find((t: any) => t.period === '0q')
@@ -3396,17 +3362,6 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
               };
             });
 
-          if (outlooks.length === 0) {
-            outlooks = generateFallbackOutlooks(
-              normalized,
-              analystCurrency,
-              nextQuarterLabel,
-              rawEpsAvg,
-              rawRevAvg,
-              rawNumber(priceModule?.regularMarketPrice) || 150
-            );
-          }
-
           const resultPayload: QuarterlyAnalystOutlookPayload = {
             ticker: normalized,
             quarterKey,
@@ -3432,7 +3387,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
               || rawNumber(financial?.numberOfAnalystOpinions),
             isConvertedToUsd: needsUsdConversion,
             originalCurrency: analystCurrency,
-            revenueIsAnalystConsensus: true,
+            revenueIsAnalystConsensus: rawRevAvg !== undefined,
             isLiveFeed: true,
             conversionNote: needsUsdConversion
               ? `Yahoo Finance omzet- en EPS-consensus genormaliseerd van ${analystCurrency} naar USD; koersdoelen blijven in ${analystCurrency}.`
@@ -3454,29 +3409,8 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
     return quarterlyAnalystCache[normalized].data;
   }
 
-  // Institutional verified fallback when Yahoo is unavailable, throttled, or crumb expired
-  const reg = VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized];
-  const targetCur = isEuropeanFinancialTicker(normalized) ? 'EUR' : 'USD';
-  const nextQ = reg?.quarter || 'Q4 2026';
-  const epsVal = reg?.eps ?? 1.50;
-  const revVal = reg?.rev ?? 15.0;
-
-  const verifiedFallback: QuarterlyAnalystOutlookPayload = {
-    ticker: normalized,
-    quarterKey,
-    nextQuarterLabel: nextQ,
-    snapshotDate: new Date().toISOString(),
-    consensusRating: 'Buy',
-    recommendationCounts: { strongBuy: 25, buy: 18, hold: 4, sell: 1, strongSell: 0 },
-    nextQuarterEps: epsVal,
-    nextQuarterRevenue: revVal,
-    targetCurrency: targetCur,
-    analystsCount: 38,
-    revenueIsAnalystConsensus: true,
-    isLiveFeed: false,
-    outlooks: generateFallbackOutlooks(normalized, targetCur, nextQ, epsVal, revVal)
-  };
-  return verifiedFallback;
+  // No synthetic analyst fallback. The client may use its persisted Yahoo snapshot.
+  return null;
 }
 
 app.get('/api/quarterly-analyst-outlook', async (req, res) => {
@@ -3484,7 +3418,7 @@ app.get('/api/quarterly-analyst-outlook', async (req, res) => {
     const symbolsParam = req.query.symbols as string;
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-      : [...DEFAULT_TECH_SYMBOLS, ...DEFAULT_SHOVEL_SYMBOLS, ...DEFAULT_US_FINANCIAL_SYMBOLS, ...DEFAULT_EU_FINANCIAL_SYMBOLS];
+      : [...DEFAULT_TECH_SYMBOLS, ...DEFAULT_SHOVEL_SYMBOLS, ...DEFAULT_AEROSPACE_DEFENSE_SYMBOLS, ...DEFAULT_US_FINANCIAL_SYMBOLS, ...DEFAULT_EU_FINANCIAL_SYMBOLS];
 
     const quarterKey = getQuarterKey();
     const data: Record<string, QuarterlyAnalystOutlookPayload> = {};
@@ -4671,7 +4605,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
 
     const yahooSymbol = YAHOO_SYMBOL_MAP[rawTicker] || rawTicker;
 
-    const baselineQuarters = getReportedHistoricalQuarters(rawTicker);
+    const baselineQuarters = getReportedHistoricalQuarters(rawTicker).filter(q => q.source !== 'generated');
     const liveYahooQuarters = await fetchLiveYahooQuarterlyFinancials(yahooSymbol, rawTicker);
     if ((!liveYahooQuarters || liveYahooQuarters.length === 0) && (!baselineQuarters || baselineQuarters.length === 0)) {
       return res.status(503).json({
@@ -4683,18 +4617,22 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
 
     const quartersList: any[] = [];
 
-    // Helper to find index of same quarter (within 45 days OR matching releaseLabel / quarter)
-    const findSameQuarterIndex = (qDate?: string, qLabel?: string, qQuarter?: string) => {
+    // Match by fiscal identity first. Do not merge different fiscal quarters merely
+    // because their period-end dates happen to fall within 45 days.
+    const getFiscalIdentity = (qDate?: string, qQuarter?: string, qFiscalYear?: number, qQuarterNum?: number) =>
+      qDate
+        ? (qFiscalYear && qQuarterNum
+            ? getOfficialFiscalQuarterLabel(rawTicker, qDate, undefined, qFiscalYear, qQuarterNum)
+            : getOfficialFiscalQuarterLabel(rawTicker, qDate))
+        : (qQuarter || '');
+
+    const findSameQuarterIndex = (qDate?: string, qLabel?: string, qQuarter?: string, qFiscalYear?: number, qQuarterNum?: number) => {
+      const identity = getFiscalIdentity(qDate, qQuarter, qFiscalYear, qQuarterNum);
       return quartersList.findIndex(existing => {
-        if (qDate && existing.fiscalDate && isSameFiscalQuarter(existing.fiscalDate, qDate)) {
-          return true;
-        }
-        if (qLabel && existing.releaseLabel && existing.releaseLabel === qLabel) {
-          return true;
-        }
-        if (qQuarter && existing.quarter && existing.quarter === qQuarter) {
-          return true;
-        }
+        const existingIdentity = getFiscalIdentity(existing.fiscalDate, existing.quarter, existing.fiscalYear, existing.quarterNum);
+        if (identity && existingIdentity && identity === existingIdentity) return true;
+        if (qDate && existing.fiscalDate && qDate === existing.fiscalDate) return true;
+        if (qLabel && existing.releaseLabel && existing.releaseLabel === qLabel) return true;
         return false;
       });
     };
@@ -4705,7 +4643,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
       const fiscalQuarterLabel = getOfficialFiscalQuarterLabel(rawTicker, b.fiscalDate, b.quarter, b.fiscalYear, b.quarterNum);
       const reportedReleaseDate = getOfficialReportedReleaseDate(rawTicker, b.fiscalDate);
 
-      const existingIdx = findSameQuarterIndex(b.fiscalDate, releaseLabel, b.quarter);
+      const existingIdx = findSameQuarterIndex(b.fiscalDate, releaseLabel, b.quarter, b.fiscalYear, b.quarterNum);
       if (existingIdx >= 0) {
         quartersList[existingIdx] = {
           ...quartersList[existingIdx],
@@ -4730,12 +4668,16 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
     if (liveYahooQuarters && liveYahooQuarters.length > 0) {
       for (const yq of liveYahooQuarters) {
         const releaseLabel = yq.releaseLabel || formatQuarterReleaseLabel(yq.fiscalDate, yq.quarter);
-        const existingIdx = findSameQuarterIndex(yq.fiscalDate, releaseLabel, yq.quarter);
+        const fiscalIdentity = getOfficialFiscalQuarterLabel(rawTicker, yq.fiscalDate);
+        const fiscalMatch = fiscalIdentity.match(/^Fiscaal Q([1-4]) (\d{4})$/);
+        const yahooFiscalQuarterNum = fiscalMatch ? Number(fiscalMatch[1]) : undefined;
+        const yahooFiscalYear = fiscalMatch ? Number(fiscalMatch[2]) : undefined;
+        const existingIdx = findSameQuarterIndex(yq.fiscalDate, releaseLabel, undefined, yahooFiscalYear, yahooFiscalQuarterNum);
 
         if (existingIdx >= 0) {
           const existing = quartersList[existingIdx];
-          const mergedFiscalYear = existing.fiscalYear || yq.fiscalYear;
-          const mergedQuarterNum = existing.quarterNum || yq.quarterNum;
+          const mergedFiscalYear = existing.fiscalYear || yahooFiscalYear || yq.fiscalYear;
+          const mergedQuarterNum = existing.quarterNum || yahooFiscalQuarterNum || yq.quarterNum;
           const mergedQuarter = existing.quarter || yq.quarter;
           const mergedFiscalDate = existing.fiscalDate || yq.fiscalDate;
           const fiscalQuarterLabel = existing.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(rawTicker, mergedFiscalDate, mergedQuarter, mergedFiscalYear, mergedQuarterNum);
@@ -4755,12 +4697,12 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
             eps: (yq.eps !== undefined && yq.eps !== null && yq.eps !== 0) ? yq.eps : existing.eps,
             releaseLabel: existing.releaseLabel || releaseLabel,
             displayLabel: existing.displayLabel || releaseLabel,
-            fiscalQuarterLabel,
+            fiscalQuarterLabel: fiscalIdentity,
             reportedReleaseDate,
             isLive: true
           };
         } else {
-          const fiscalQuarterLabel = getOfficialFiscalQuarterLabel(rawTicker, yq.fiscalDate, yq.quarter, yq.fiscalYear, yq.quarterNum);
+          const fiscalQuarterLabel = fiscalIdentity;
           const reportedReleaseDate = getOfficialReportedReleaseDate(rawTicker, yq.fiscalDate);
           quartersList.push({
             ...yq,

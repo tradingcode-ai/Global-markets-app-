@@ -6,7 +6,7 @@ export const HYPERSCALER_SUB_SECTORS = [
 ];
 
 export const HYPERSCALER_TICKERS = new Set<string>([
-  'GOOGL', 'MSFT', 'AMZN', 'SPCX', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'
+  'GOOGL', 'MSFT', 'AMZN', 'ORCL', 'META', 'NBIS', 'CRWV', 'IREN'
 ]);
 
 export const HYPERSCALER_COMPANIES: Record<string, CompanyMeta> = {

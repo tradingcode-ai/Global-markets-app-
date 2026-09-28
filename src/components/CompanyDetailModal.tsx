@@ -23,8 +23,9 @@ import {
 import { TECH_COMPANIES } from '../data/earningsData';
 import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
 import { FINANCIAL_COMPANIES } from '../data/financialsData';
-import { getStockQuarterlyConsensus, getStockAnalystOutlooks } from '../data/analystCoverageData';
+import { AEROSPACE_DEFENSE_COMPANIES } from '../data/aerospaceDefenseData';
 import { getCurrencySymbol } from '../utils/formatters';
+import { getStoredAnalystSnapshots } from '../services/marketDataService';
 import { getMarketSessionInfo } from '../utils/marketSession';
 import { StockLogo } from './StockLogo';
 import { FinancialHistoryChart } from './FinancialHistoryChart';
@@ -64,7 +65,11 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         const res = await fetch(`/api/quarterly-analyst-outlook?symbols=${encodeURIComponent(ticker)}`);
         if (!res.ok) return;
         const json = await res.json();
-        const snap = json?.data?.[ticker.toUpperCase()];
+        const liveSnap = json?.data?.[ticker.toUpperCase()];
+        const cachedSnap = getStoredAnalystSnapshots()[ticker.toUpperCase()];
+        const snap = liveSnap?.isLiveFeed === true
+          ? liveSnap
+          : (cachedSnap?.isLiveFeed === true ? { ...cachedSnap, isCachedSnapshot: true } : null);
         if (!cancelled && snap) {
           setLiveConsensus(snap);
           setLiveOutlooks(Array.isArray(snap.outlooks) ? snap.outlooks : []);
@@ -124,7 +129,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
 
   if (!result) return null;
 
-  const meta = TECH_COMPANIES[result.ticker] || SHOVEL_SELLERS_COMPANIES[result.ticker] || FINANCIAL_COMPANIES[result.ticker];
+  const meta = TECH_COMPANIES[result.ticker] || SHOVEL_SELLERS_COMPANIES[result.ticker] || FINANCIAL_COMPANIES[result.ticker] || AEROSPACE_DEFENSE_COMPANIES[result.ticker];
   const isReported = result.status === 'reported' || result.status === 'reporting_today';
   const epsBeaten = isReported && (result.epsActual ?? 0) >= result.epsEstimate;
   const revBeaten = isReported && (result.revenueActual ?? 0) >= result.revenueEstimate;
@@ -182,13 +187,13 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     ? (session.prePostPrice - quote.price) 
     : undefined;
 
-  // Prefer live Yahoo consensus, then the app-level synchronized snapshot, and only
-  // use the curated local dataset as a temporary fallback when Yahoo is unavailable.
-  const safeCurrentPrice = (displayPrice && displayPrice > 0) ? displayPrice : (meta?.currentPrice || 150);
-  const fallbackConsensus = getStockQuarterlyConsensus(result.ticker, safeCurrentPrice, cur, result);
-  const consensus = liveConsensus || result.quarterlyConsensus || fallbackConsensus;
-  const fallbackOutlooks = getStockAnalystOutlooks(result.ticker, safeCurrentPrice, cur, result);
-  const outlooks = liveOutlooks.length > 0 ? liveOutlooks : ((result.analystOutlooks && result.analystOutlooks.length > 0) ? result.analystOutlooks : fallbackOutlooks);
+  // Only real Yahoo data or a previously persisted Yahoo snapshot may be shown.
+  const consensus = liveConsensus?.isLiveFeed === true
+    ? liveConsensus
+    : (result.quarterlyConsensus?.isLiveFeed === true ? result.quarterlyConsensus : null);
+  const outlooks = liveOutlooks.length > 0
+    ? liveOutlooks
+    : ((result.analystOutlooks && result.analystOutlooks.length > 0) ? result.analystOutlooks : []);
   const consensusTargetCurrency = getCurrencySymbol(consensus?.targetCurrency || currencyCode);
   const consensusFinancialCurrency = consensus?.isConvertedToUsd
     ? '$'
@@ -559,7 +564,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     Forward Quarter: {cleanQuarterLabel}
                   </span>
                   <span className={`${consensus.isLiveFeed !== false ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'} border px-2 py-0.5 rounded font-medium`}>
-                    {consensus.isLiveFeed !== false ? 'Yahoo Finance Live' : 'Verified Consensus'}
+                    {consensus.isCachedSnapshot ? 'Yahoo Finance — Cached' : 'Yahoo Finance Live'}
                   </span>
                   {consensus.monthlyRevisionDate && (
                     <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded">
@@ -570,7 +575,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </div>
 
               <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                Live analyst consensus from Yahoo Finance earnings estimates. The displayed quarter follows Yahoo's current earnings-estimate period and is refreshed automatically.
+                Analyst consensus from Yahoo Finance earnings estimates. Live data is refreshed automatically; when Yahoo is temporarily unavailable, the last verified Yahoo snapshot is shown and labeled as cached.
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -677,7 +682,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     Forward Quarter: {cleanQuarterLabel}
                   </span>
                   <span className={`${consensus?.isLiveFeed !== false ? 'text-blue-700 bg-blue-50 border-blue-200' : 'text-slate-700 bg-slate-100 border-slate-200'} border px-2 py-0.5 rounded font-bold`}>
-                    {consensus?.isLiveFeed !== false ? 'Yahoo Finance Coverage' : 'Institutional Consensus'}
+                    {consensus?.isCachedSnapshot ? 'Yahoo Finance — Cached' : 'Yahoo Finance Coverage'}
                   </span>
                 </div>
               </div>
