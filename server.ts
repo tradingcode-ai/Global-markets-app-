@@ -4620,7 +4620,11 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
     // Match by fiscal identity first. Do not merge different fiscal quarters merely
     // because their period-end dates happen to fall within 45 days.
     const getFiscalIdentity = (qDate?: string, qQuarter?: string, qFiscalYear?: number, qQuarterNum?: number) =>
-      qDate ? getOfficialFiscalQuarterLabel(rawTicker, qDate, qQuarter, qFiscalYear, qQuarterNum) : (qQuarter || '');
+      qDate
+        ? (qFiscalYear && qQuarterNum
+            ? getOfficialFiscalQuarterLabel(rawTicker, qDate, undefined, qFiscalYear, qQuarterNum)
+            : getOfficialFiscalQuarterLabel(rawTicker, qDate))
+        : (qQuarter || '');
 
     const findSameQuarterIndex = (qDate?: string, qLabel?: string, qQuarter?: string, qFiscalYear?: number, qQuarterNum?: number) => {
       const identity = getFiscalIdentity(qDate, qQuarter, qFiscalYear, qQuarterNum);
@@ -4664,12 +4668,16 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
     if (liveYahooQuarters && liveYahooQuarters.length > 0) {
       for (const yq of liveYahooQuarters) {
         const releaseLabel = yq.releaseLabel || formatQuarterReleaseLabel(yq.fiscalDate, yq.quarter);
-        const existingIdx = findSameQuarterIndex(yq.fiscalDate, releaseLabel, yq.quarter, undefined, undefined);
+        const fiscalIdentity = getOfficialFiscalQuarterLabel(rawTicker, yq.fiscalDate);
+        const fiscalMatch = fiscalIdentity.match(/^Fiscaal Q([1-4]) (\d{4})$/);
+        const yahooFiscalQuarterNum = fiscalMatch ? Number(fiscalMatch[1]) : undefined;
+        const yahooFiscalYear = fiscalMatch ? Number(fiscalMatch[2]) : undefined;
+        const existingIdx = findSameQuarterIndex(yq.fiscalDate, releaseLabel, undefined, yahooFiscalYear, yahooFiscalQuarterNum);
 
         if (existingIdx >= 0) {
           const existing = quartersList[existingIdx];
-          const mergedFiscalYear = existing.fiscalYear || yq.fiscalYear;
-          const mergedQuarterNum = existing.quarterNum || yq.quarterNum;
+          const mergedFiscalYear = existing.fiscalYear || yahooFiscalYear || yq.fiscalYear;
+          const mergedQuarterNum = existing.quarterNum || yahooFiscalQuarterNum || yq.quarterNum;
           const mergedQuarter = existing.quarter || yq.quarter;
           const mergedFiscalDate = existing.fiscalDate || yq.fiscalDate;
           const fiscalQuarterLabel = existing.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(rawTicker, mergedFiscalDate, mergedQuarter, mergedFiscalYear, mergedQuarterNum);
@@ -4689,7 +4697,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
             eps: (yq.eps !== undefined && yq.eps !== null && yq.eps !== 0) ? yq.eps : existing.eps,
             releaseLabel: existing.releaseLabel || releaseLabel,
             displayLabel: existing.displayLabel || releaseLabel,
-            fiscalQuarterLabel,
+            fiscalQuarterLabel: fiscalIdentity,
             reportedReleaseDate,
             isLive: true
           };
