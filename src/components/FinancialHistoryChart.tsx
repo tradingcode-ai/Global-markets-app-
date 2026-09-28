@@ -105,6 +105,21 @@ export const FinancialHistoryChart: React.FC<FinancialHistoryChartProps> = ({
       }
     } catch (err) {
       console.warn('Failed to load financial history:', err);
+      try {
+        const raw = window.localStorage.getItem(FINANCIAL_SNAPSHOT_KEY);
+        if (raw) {
+          const cached = JSON.parse(raw) as CompanyFinancialHistory;
+          if (cached?.quarters?.length) {
+            setData({
+              ...cached,
+              isLive: false,
+              provider: 'Yahoo Finance — Cached Snapshot'
+            });
+          }
+        }
+      } catch {
+        // No usable local snapshot.
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
