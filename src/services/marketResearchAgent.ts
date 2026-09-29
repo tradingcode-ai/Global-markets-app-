@@ -382,45 +382,83 @@ export async function executeResearchForEvent(
   let modelUsed = '';
   let lastError: any = null;
 
-  for (const model of modelsToTry) {
+  // 1. First attempt: Official Interactions API Antigravity Agent
+  if (aiClient.interactions && typeof aiClient.interactions.create === 'function') {
     try {
-      console.log(`[Research Agent] Calling model ${model} with Google Search tool...`);
-      const response = await aiClient.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          systemInstruction: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
-          tools: [{ googleSearch: {} }]
-        }
+      console.log(`[Research Agent] Initializing official Antigravity Agent via Interactions API (agent: antigravity-preview-05-2026, model: gemini-3.8-flash)...`);
+      const interactionResponse: any = await aiClient.interactions.create({
+        agent: 'antigravity-preview-05-2026',
+        agent_config: {
+          type: 'antigravity',
+          model: 'gemini-3.8-flash'
+        },
+        input: prompt,
+        system_instruction: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
+        tools: [{ type: 'google_search' }]
       });
 
-      if (response && response.text) {
-        rawMarkdown = response.text;
-        modelUsed = model;
+      if (interactionResponse) {
+        // Check outputs or steps text
+        const outputText = interactionResponse.output_text || 
+          interactionResponse.outputs?.[0]?.text ||
+          (Array.isArray(interactionResponse.steps) 
+            ? interactionResponse.steps.map((s: any) => s.content?.map((c: any) => c.text).join('')).join('\n')
+            : null);
 
-        // Extract native Google Search grounding metadata if returned
-        const candidate = response.candidates?.[0];
-        const metadata = (candidate as any)?.groundingMetadata;
-        if (metadata && Array.isArray(metadata.groundingChunks)) {
-          for (const chunk of metadata.groundingChunks) {
-            const web = chunk.web;
-            if (web && web.uri) {
-              groundingSources.push({
-                title: web.title || 'Grounding Search Source',
-                url: web.uri,
-                publisher: new URL(web.uri).hostname.replace('www.', ''),
-                sourceCategory: 'FINANCIAL_NEWS',
-                relevance: 'Grounding search confirmation document.',
-                accessedAt: new Date().toISOString()
-              });
-            }
-          }
+        if (outputText && outputText.length > 50) {
+          rawMarkdown = outputText;
+          modelUsed = 'antigravity-preview-05-2026 (gemini-3.8-flash)';
+          console.log(`[Research Agent] Successfully completed research via official Antigravity Agent interaction.`);
         }
-        break;
       }
     } catch (err: any) {
-      console.warn(`[Research Agent] Model ${model} failed:`, err.message);
+      console.warn(`[Research Agent] Interactions API Antigravity agent attempted, falling back to direct model:`, err.message);
       lastError = err;
+    }
+  }
+
+  // 2. Second attempt: Direct model generation loop
+  if (!rawMarkdown) {
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[Research Agent] Calling model ${model} with Google Search tool...`);
+        const response = await aiClient.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
+            tools: [{ googleSearch: {} }]
+          }
+        });
+
+        if (response && response.text) {
+          rawMarkdown = response.text;
+          modelUsed = model;
+
+          // Extract native Google Search grounding metadata if returned
+          const candidate = response.candidates?.[0];
+          const metadata = (candidate as any)?.groundingMetadata;
+          if (metadata && Array.isArray(metadata.groundingChunks)) {
+            for (const chunk of metadata.groundingChunks) {
+              const web = chunk.web;
+              if (web && web.uri) {
+                groundingSources.push({
+                  title: web.title || 'Grounding Search Source',
+                  url: web.uri,
+                  publisher: new URL(web.uri).hostname.replace('www.', ''),
+                  sourceCategory: 'FINANCIAL_NEWS',
+                  relevance: 'Grounding search confirmation document.',
+                  accessedAt: new Date().toISOString()
+                });
+              }
+            }
+          }
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`[Research Agent] Model ${model} failed:`, err.message);
+        lastError = err;
+      }
     }
   }
 
