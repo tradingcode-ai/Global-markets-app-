@@ -1,5 +1,47 @@
 # GLOBAL MARKETS — DEEP MARKET RESEARCH IMPLEMENTATION MASTER PROMPT
 
+## BEFORE IMPLEMENTATION
+
+This document is the authoritative implementation specification for this task.
+
+You MUST read and understand this entire document before beginning implementation.
+
+Do not treat the architecture documents as a replacement for this implementation prompt.
+
+Before modifying application code, you must also read and understand:
+
+1. `.agents/AGENTS.md`
+2. `.agents/SUBAGENTS_EXECUTION_POLICY.md`
+3. `.agents/ARCHITECTURE.md`
+4. `.agents/DEEP_MARKET_RESEARCH_ARCHITECTURE.md`
+
+### Document responsibilities
+
+* `AGENTS.md` defines repository-wide agent instructions and guardrails.
+* `SUBAGENTS_EXECUTION_POLICY.md` defines HOW the Main LLM and development subagents must perform the work.
+* `MASTER_IMPLEMENTATION_PROMPT.md` defines WHAT must be implemented for this task.
+* `ARCHITECTURE.md` defines the general application architecture.
+* `DEEP_MARKET_RESEARCH_ARCHITECTURE.md` defines the authoritative Deep Market Research architecture.
+
+All of these documents must be considered together.
+
+The Master Implementation Prompt must NOT be partially read or treated as optional.
+
+Do not begin implementation until the required documents have been read and understood.
+
+## 1. FIRST: READ THE ARCHITECTURE DOCUMENTS
+
+After reading this implementation prompt, read and understand:
+
+* `.agents/ARCHITECTURE.md`
+* `.agents/DEEP_MARKET_RESEARCH_ARCHITECTURE.md`
+
+These documents provide the architectural constraints and technical context required to implement this specification correctly.
+
+The architecture documents supplement this implementation prompt. They do not replace it.
+
+If requirements appear to conflict, stop and resolve the conflict using the authority rules defined in `.agents/AGENTS.md` and `.agents/SUBAGENTS_EXECUTION_POLICY.md` before making implementation changes.
+
 You are the lead software architect and senior full-stack engineer responsible for implementing the Deep Market Research system inside the existing **Global Markets** application.
 
 Your task is to inspect the existing application, understand its architecture, and implement the complete Market Research feature across:
