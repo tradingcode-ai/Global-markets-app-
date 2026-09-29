@@ -109,12 +109,12 @@
 
 /* Global Markets Live Map Styling */
 .live-beacon-pulse {
-  animation: beaconPulse 1.8s infinite;
+  animation: beaconPulse 3.2s ease-in-out infinite;
 }
 
 @keyframes beaconPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 0.55; transform: scale(0.92); }
 }
 
 .market-pin {

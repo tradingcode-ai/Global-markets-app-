@@ -39,7 +39,6 @@ import { GlobalMarketsMap } from './components/GlobalMarketsMap';
 import { EarningsTableView } from './components/EarningsTableView';
 import { EarningsCalendarView } from './components/EarningsCalendarView';
 import { CompanyDetailModal } from './components/CompanyDetailModal';
-import { SimulateReleaseModal } from './components/SimulateReleaseModal';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { AlertSettingsModal } from './components/AlertSettingsModal';
 import { LivePushToast } from './components/LivePushToast';
@@ -55,7 +54,6 @@ import {
   Calendar, 
   Sparkles, 
   Bell, 
-  Zap, 
   Radio,
   Fuel,
   Menu,
@@ -107,7 +105,6 @@ export default function App() {
   
   // Modals
   const [selectedResultForModal, setSelectedResultForModal] = useState<QuarterlyResult | null>(null);
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState<boolean>(false);
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeToast, setActiveToast] = useState<PushNotificationItem | null>(null);
@@ -447,7 +444,7 @@ export default function App() {
 
         if (Object.keys(newTicks).length > 0) {
           setRecentTicks(newTicks);
-          setTimeout(() => setRecentTicks({}), 2000);
+          setTimeout(() => setRecentTicks({}), 850);
         }
 
         prevQuotesRef.current = liveData;
@@ -500,16 +497,16 @@ export default function App() {
 
   // Adaptive background-aware polling loop:
   // - Pauses when phone screen is locked or tab is hidden (saves battery & prevents crash queues)
-  // - Calibrates interval: 5000ms on mobile devices to prevent thermal throttling, 2500ms on desktop
+  // - Calibrates interval: 5000ms on mobile devices to prevent thermal throttling, 1000ms on laptop/desktop
   useEffect(() => {
     if (!isStreaming) return;
 
     let intervalId: number | null = null;
 
     const getPollingDelay = () => {
-      if (typeof window === 'undefined') return 2500;
-      const isMobile = window.innerWidth < 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-      return isMobile ? 5000 : 2500;
+      if (typeof window === 'undefined') return 1000;
+      const isMobile = window.innerWidth < 768 && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      return isMobile ? 5000 : 1000;
     };
 
     const startPolling = () => {
@@ -586,53 +583,6 @@ export default function App() {
       ...preferences,
       subscribedTickers: nextList
     });
-  };
-
-  // Execute Live Simulation
-  const handleExecuteSimulation = (scenario: {
-    ticker: string;
-    scenarioType: 'beat' | 'miss' | 'breaking' | 'guidance';
-    customTitle?: string;
-    customBody?: string;
-    updatedResult: Partial<QuarterlyResult>;
-  }) => {
-    setResults(prev => prev.map(item => {
-      if (item.ticker === scenario.ticker) {
-        return {
-          ...item,
-          ...scenario.updatedResult
-        };
-      }
-      return item;
-    }));
-
-    const mappedType: NotificationEventType = 
-      scenario.scenarioType === 'beat' ? 'earnings-beat' :
-      scenario.scenarioType === 'miss' ? 'earnings-miss' :
-      'sec-8k';
-
-    const company = TECH_COMPANIES[scenario.ticker];
-    dispatchPushNotification(
-      {
-        ticker: scenario.ticker,
-        companyName: company?.name || scenario.ticker,
-        title: scenario.customTitle || `${scenario.ticker} — ${mappedType === 'earnings-beat' ? 'Earnings Beat' : mappedType === 'earnings-miss' ? 'Earnings Miss' : 'SEC 8-K Disclosure'}`,
-        body: scenario.customBody || `${scenario.ticker} reported quarterly earnings. Check the institutional matrix for full numbers.`,
-        type: mappedType,
-        metrics: {
-          epsActual: scenario.updatedResult.epsActual,
-          epsEstimate: scenario.updatedResult.epsEstimate,
-          revenueActual: scenario.updatedResult.revenueActual,
-          revenueEstimate: scenario.updatedResult.revenueEstimate,
-          priceMove: scenario.updatedResult.priceReactionPercent
-        }
-      },
-      preferences,
-      (newNotif) => {
-        handleSaveNotifications([newNotif, ...notifications]);
-        setActiveToast(newNotif);
-      }
-    );
   };
 
   // Trigger test push from detail modal
@@ -871,7 +821,6 @@ export default function App() {
         browserPermission={browserPermission}
         notifications={notifications}
         onOpenNotifications={() => setIsNotificationCenterOpen(true)}
-        onOpenSimulator={() => setIsSimulatorOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -1016,17 +965,16 @@ export default function App() {
           {/* Institutional Alert Protocol Status Banner */}
           <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200/90 px-3.5 py-1.5 rounded-xl shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="font-semibold text-slate-700">PUSH ENGINE:</span>
-            <strong className="text-slate-900 font-mono-code font-bold">
+            <span className="font-semibold text-slate-700 font-mono-code text-[11px]">PUSH ENGINE:</span>
+            <strong className="text-slate-900 font-mono-code font-bold text-[11px]">
               {preferences.subscribedTickers.length} Tickers Subscribed
             </strong>
             <span className="text-slate-300">|</span>
             <button
-              onClick={() => setIsSimulatorOpen(true)}
-              className="text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer font-bold"
+              onClick={() => setIsSettingsOpen(true)}
+              className="text-slate-700 hover:text-slate-900 hover:underline flex items-center gap-1 cursor-pointer font-semibold text-[11px]"
             >
-              <Zap className="w-3 h-3 text-emerald-600" />
-              <span>Test Push Chime</span>
+              <span>Notificatie Instellingen</span>
             </button>
           </div>
         </div>
@@ -1144,13 +1092,6 @@ export default function App() {
             >
               Push Notification Protocol
             </button>
-            <span className="text-slate-300">•</span>
-            <button 
-              onClick={() => setIsSimulatorOpen(true)}
-              className="text-emerald-700 hover:underline cursor-pointer font-semibold"
-            >
-              Test Alert Delivery
-            </button>
           </div>
         </div>
       </footer>
@@ -1164,15 +1105,6 @@ export default function App() {
           onClose={() => setSelectedResultForModal(null)}
           onTriggerTestPush={handleTriggerTestPush}
           preferences={preferences}
-        />
-      )}
-
-      {isSimulatorOpen && (
-        <SimulateReleaseModal
-          results={results}
-          preferences={preferences}
-          onClose={() => setIsSimulatorOpen(false)}
-          onExecuteSimulation={handleExecuteSimulation}
         />
       )}
 

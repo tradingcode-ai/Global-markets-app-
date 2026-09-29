@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LiveQuote } from '../types';
 import { StockLogo } from './StockLogo';
 import { getStockTechnicalMetrics } from '../data/technicalData';
-import { getMarketSessionInfo, isAssetSessionActive, resolveLiveQuote } from '../utils/marketSession';
+import { getMarketSessionInfo, isAssetSessionActive, isEquityActiveSession, resolveLiveQuote } from '../utils/marketSession';
 import { SHOVEL_SELLERS_COMPANIES } from '../data/shovelSellersData';
 import { HYPERSCALER_TICKERS } from '../data/hyperscalersData';
 import { TECH_COMPANIES } from '../data/earningsData';
@@ -62,7 +62,10 @@ const EU_FINANCIAL_TICKERS = [
   'BCS', 'BARC', 'HSBC', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'UBS', 'SAN', 'BBVA', 'SX7P'
 ];
 
-// 6. Aerospace & Defense\nconst AEROSPACE_DEFENSE_TICKERS_LIST = Array.from(AEROSPACE_DEFENSE_TICKERS);\n\n// 7. Global Energy & Industrial Commodities
+// 6. Aerospace & Defense
+const AEROSPACE_DEFENSE_TICKERS_LIST = Array.from(AEROSPACE_DEFENSE_TICKERS);
+
+// 7. Global Energy & Industrial Commodities
 const COMMODITY_TICKERS = [
   'TTF', 'NG', 'JKM', 'WTI', 'BRENT', 'MURBAN', 'MRBC', 'OQD', 'INE-SC', 
   'RBOB', 'HO', 'GOLD', 'SILVER', 'COPPER', 'URANIUM', 'LITHIUM', 'WHEAT', 'CORN'
@@ -75,14 +78,20 @@ const GOV_BOND_TICKERS = [
   'IT10Y', 'IT30Y', 'ES10Y', 'ES30Y', 'CN10Y', 'CN30Y'
 ];
 
-// All tickers across the application, deduplicated while preserving logical ordering
-const ALL_APPLICATION_TICKERS = Array.from(new Set([
+// All equities across the application
+const ALL_EQUITY_TICKERS = Array.from(new Set([
   ...US_TECH_TICKERS,
   ...HYPERSCALER_TICKERS_LIST,
   ...SHOVEL_SELLER_TICKERS,
+  ...AEROSPACE_DEFENSE_TICKERS_LIST,
   ...EU_TECH_TICKERS,
   ...US_FINANCIAL_TICKERS,
-  ...EU_FINANCIAL_TICKERS,
+  ...EU_FINANCIAL_TICKERS
+]));
+
+// All tickers across the application, deduplicated while preserving logical ordering
+const ALL_APPLICATION_TICKERS = Array.from(new Set([
+  ...ALL_EQUITY_TICKERS,
   ...COMMODITY_TICKERS,
   ...GOV_BOND_TICKERS
 ]));
@@ -100,9 +109,10 @@ export const getQuoteForTicker = (
   if ((upper === 'US30YFRM' || upper === 'US30YMORT') && (quotes['US30YFRM'] || quotes['US30YMORT'])) {
     return quotes['US30YFRM'] || quotes['US30YMORT'];
   }
-  // Cross-listed & dual-exchange equities
-  if (upper === '2330.TW' && (quotes['2330'] || quotes['TSM'])) return quotes['2330'] || quotes['TSM'];
-  if (upper === 'TSM' && (quotes['2330.TW'] || quotes['2330'])) return quotes['2330.TW'] || quotes['2330'];
+  // Cross-listed & dual-exchange equities: Taiwan Semiconductor Manufacturing Co (TWSE: 2330.TW)
+  if (upper === '2330.TW' || upper === '2330' || upper === 'TSM') {
+    return quotes['2330.TW'] || quotes['2330'] || quotes['TSM'] || null;
+  }
   if (upper === '8035.T' && (quotes['8035'] || quotes['TOELY'])) return quotes['8035'] || quotes['TOELY'];
   if (upper === 'TOELY' && (quotes['8035.T'] || quotes['8035'])) return quotes['8035.T'] || quotes['8035'];
   if (upper === '6857.T' && (quotes['6857'] || quotes['ATEYY'])) return quotes['6857'] || quotes['ATEYY'];
@@ -227,10 +237,31 @@ export const getQuoteForTicker = (
     };
   }
 
+  // 6. Aerospace & Defense
+  const aero = (AEROSPACE_DEFENSE_COMPANIES as any)[sym];
+  if (aero) {
+    const p = aero.currentPrice || 0;
+    const chgPct = aero.dayChangePercent || 0;
+    const chg = (p * chgPct) / 100;
+    return {
+      symbol: sym,
+      price: p,
+      change: chg,
+      changePercent: chgPct,
+      dayHigh: p > 0 ? p * 1.05 : 0,
+      dayLow: p > 0 ? p * 0.95 : 0,
+      volume: 5000000,
+      previousClose: p - chg,
+      currency: aero.currency || 'USD',
+      lastUpdated: new Date().toISOString(),
+      isLive: false
+    };
+  }
+
   return null;
 };
 
-type CategoryFilter = 'ALL' | 'SHOVEL_SELLERS' | 'HYPERSCALERS' | 'US_TECH' | 'US_FIN' | 'EU_FIN' | 'EU_TECH' | 'COMMODITIES' | 'BONDS';
+type CategoryFilter = 'ALL' | 'AERO_DEFENSE' | 'SHOVEL_SELLERS' | 'HYPERSCALERS' | 'US_TECH' | 'US_FIN' | 'EU_FIN' | 'EU_TECH' | 'COMMODITIES' | 'BONDS';
 
 export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
   quotes,
@@ -247,10 +278,17 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
   const [glideSpeed, setGlideSpeed] = useState<'normal' | 'slow'>('normal');
 
   const formattedTime = lastUpdated 
-    ? lastUpdated.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    ? lastUpdated.toLocaleTimeString('nl-NL', { 
+        timeZone: 'Europe/Amsterdam', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false 
+      })
     : '--:--:--';
 
   const rawCategoryTickers = useMemo(() => {
+    if (activeCategory === 'AERO_DEFENSE') return AEROSPACE_DEFENSE_TICKERS_LIST;
     if (activeCategory === 'SHOVEL_SELLERS') return SHOVEL_SELLER_TICKERS;
     if (activeCategory === 'HYPERSCALERS') return HYPERSCALER_TICKERS_LIST;
     if (activeCategory === 'US_TECH') return US_TECH_TICKERS;
@@ -260,44 +298,28 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     if (activeCategory === 'COMMODITIES') return COMMODITY_TICKERS;
     if (activeCategory === 'BONDS') return GOV_BOND_TICKERS;
 
-    // USER REQUIREMENT:
-    // "daarnaast moeten bij de live ticker bar als ik all heb aanstaan alleen assets weergeven 
-    //  waarvan de markt open is of pre/after market is. wel nog behouden op basis van prioriteit"
-    const activeAssets = ALL_APPLICATION_TICKERS.filter(sym => {
-      const q = getQuoteForTicker(sym, quotes);
-      return isAssetSessionActive(sym, q);
-    });
+    // "ALL" tab displays all application assets across equities, commodities, and benchmark yields
+    return ALL_APPLICATION_TICKERS;
+  }, [activeCategory]);
 
-    return activeAssets.length > 0 ? activeAssets : ALL_APPLICATION_TICKERS;
-  }, [activeCategory, quotes]);
-
-  // Priority Rank Tier: Tech Mega-Caps -> Hyperscalers -> Shovel Sellers -> Commodities -> Sovereign Yields -> Financials
+  // Priority Rank Tier: Tech Mega-Caps -> Hyperscalers -> Shovel Sellers -> Aerospace & Defense -> European Tech -> Commodities -> Sovereign Yields -> Financials
   const getAssetPriorityRank = (sym: string): number => {
     if (US_TECH_TICKERS.includes(sym)) return 1;
     if (HYPERSCALER_TICKERS_LIST.includes(sym)) return 2;
     if (SHOVEL_SELLER_TICKERS.includes(sym)) return 3;
-    if (COMMODITY_TICKERS.includes(sym)) return 4;
-    if (GOV_BOND_TICKERS.includes(sym)) return 5;
-    if (US_FINANCIAL_TICKERS.includes(sym)) return 6;
-    if (EU_TECH_TICKERS.includes(sym)) return 7;
-    if (EU_FINANCIAL_TICKERS.includes(sym)) return 8;
-    return 9;
+    if ((AEROSPACE_DEFENSE_TICKERS_LIST as readonly string[]).includes(sym)) return 4;
+    if (EU_TECH_TICKERS.includes(sym)) return 5;
+    if (COMMODITY_TICKERS.includes(sym)) return 6;
+    if (GOV_BOND_TICKERS.includes(sym)) return 7;
+    if (US_FINANCIAL_TICKERS.includes(sym)) return 8;
+    if (EU_FINANCIAL_TICKERS.includes(sym)) return 9;
+    return 10;
   };
 
-  // Volatility Sorting with preserved Institutional Tier Priority:
-  // "en er voor zorgen dat de aandelen of andere asset classen de volgorde is gebaseerd is op volatiliteit 
-  //  dus meeste percentage omhoog of naar beneden als eerst... wel nog behouden op basis van prioriteit"
+  // Stable category ordering so that ticker items do NOT constantly jump or shuffle positions mid-scroll:
+  // Preserves institutional tier priority and consistent alphabetical order within tiers.
   const sortedTickers = useMemo(() => {
     return [...rawCategoryTickers].sort((a, b) => {
-      const qA = getQuoteForTicker(a, quotes);
-      const qB = getQuoteForTicker(b, quotes);
-      const volA = Math.abs(qA?.changePercent ?? 0);
-      const volB = Math.abs(qB?.changePercent ?? 0);
-      // 1. Highest volatility first (meeste percentage omhoog of naar beneden als eerst)
-      if (Math.abs(volB - volA) > 0.01) {
-        return volB - volA;
-      }
-      // 2. Preserved priority tier
       const rankA = getAssetPriorityRank(a);
       const rankB = getAssetPriorityRank(b);
       if (rankA !== rankB) {
@@ -305,12 +327,12 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
       }
       return a.localeCompare(b);
     });
-  }, [rawCategoryTickers, quotes]);
+  }, [rawCategoryTickers]);
 
-  // SPEED CALIBRATION (25% slower than original 85s for 97 items: 0.876s/item -> 1.17s/item)
+  // SPEED CALIBRATION
   // Constant scrolling velocity across all categories:
-  const SECONDS_PER_ITEM_NORMAL = 1.17; // 25% slower than original
-  const SECONDS_PER_ITEM_SLOW = 1.65;   // Relaxed ticker speed
+  const SECONDS_PER_ITEM_NORMAL = 1.17;
+  const SECONDS_PER_ITEM_SLOW = 1.65;
   const secondsPerItem = glideSpeed === 'slow' ? SECONDS_PER_ITEM_SLOW : SECONDS_PER_ITEM_NORMAL;
 
   // Ensure base set contains at least 28 items so that it completely spans wide monitors (e.g., 2560px) before looping
@@ -320,9 +342,11 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     return Array.from({ length: repeatsNeeded }, () => sortedTickers).flat();
   }, [sortedTickers, repeatsNeeded]);
 
-  // Duration accounts for the lead spacer (equivalent to ~8 ticker widths) plus the baseItems
-  const totalUnits = isGliding ? baseItems.length + 8 : baseItems.length;
-  const animationDurationSec = Number((totalUnits * secondsPerItem).toFixed(2));
+  // Duration accounts for the lead spacer (100vw equivalent to ~8-10 items) plus the lead badge and base items
+  const animationDurationSec = useMemo(() => {
+    const totalUnits = baseItems.length + 8;
+    return Number((totalUnits * secondsPerItem).toFixed(2));
+  }, [baseItems.length, secondsPerItem]);
 
   // Render a single borderless, flowing ticker item
   const renderTickerItem = (sym: string, key: string) => {
@@ -337,11 +361,24 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
     const isBond = GOV_BOND_TICKERS.includes(sym);
     const isEuropean = ['ASML', 'SAP', 'ARM', 'PRX', 'SU', 'SIE', 'SPOT', 'ADYEN', 'IFX', 'STM', 'ABN', 'ING', 'BNP', 'GLE', 'SAN', 'BBVA'].includes(sym.toUpperCase());
     const curSym = isBond ? '' : (isEuropean && (q.currency === 'EUR' || !q.currency) ? '€' : getCurrencySymbol(q.currency));
-    const priceFormatted = isBond ? `${q.price.toFixed(3)}%` : `${curSym}${q.price.toFixed(2)}`;
+    const priceFormatted = isBond 
+      ? `${q.price.toFixed(3)}%` 
+      : (q.currency === 'JPY' || q.currency === 'KRW')
+        ? `${curSym}${Math.round(q.price).toLocaleString()}`
+        : `${curSym}${q.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     
     // Market Session & Pre/After-Market Calculation
     const session = (!isCommodity && !isBond) ? getMarketSessionInfo(sym, q) : null;
-    const showPrePost = session && !session.isMarketOpen && (session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours') && session.prePostChangePercent !== undefined;
+    const isOpen = session ? (session.isMarketOpen || session.marketState === 'REGULAR') : false;
+    const isPreMarket = session ? (!isOpen && (session.sessionLabel === 'Pre-Market' || session.marketState === 'PRE')) : false;
+    const isPostMarket = session ? (!isOpen && !isPreMarket && (session.sessionLabel === 'After-Hours' || session.marketState === 'POST')) : false;
+    
+    const prePostPrice = session?.prePostPrice ?? (isPreMarket ? q.preMarketPrice : q.postMarketPrice);
+    const prePostPct = session?.prePostChangePercent ?? (isPreMarket ? q.preMarketChangePercent : q.postMarketChangePercent);
+    const showPrePost = session && !isOpen && (isPreMarket || isPostMarket) && (prePostPct !== undefined || prePostPrice !== undefined);
+    const prePostIsPositive = prePostPct !== undefined 
+      ? prePostPct >= 0 
+      : (prePostPrice !== undefined && q.previousClose ? prePostPrice >= q.previousClose : true);
 
     // Technical check: 200 DMA and 52-week High/Low
     const tech = (!isCommodity && !isBond) ? getStockTechnicalMetrics(sym, q.price, q) : null;
@@ -382,17 +419,17 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
             <span>{isPositive ? `+${q.changePercent.toFixed(2)}%` : `${q.changePercent.toFixed(2)}%`}</span>
           </span>
 
-          {/* Pre/After-Market change indicator (inline text, no borders) */}
+          {/* Pre/After-Market change indicator in green/red */}
           {showPrePost && (
             <span 
-              className="inline-flex items-center gap-0.5 text-[10px] text-slate-400 font-medium"
-              title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}% (${curSym}${session.prePostPrice?.toFixed(2)})`}
+              className="inline-flex items-center gap-0.5 text-[10px] font-medium"
+              title={`${isPreMarket ? 'Pre-Market' : 'After-Hours'}: ${prePostPct !== undefined ? (prePostIsPositive ? '+' : '') + prePostPct.toFixed(2) + '%' : ''} ${prePostPrice ? `(${curSym}${prePostPrice.toFixed(2)})` : ''}`}
             >
-              <span>({session.sessionLabel === 'Pre-Market' ? 'Pre' : 'Post'}:</span>
-              <span className={`font-bold tabular-nums ${session.prePostChangePercent! >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {session.prePostChangePercent! >= 0 ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%
+              <span className="text-slate-400">({isPreMarket ? 'Pre:' : 'Post:'}</span>
+              <span className={`font-bold tabular-nums ${prePostIsPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {prePostIsPositive ? '+' : ''}{prePostPct !== undefined ? prePostPct.toFixed(2) : '0.00'}%
               </span>
-              <span>)</span>
+              <span className="text-slate-400">)</span>
             </span>
           )}
 
@@ -455,7 +492,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
               </span>
               <span className="text-slate-300">|</span>
               <span className="font-mono-code tabular-nums text-slate-600 text-[10px] font-semibold">
-                {formattedTime} ET
+                {formattedTime} NL
               </span>
             </div>
 
@@ -507,15 +544,6 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
                   {glideSpeed === 'normal' ? '0.75x SNELHEID' : '0.5x RUSTIG'}
                 </button>
               )}
-
-              {/* Volatility Indicator Badge */}
-              <div 
-                className="hidden xl:flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono-code bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs"
-                title="Volgorde gebaseerd op volatiliteit: hoogste absolute dagpercentage (winst of verlies) eerst"
-              >
-                <Flame className="w-3 h-3 text-amber-600 shrink-0" />
-                <span className="font-semibold tracking-tight">VOLATILITEIT VOLGORDE (|Δ%|)</span>
-              </div>
             </div>
           </div>
 
@@ -526,8 +554,18 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
               className={`px-2.5 py-1 rounded transition cursor-pointer whitespace-nowrap font-medium ${
                 activeCategory === 'ALL' ? 'bg-[#002D62] text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
+              title="Alle gevolgde wereldwijde assets (Aandelen, Tech, Defensie, Grondstoffen & Obligaties)"
             >
               ALL ({ALL_APPLICATION_TICKERS.length})
+            </button>
+            <button
+              onClick={() => setActiveCategory('AERO_DEFENSE')}
+              className={`px-2 py-1 rounded transition cursor-pointer whitespace-nowrap font-medium ${
+                activeCategory === 'AERO_DEFENSE' ? 'bg-slate-800 text-white font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Aerospace & Defense Contractors, Aircraft Manufacturers, Drones and Commercial Satellite"
+            >
+              AERO & DEFENSE ({AEROSPACE_DEFENSE_TICKERS_LIST.length})
             </button>
             <button
               onClick={() => setActiveCategory('SHOVEL_SELLERS')}
@@ -607,7 +645,7 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
 
         <div className="max-w-7xl mx-auto overflow-hidden">
           <div 
-            key={`${activeCategory}-${glideSpeed}-${sortedTickers.length}`}
+            key={activeCategory}
             className={`flex items-center ${
               isGliding 
                 ? (glideSpeed === 'slow' ? 'animate-ticker-glide-slow' : 'animate-ticker-glide') 
@@ -618,27 +656,29 @@ export const RealTimeTrackerBar: React.FC<RealTimeTrackerBarProps> = ({
           >
             {isGliding ? (
               <>
-                {/* Block 1: Lead Spacer (ensures first ticker enters from the right) + Base Items */}
+                {/* Block 1: Lead Spacer (ensures tape starts completely off-screen to the right) + Badge + Items */}
                 <div className="flex items-center shrink-0">
-                  <div className="w-[100vw] max-w-7xl shrink-0 flex items-center justify-end pr-8 text-[11px] font-mono-code font-bold text-slate-400 uppercase tracking-widest select-none">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2.5 animate-pulse" />
+                  <div className="w-[100vw] shrink-0 pointer-events-none" aria-hidden="true" />
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100/90 text-slate-500 rounded border border-slate-200/80 text-[10px] font-mono-code font-bold uppercase tracking-wider shrink-0 mx-2 select-none">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span>REAL-TIME EXCHANGE FEED</span>
                   </div>
-                  {baseItems.map((sym, idx) => renderTickerItem(sym, `b1-${idx}`))}
+                  {baseItems.map((sym, idx) => renderTickerItem(sym, `b1-${sym}-${idx}`))}
                 </div>
 
-                {/* Block 2: Identical Lead Spacer + Base Items (for seamless -50% loop) */}
+                {/* Block 2: Identical Lead Spacer + Badge + Items (for seamless continuous -50% loop from the right) */}
                 <div className="flex items-center shrink-0">
-                  <div className="w-[100vw] max-w-7xl shrink-0 flex items-center justify-end pr-8 text-[11px] font-mono-code font-bold text-slate-400 uppercase tracking-widest select-none">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2.5 animate-pulse" />
+                  <div className="w-[100vw] shrink-0 pointer-events-none" aria-hidden="true" />
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100/90 text-slate-500 rounded border border-slate-200/80 text-[10px] font-mono-code font-bold uppercase tracking-wider shrink-0 mx-2 select-none">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span>REAL-TIME EXCHANGE FEED</span>
                   </div>
-                  {baseItems.map((sym, idx) => renderTickerItem(sym, `b2-${idx}`))}
+                  {baseItems.map((sym, idx) => renderTickerItem(sym, `b2-${sym}-${idx}`))}
                 </div>
               </>
             ) : (
               <div className="flex items-center shrink-0">
-                {sortedTickers.map((sym, idx) => renderTickerItem(sym, `static-${idx}`))}
+                {sortedTickers.map((sym, idx) => renderTickerItem(sym, `static-${sym}-${idx}`))}
               </div>
             )}
           </div>

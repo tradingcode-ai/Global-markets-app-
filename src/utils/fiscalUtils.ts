@@ -214,8 +214,186 @@ export function getOfficialReportedReleaseDate(ticker: string, fiscalDate: strin
 }
 
 /**
+ * Resolves canonical fiscal details (fiscal year, quarter number, quarter string, and label)
+ * according to each corporation's official SEC / regulatory fiscal calendar.
+ */
+export function getCanonicalFiscalDetails(ticker: string, fiscalDate: string): {
+  fiscalYear: number;
+  quarterNum: number;
+  quarterStr: string;
+  fiscalQuarterLabel: string;
+} {
+  const sym = ticker.toUpperCase();
+  const d = new Date(fiscalDate);
+  const calYear = !isNaN(d.getTime()) ? d.getUTCFullYear() : new Date().getFullYear();
+  const month = !isNaN(d.getTime()) ? d.getUTCMonth() + 1 : 1; // 1-12
+
+  let fiscalYear = calYear;
+  let quarterNum = Math.floor((month - 1) / 3) + 1;
+
+  // 1. January FY end (DELL, NVDA, CRM, MRVL) -> FY reports forward (FY = calYear + 1 for Feb-Jan)
+  if (sym === 'NVDA' || sym === 'CRM' || sym === 'MRVL' || sym === 'DELL') {
+    const day = !isNaN(d.getTime()) ? d.getUTCDate() : 15;
+    // Early February (<= 7) is Q4 closing of the fiscal year ending that calendar year (e.g. Feb 3, 2023 = FY23 Q4)
+    if (month === 2 && day <= 7) {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+    // Mid/late Feb, Mar, Apr, or early May (<= 7) -> Q1 FY calYear + 1
+    else if ((month === 2 && day > 7) || (month >= 3 && month <= 4) || (month === 5 && day <= 7)) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } 
+    // Late May, Jun, Jul, or early Aug (<= 7) -> Q2 FY calYear + 1
+    else if ((month >= 6 && month <= 7) || (month === 5 && day > 7) || (month === 8 && day <= 7)) {
+      quarterNum = 2;
+      fiscalYear = calYear + 1;
+    } 
+    // Late Aug, Sep, Oct, or early Nov (<= 7) -> Q3 FY calYear + 1
+    else if ((month >= 9 && month <= 10) || (month === 8 && day > 7) || (month === 11 && day <= 7)) {
+      quarterNum = 3;
+      fiscalYear = calYear + 1;
+    } 
+    // Late Nov, Dec, Jan -> Q4 (Dec/Nov = FY calYear + 1; Jan = FY calYear)
+    else {
+      quarterNum = 4;
+      fiscalYear = month === 1 ? calYear : calYear + 1;
+    }
+  }
+  // 2. June 30 FY end (MSFT, LRCX, KLAC, SMCI, WDC, STX, COHR, LITE)
+  else if (sym === 'MSFT' || sym === 'LRCX' || sym === 'KLAC' || sym === 'SMCI' || sym === 'WDC' || sym === 'STX' || sym === 'COHR' || sym === 'LITE') {
+    if (month >= 7 && month <= 9) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } else if (month >= 10 && month <= 12) {
+      quarterNum = 2;
+      fiscalYear = calYear + 1;
+    } else if (month >= 1 && month <= 3) {
+      quarterNum = 3;
+      fiscalYear = calYear;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 3. September 30 FY end (AAPL, SIE, IFX)
+  else if (sym === 'AAPL' || sym === 'SIE' || sym === 'IFX') {
+    if (month >= 10 && month <= 12) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } else if (month >= 1 && month <= 3) {
+      quarterNum = 2;
+      fiscalYear = calYear;
+    } else if (month >= 4 && month <= 6) {
+      quarterNum = 3;
+      fiscalYear = calYear;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 4. July 31 FY end (CSCO, PANW, CRWD, ZS)
+  else if (sym === 'CSCO' || sym === 'PANW' || sym === 'CRWD' || sym === 'ZS') {
+    if (month >= 8 && month <= 10) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } else if (month >= 11 || month === 1) {
+      quarterNum = 2;
+      fiscalYear = month === 1 ? calYear : calYear + 1;
+    } else if (month >= 2 && month <= 4) {
+      quarterNum = 3;
+      fiscalYear = calYear;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 5. May 31 FY end (ORCL)
+  else if (sym === 'ORCL') {
+    if (month >= 6 && month <= 8) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } else if (month >= 9 && month <= 11) {
+      quarterNum = 2;
+      fiscalYear = calYear + 1;
+    } else if (month === 12 || month <= 2) {
+      quarterNum = 3;
+      fiscalYear = month === 12 ? calYear + 1 : calYear;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 6. October 31 FY end (AVGO, AMAT, HPE, CIEN)
+  else if (sym === 'AVGO' || sym === 'AMAT' || sym === 'HPE' || sym === 'CIEN') {
+    if (month >= 11 || month === 1) {
+      quarterNum = 1;
+      fiscalYear = month === 1 ? calYear : calYear + 1;
+    } else if (month >= 2 && month <= 4) {
+      quarterNum = 2;
+      fiscalYear = calYear;
+    } else if (month >= 5 && month <= 7) {
+      quarterNum = 3;
+      fiscalYear = calYear;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 7. August 31 FY end (MU)
+  else if (sym === 'MU') {
+    if (month >= 9 && month <= 11) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } else if (month === 12 || month <= 2) {
+      quarterNum = 2;
+      fiscalYear = month === 12 ? calYear + 1 : calYear;
+    } else if (month >= 3 && month <= 5) {
+      quarterNum = 3;
+      fiscalYear = calYear;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 8. April 30 FY end (AVAV, RCAT)
+  else if (sym === 'AVAV' || sym === 'RCAT') {
+    if (month >= 5 && month <= 7) {
+      quarterNum = 1;
+      fiscalYear = calYear + 1;
+    } else if (month >= 8 && month <= 10) {
+      quarterNum = 2;
+      fiscalYear = calYear + 1;
+    } else if (month >= 11 || month === 1) {
+      quarterNum = 3;
+      fiscalYear = month === 1 ? calYear : calYear + 1;
+    } else {
+      quarterNum = 4;
+      fiscalYear = calYear;
+    }
+  }
+  // 9. Standard Calendar Year (GOOGL, META, AMZN, TSM, AMD, NFLX, ASML, SAP, INTC, TXN, LMT, RTX, BA, NOC, GD, European Banks, etc.)
+  else {
+    quarterNum = Math.floor((month - 1) / 3) + 1;
+    fiscalYear = calYear;
+  }
+
+  const shortYear = String(fiscalYear).slice(-2);
+  const quarterStr = `Q${quarterNum} '${shortYear}`;
+  const fiscalQuarterLabel = `Fiscaal Q${quarterNum} ${fiscalYear}`;
+
+  return {
+    fiscalYear,
+    quarterNum,
+    quarterStr,
+    fiscalQuarterLabel
+  };
+}
+
+/**
  * Resolves the company's official fiscal quarter label.
  * For example:
+ * - DELL: in calendar Oct 2021 -> "Fiscaal Q3 2022" (revenue $28.39B)
  * - NVDA: in calendar July 2026 -> "Fiscaal Q2 2027"
  * - MSFT: in calendar June 2026 -> "Fiscaal Q4 2026", calendar September 2026 -> "Fiscaal Q1 2027"
  * - AAPL: in calendar September 2026 -> "Fiscaal Q4 2026"
@@ -228,17 +406,18 @@ export function getOfficialFiscalQuarterLabel(
   fiscalYear?: number,
   quarterNum?: number
 ): string {
-  const sym = ticker.toUpperCase();
-  const d = new Date(fiscalDate);
-  const calYear = !isNaN(d.getTime()) ? d.getUTCFullYear() : new Date().getFullYear();
-  const month = !isNaN(d.getTime()) ? d.getUTCMonth() + 1 : 1; // 1-12
+  // If fiscalDate is available, always use the canonical corporate fiscal rules
+  if (fiscalDate) {
+    const canonical = getCanonicalFiscalDetails(ticker, fiscalDate);
+    return canonical.fiscalQuarterLabel;
+  }
 
-  // 1. If explicit fiscalYear and quarterNum are already provided, format directly
+  // Fallback to explicit fiscalYear & quarterNum if no fiscalDate provided
   if (fiscalYear && quarterNum) {
     return `Fiscaal Q${quarterNum} ${fiscalYear}`;
   }
 
-  // 2. If quarterStr is like "Q2 '27", parse it
+  // Fallback to quarterStr parse if no date provided
   if (quarterStr && /^Q[1-4]\s*'?\d{2,4}$/i.test(quarterStr.trim())) {
     const match = quarterStr.trim().match(/^Q([1-4])\s*'?(\d{2,4})$/i);
     if (match) {
@@ -249,97 +428,5 @@ export function getOfficialFiscalQuarterLabel(
     }
   }
 
-  // 3. NVIDIA fiscal calendar (Ends late January)
-  // Feb-Apr = Q1 FY+1, May-Jul = Q2 FY+1, Aug-Oct = Q3 FY+1, Nov-Jan = Q4 FY
-  if (sym === 'NVDA' || sym === 'CRM' || sym === 'MRVL' || sym === 'DELL') {
-    if (month >= 2 && month <= 4) {
-      return `Fiscaal Q1 ${calYear + 1}`;
-    } else if (month >= 5 && month <= 7) {
-      return `Fiscaal Q2 ${calYear + 1}`;
-    } else if (month >= 8 && month <= 10) {
-      return `Fiscaal Q3 ${calYear + 1}`;
-    } else {
-      // Month 11, 12, 1
-      const fy = month === 1 ? calYear : calYear + 1;
-      return `Fiscaal Q4 ${fy}`;
-    }
-  }
-
-  // 4. Microsoft / Lam Research / KLA fiscal calendar (Ends June 30)
-  // Jul-Sep = Q1 FY+1, Oct-Dec = Q2 FY+1, Jan-Mar = Q3 FY, Apr-Jun = Q4 FY
-  if (sym === 'MSFT' || sym === 'LRCX' || sym === 'KLAC') {
-    if (month >= 7 && month <= 9) {
-      return `Fiscaal Q1 ${calYear + 1}`;
-    } else if (month >= 10 && month <= 12) {
-      return `Fiscaal Q2 ${calYear + 1}`;
-    } else if (month >= 1 && month <= 3) {
-      return `Fiscaal Q3 ${calYear}`;
-    } else {
-      return `Fiscaal Q4 ${calYear}`;
-    }
-  }
-
-  // 5. Micron fiscal calendar (fiscal year ends in late August/early September)
-  // Nov-Jan = Q1, Feb-Apr = Q2, May-Jul = Q3, Aug-Oct = Q4.
-  // Micron's fiscal periods end on a Thursday near these month boundaries.
-  if (sym === 'MU') {
-    if (month >= 11 || month <= 1) {
-      return `Fiscaal Q1 ${month === 1 ? calYear : calYear + 1}`;
-    } else if (month >= 2 && month <= 4) {
-      return `Fiscaal Q2 ${calYear}`;
-    } else if (month >= 5 && month <= 7) {
-      return `Fiscaal Q3 ${calYear}`;
-    } else {
-      return `Fiscaal Q4 ${calYear}`;
-    }
-  }
-
-  // 5. Apple fiscal calendar (Ends late September)
-  // Oct-Dec = Q1 FY+1, Jan-Mar = Q2 FY, Apr-Jun = Q3 FY, Jul-Sep = Q4 FY
-  if (sym === 'AAPL') {
-    if (month >= 10 && month <= 12) {
-      return `Fiscaal Q1 ${calYear + 1}`;
-    } else if (month >= 1 && month <= 3) {
-      return `Fiscaal Q2 ${calYear}`;
-    } else if (month >= 4 && month <= 6) {
-      return `Fiscaal Q3 ${calYear}`;
-    } else {
-      return `Fiscaal Q4 ${calYear}`;
-    }
-  }
-
-  // 6. Oracle fiscal calendar (Ends May 31)
-  // Jun-Aug = Q1 FY+1, Sep-Nov = Q2 FY+1, Dec-Feb = Q3 FY+1, Mar-May = Q4 FY
-  if (sym === 'ORCL') {
-    if (month >= 6 && month <= 8) {
-      return `Fiscaal Q1 ${calYear + 1}`;
-    } else if (month >= 9 && month <= 11) {
-      return `Fiscaal Q2 ${calYear + 1}`;
-    } else if (month === 12) {
-      return `Fiscaal Q3 ${calYear + 1}`;
-    } else if (month <= 2) {
-      return `Fiscaal Q3 ${calYear}`;
-    } else {
-      return `Fiscaal Q4 ${calYear}`;
-    }
-  }
-
-  // 7. Broadcom / Applied Materials fiscal calendar (Ends late October)
-  // Nov-Jan = Q1 FY+1, Feb-Apr = Q2 FY, May-Jul = Q3 FY, Aug-Oct = Q4 FY
-  if (sym === 'AVGO' || sym === 'AMAT') {
-    if (month >= 11 || month === 1) {
-      const fy = month === 1 ? calYear : calYear + 1;
-      return `Fiscaal Q1 ${fy}`;
-    } else if (month >= 2 && month <= 4) {
-      return `Fiscaal Q2 ${calYear}`;
-    } else if (month >= 5 && month <= 7) {
-      return `Fiscaal Q3 ${calYear}`;
-    } else {
-      return `Fiscaal Q4 ${calYear}`;
-    }
-  }
-
-  // Default standard calendar quarter (GOOGL, META, AMZN, TSM, AMD, NFLX, ASML, SAP, INTC, TXN, etc.)
-  const qNum = Math.floor((month - 1) / 3) + 1;
-  return `Fiscaal Q${qNum} ${calYear}`;
+  return 'Fiscaal Kwartaal';
 }

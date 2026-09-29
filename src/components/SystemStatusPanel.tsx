@@ -353,11 +353,15 @@ export const SystemStatusPanel: React.FC = () => {
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
             </div>
             <p className="text-[10px] text-slate-500">
-              High-frequency aggregator met 2.5s real-time snapshot cache.
+              High-frequency aggregator met {data?.services.marketQuotes.cacheTtlSeconds ?? 1.0}s real-time snapshot cache.
             </p>
             <div className="flex items-center justify-between text-[10px] font-mono-code text-slate-600 pt-1">
               <span>{data?.services.marketQuotes.cachedSymbols ?? 0} actieve quotes</span>
               <span className="text-emerald-700 font-semibold">{data?.services.marketQuotes.latencyMs ?? 15} ms</span>
+            </div>
+            <div className="text-[9.5px] text-slate-400 border-t border-slate-200/60 pt-1 flex justify-between font-mono-code">
+              <span>Desktop: 1.0s polling</span>
+              <span>Mobiel: 5.0s adaptive</span>
             </div>
           </div>
 

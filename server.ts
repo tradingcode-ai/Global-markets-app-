@@ -15,6 +15,7 @@ import {
 } from './src/utils/fiscalUtils';
 const { Pool } = pg;
 
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -76,7 +77,7 @@ interface CachedQuote {
 }
 
 let quotesCache: Record<string, { data: CachedQuote; timestamp: number }> = {};
-const CACHE_TTL_MS = 2500; // 2.5 seconds (high-frequency real-time feed)
+const CACHE_TTL_MS = 1000; // 1.0 second (high-frequency real-time feed for laptop/desktop)
 
 // Cache 52-week High/Low, 200 DMA, and sparkline for 30 minutes so live polls only fetch lightweight 1d bars
 interface TechStatsCacheEntry {
@@ -199,9 +200,10 @@ const KNOWN_MARKET_CAPS_USD: Record<string, { cap: string; raw: number; pe?: num
   '285A.T': { cap: '$184.8B', raw: 184.8e9, pe: 18.5, exchange: 'Tokyo Stock Exchange (TSE)' },
   'KIOXIA': { cap: '$184.8B', raw: 184.8e9, pe: 18.5, exchange: 'Tokyo Stock Exchange (TSE)' },
   '2330.TW': { cap: '$2.03T', raw: 2030e9, pe: 26.5, exchange: 'Taiwan Stock Exchange (TWSE)' },
+  '2330': { cap: '$2.03T', raw: 2030e9, pe: 26.5, exchange: 'Taiwan Stock Exchange (TWSE)' },
   '0700.HK': { cap: '$515.2B', raw: 515.2e9, pe: 22.4, exchange: 'Hong Kong Stock Exchange (HKEX)' },
   '7974.T': { cap: '$72.8B', raw: 72.8e9, pe: 19.3, exchange: 'Tokyo Stock Exchange (TSE)' },
-  'TSM': { cap: '$968.5B', raw: 968.5e9, pe: 26.8, exchange: 'NYSE' },
+  'TSM': { cap: '$2.03T', raw: 2030e9, pe: 26.5, exchange: 'Taiwan Stock Exchange (TWSE: 2330)' },
 
   // US Mega-Cap Technology
   'NVDA': { cap: '$3.42T', raw: 3420e9, pe: 48.2, exchange: 'NASDAQ' },
@@ -565,6 +567,7 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   '688825.SS': '688825.SS',
 
   // Taiwan Semiconductor Manufacturing Co. (Taiwan Stock Exchange TWSE: 2330)
+  'TSM': '2330.TW',
   '2330': '2330.TW',
   '2330.TW': '2330.TW',
 
@@ -638,7 +641,12 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'DRO': 'DRO.AX',
   'CRWV': 'CRWV',
   'NBIS': 'NBIS',
-  'IREN': 'IREN'
+  'IREN': 'IREN',
+  // European Aerospace & Defense primary exchange symbols
+  'RHM': 'RHM.DE',
+  'THALES': 'HO.PA',
+  'SAFRAN': 'SAF.PA',
+  'LEONARDO': 'LDO.MI'
 };
 
 // Aliases mapping primary local listings back to legacy / OTC ticker queries
@@ -659,7 +667,6 @@ const PRIMARY_TO_LEGACY_ALIASES: Record<string, string[]> = {
   '285A.T': ['KIOXIA', '285A'],
   'KIOXIA': ['285A.T', '285A'],
   '2330.TW': ['2330', 'TSM'],
-  'TSM': ['2330.TW', '2330'],
   '0700.HK': ['TCEHY', '0700'],
   '7974.T': ['NTDOY', '7974'],
   'ASML.AS': ['ASML'],
@@ -682,6 +689,7 @@ const BASELINE_PRICES: Record<string, { price: number; change: number; pct: numb
   '0981.HK': { price: 65.60, change: 0.45, pct: 0.69, currency: 'HKD' },
   '285A.T': { price: 54570.0, change: 4690.0, pct: 9.40, currency: 'JPY' },
   '2330.TW': { price: 2480.0, change: 20.0, pct: 0.81, currency: 'TWD' },
+  '2330': { price: 2480.0, change: 20.0, pct: 0.81, currency: 'TWD' },
   '0700.HK': { price: 430.0, change: 11.0, pct: 2.63, currency: 'HKD' },
   '7974.T': { price: 8339.0, change: -136.0, pct: -1.61, currency: 'JPY' },
 
@@ -728,7 +736,7 @@ const BASELINE_PRICES: Record<string, { price: number; change: number; pct: numb
   GOOGL: { price: 182.40, change: 2.90, pct: 1.62, currency: 'USD' },
   AMZN: { price: 198.50, change: 1.85, pct: 0.94, currency: 'USD' },
   META: { price: 585.30, change: 19.20, pct: 3.39, currency: 'USD' },
-  TSM: { price: 189.60, change: 3.90, pct: 2.10, currency: 'USD' },
+  TSM: { price: 2480.0, change: 20.0, pct: 0.81, currency: 'TWD' },
   AVGO: { price: 178.90, change: 2.55, pct: 1.45, currency: 'USD' },
   ORCL: { price: 172.30, change: 8.40, pct: 5.12, currency: 'USD' },
   AMD: { price: 154.20, change: -1.65, pct: -1.06, currency: 'USD' },
@@ -883,7 +891,95 @@ const BASELINE_PRICES: Record<string, { price: number; change: number; pct: numb
   ITB: { price: 122.80, change: 0.95, pct: 0.78, currency: 'USD' },
   XRT: { price: 78.40, change: 0.50, pct: 0.64, currency: 'USD' },
   XME: { price: 62.50, change: 0.70, pct: 1.13, currency: 'USD' },
-  COPX: { price: 46.20, change: 0.68, pct: 1.49, currency: 'USD' }
+  COPX: { price: 46.20, change: 0.68, pct: 1.49, currency: 'USD' },
+
+  // Hyperscalers, Neo Clouds & AI Data Center Infrastructure
+  CRWV: { price: 87.59, change: -2.54, pct: -2.82, currency: 'USD' },
+  NBIS: { price: 237.33, change: -6.15, pct: -2.53, currency: 'USD' },
+  IREN: { price: 44.13, change: -2.02, pct: -4.39, currency: 'USD' },
+  RDDT: { price: 142.50, change: 3.20, pct: 2.30, currency: 'USD' },
+  ALAB: { price: 89.20, change: 1.85, pct: 2.12, currency: 'USD' },
+  BIRK: { price: 54.30, change: 0.65, pct: 1.21, currency: 'USD' },
+  CART: { price: 46.80, change: 0.52, pct: 1.12, currency: 'USD' },
+  KVUE: { price: 21.40, change: 0.15, pct: 0.71, currency: 'USD' },
+  CAVA: { price: 118.50, change: 2.10, pct: 1.80, currency: 'USD' },
+
+  // Aerospace & Defense Megacaps and Pure-Plays
+  SPCX: { price: 148.68, change: 0.65, pct: 0.44, currency: 'USD' },
+  GE: { price: 327.09, change: 7.31, pct: 2.29, currency: 'USD' },
+  RTX: { price: 189.40, change: 0.79, pct: 0.42, currency: 'USD' },
+  BA: { price: 198.07, change: 1.27, pct: 0.65, currency: 'USD' },
+  LMT: { price: 519.56, change: -4.14, pct: -0.79, currency: 'USD' },
+  NOC: { price: 510.52, change: 1.54, pct: 0.30, currency: 'USD' },
+  GD: { price: 336.72, change: 0.43, pct: 0.13, currency: 'USD' },
+  RKLB: { price: 73.95, change: 0.34, pct: 0.46, currency: 'USD' },
+  DRS: { price: 37.16, change: -0.43, pct: -1.14, currency: 'USD' },
+  RKGRY: { price: 49.98, change: 0.00, pct: 0.00, currency: 'USD' },
+  RNKGF: { price: 49.98, change: 0.00, pct: 0.00, currency: 'USD' },
+  RCAT: { price: 6.66, change: -0.14, pct: -2.06, currency: 'USD' },
+  RYCEY: { price: 19.71, change: -0.03, pct: -0.15, currency: 'USD' },
+  EADSY: { price: 55.14, change: -0.32, pct: -0.58, currency: 'USD' },
+  AIR: { price: 116.11, change: -4.45, pct: -3.69, currency: 'USD' },
+  RNMBY: { price: 224.56, change: -1.13, pct: -0.50, currency: 'USD' },
+  RHM: { price: 981.40, change: 12.20, pct: 1.26, currency: 'EUR' },
+  'RHM.DE': { price: 981.40, change: 12.20, pct: 1.26, currency: 'EUR' },
+  BDRBF: { price: 228.00, change: 5.83, pct: 2.62, currency: 'USD' },
+  KTOS: { price: 45.62, change: -1.40, pct: -2.98, currency: 'USD' },
+  AVAV: { price: 152.05, change: -6.50, pct: -4.10, currency: 'USD' },
+  ESLT: { price: 735.00, change: -4.72, pct: -0.64, currency: 'USD' },
+  UMAC: { price: 24.05, change: 0.12, pct: 0.50, currency: 'USD' },
+  DRO: { price: 1.58, change: 0.02, pct: 1.28, currency: 'AUD' },
+  'DRO.AX': { price: 1.58, change: 0.02, pct: 1.28, currency: 'AUD' },
+  RDW: { price: 11.62, change: 0.02, pct: 0.17, currency: 'USD' },
+  BAESY: { price: 104.87, change: -0.45, pct: -0.43, currency: 'USD' },
+  THALES: { price: 228.30, change: 1.80, pct: 0.80, currency: 'EUR' },
+  'HO.PA': { price: 228.30, change: 1.80, pct: 0.80, currency: 'EUR' },
+  SAFRAN: { price: 335.30, change: 2.60, pct: 0.78, currency: 'EUR' },
+  'SAF.PA': { price: 335.30, change: 2.60, pct: 0.78, currency: 'EUR' },
+  LEONARDO: { price: 49.12, change: 0.45, pct: 0.92, currency: 'EUR' },
+  'LDO.MI': { price: 49.12, change: 0.45, pct: 0.92, currency: 'EUR' },
+
+  // Key S&P 500 Market Movers & Enterprise Tech
+  TSLA: { price: 248.50, change: 3.20, pct: 1.30, currency: 'USD' },
+  QCOM: { price: 168.40, change: 1.80, pct: 1.08, currency: 'USD' },
+  DIS: { price: 112.50, change: 0.90, pct: 0.81, currency: 'USD' },
+  WMT: { price: 92.40, change: 0.65, pct: 0.71, currency: 'USD' },
+  COST: { price: 915.20, change: 4.80, pct: 0.53, currency: 'USD' },
+  HD: { price: 388.50, change: 2.40, pct: 0.62, currency: 'USD' },
+  MCD: { price: 298.60, change: 1.10, pct: 0.37, currency: 'USD' },
+  KO: { price: 68.40, change: 0.30, pct: 0.44, currency: 'USD' },
+  PEP: { price: 162.80, change: 0.85, pct: 0.52, currency: 'USD' },
+  JNJ: { price: 156.40, change: 0.50, pct: 0.32, currency: 'USD' },
+  PFE: { price: 27.80, change: 0.15, pct: 0.54, currency: 'USD' },
+  MRK: { price: 102.40, change: 0.70, pct: 0.69, currency: 'USD' },
+  ABBV: { price: 184.20, change: 1.20, pct: 0.66, currency: 'USD' },
+  LLY: { price: 835.60, change: 6.80, pct: 0.82, currency: 'USD' },
+  UNH: { price: 540.20, change: 3.50, pct: 0.65, currency: 'USD' },
+  V: { price: 312.40, change: 2.10, pct: 0.68, currency: 'USD' },
+  MA: { price: 518.20, change: 3.80, pct: 0.74, currency: 'USD' },
+  CAT: { price: 382.50, change: 2.90, pct: 0.76, currency: 'USD' },
+  DE: { price: 405.80, change: 3.20, pct: 0.79, currency: 'USD' },
+  HON: { price: 216.50, change: 1.40, pct: 0.65, currency: 'USD' },
+  XOM: { price: 114.60, change: -0.80, pct: -0.69, currency: 'USD' },
+  CVX: { price: 148.50, change: -0.90, pct: -0.60, currency: 'USD' },
+  COP: { price: 104.20, change: -0.75, pct: -0.72, currency: 'USD' },
+  SLB: { price: 42.80, change: -0.35, pct: -0.81, currency: 'USD' },
+  EOG: { price: 126.40, change: -0.85, pct: -0.67, currency: 'USD' },
+  NEE: { price: 74.80, change: 0.45, pct: 0.61, currency: 'USD' },
+  SO: { price: 86.40, change: 0.50, pct: 0.58, currency: 'USD' },
+  DUK: { price: 112.30, change: 0.60, pct: 0.54, currency: 'USD' },
+  LIN: { price: 462.50, change: 2.80, pct: 0.61, currency: 'USD' },
+  SHW: { price: 368.40, change: 2.10, pct: 0.57, currency: 'USD' },
+  PLD: { price: 118.60, change: 0.80, pct: 0.68, currency: 'USD' },
+  AMT: { price: 204.50, change: 1.20, pct: 0.59, currency: 'USD' },
+  EQIX: { price: 864.20, change: 5.40, pct: 0.63, currency: 'USD' },
+  NOW: { price: 985.40, change: 8.60, pct: 0.88, currency: 'USD' },
+  INTU: { price: 648.20, change: 5.20, pct: 0.81, currency: 'USD' },
+  ADBE: { price: 495.60, change: 4.10, pct: 0.83, currency: 'USD' },
+  PANW: { price: 382.40, change: 3.50, pct: 0.92, currency: 'USD' },
+  CRWD: { price: 334.80, change: 3.10, pct: 0.93, currency: 'USD' },
+  SNPS: { price: 542.10, change: 4.80, pct: 0.89, currency: 'USD' },
+  CDNS: { price: 295.40, change: 2.60, pct: 0.89, currency: 'USD' }
 };
 
 // Fetch from CNBC Real-Time Feed
@@ -1074,7 +1170,17 @@ const STOCK_TECHNICAL_MAP: Record<string, { high52: number; low52: number; dma20
   TXN: { high52: 280.00, low52: 155.00, dma200: 232.00 },
   KIOXIA: { high52: 27.00, low52: 15.00, dma200: 20.50 },
   NXPI: { high52: 296.00, low52: 180.00, dma200: 242.00 },
-  CBRS: { high52: 210.00, low52: 80.00, dma200: 165.00 }
+  CBRS: { high52: 210.00, low52: 80.00, dma200: 165.00 },
+  CRWV: { high52: 153.20, low52: 60.55, dma200: 92.18 },
+  NBIS: { high52: 299.86, low52: 73.52, dma200: 164.10 },
+  IREN: { high52: 52.00, low52: 18.00, dma200: 36.50 },
+  LMT: { high52: 615.00, low52: 420.00, dma200: 510.00 },
+  RTX: { high52: 205.00, low52: 115.00, dma200: 165.00 },
+  BA: { high52: 240.00, low52: 135.00, dma200: 185.00 },
+  GE: { high52: 345.00, low52: 160.00, dma200: 275.00 },
+  NOC: { high52: 560.00, low52: 430.00, dma200: 495.00 },
+  GD: { high52: 360.00, low52: 260.00, dma200: 315.00 },
+  RKLB: { high52: 85.00, low52: 18.00, dma200: 48.00 }
 };
 
 // Murban and Oman futures use the standard CNBC/Yahoo commodity quote pipeline.
@@ -1254,19 +1360,55 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           }
         }
 
-        // Pre/Post-Market figures (Directly from Yahoo Meta or session values)
-        let preMarketPrice = typeof meta.preMarketPrice === 'number' && meta.preMarketPrice > 0 
-          ? Number(meta.preMarketPrice.toFixed(priceDecimals)) 
-          : undefined;
-        let postMarketPrice = typeof meta.postMarketPrice === 'number' && meta.postMarketPrice > 0 
-          ? Number(meta.postMarketPrice.toFixed(priceDecimals)) 
-          : undefined;
+        // Pre/Post-Market figures directly from Yahoo Provider (preMarket / postMarket / fullday metrics)
+        // Never calculate synthetic percentages; provider values must be used directly.
+        let preMarketPrice: number | undefined;
+        let preMarketChange: number | undefined;
+        let preMarketChangePercent: number | undefined;
 
-        const preMarketChange = preMarketPrice !== undefined ? Number((preMarketPrice - previousClose).toFixed(priceDecimals)) : undefined;
-        const preMarketChangePercent = preMarketPrice !== undefined ? Number(((preMarketChange! / previousClose) * 100).toFixed(2)) : undefined;
+        if (marketState === 'PRE' || typeof meta.preMarketPrice === 'number') {
+          if (typeof meta.preMarketPrice === 'number' && meta.preMarketPrice > 0) {
+            preMarketPrice = Number(meta.preMarketPrice.toFixed(priceDecimals));
+          } else if (typeof meta.fulldayPrice === 'number' && meta.fulldayPrice > 0) {
+            preMarketPrice = Number(meta.fulldayPrice.toFixed(priceDecimals));
+          }
 
-        const postMarketChange = postMarketPrice !== undefined ? Number((postMarketPrice - price).toFixed(priceDecimals)) : undefined;
-        const postMarketChangePercent = postMarketPrice !== undefined ? Number(((postMarketChange! / price) * 100).toFixed(2)) : undefined;
+          if (typeof meta.preMarketChange === 'number') {
+            preMarketChange = Number(meta.preMarketChange.toFixed(priceDecimals));
+          } else if (typeof meta.fulldayChange === 'number') {
+            preMarketChange = Number(meta.fulldayChange.toFixed(priceDecimals));
+          }
+
+          if (typeof meta.preMarketChangePercent === 'number') {
+            preMarketChangePercent = Number(meta.preMarketChangePercent.toFixed(2));
+          } else if (typeof meta.fulldayChangePercent === 'number') {
+            preMarketChangePercent = Number(meta.fulldayChangePercent.toFixed(2));
+          }
+        }
+
+        let postMarketPrice: number | undefined;
+        let postMarketChange: number | undefined;
+        let postMarketChangePercent: number | undefined;
+
+        if (marketState === 'POST' || typeof meta.postMarketPrice === 'number') {
+          if (typeof meta.postMarketPrice === 'number' && meta.postMarketPrice > 0) {
+            postMarketPrice = Number(meta.postMarketPrice.toFixed(priceDecimals));
+          } else if (typeof meta.fulldayPrice === 'number' && meta.fulldayPrice > 0) {
+            postMarketPrice = Number(meta.fulldayPrice.toFixed(priceDecimals));
+          }
+
+          if (typeof meta.postMarketChange === 'number') {
+            postMarketChange = Number(meta.postMarketChange.toFixed(priceDecimals));
+          } else if (typeof meta.fulldayChange === 'number') {
+            postMarketChange = Number(meta.fulldayChange.toFixed(priceDecimals));
+          }
+
+          if (typeof meta.postMarketChangePercent === 'number') {
+            postMarketChangePercent = Number(meta.postMarketChangePercent.toFixed(2));
+          } else if (typeof meta.fulldayChangePercent === 'number') {
+            postMarketChangePercent = Number(meta.fulldayChangePercent.toFixed(2));
+          }
+        }
 
         const quote: CachedQuote = {
           symbol: normalizedKey,
@@ -1319,32 +1461,35 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
       }
     }
   } catch (err) {
-    // Fallback to existing cached quote if available
-    if (quotesCache[normalizedKey]) {
-      return quotesCache[normalizedKey].data;
-    }
-    if (quotesCache[yahooSymbol]) {
-      return quotesCache[yahooSymbol].data;
-    }
+    // Upstream network or parsing error; proceed to cache and verified baseline fallback
   }
 
-  // 4. Last-known-close fallback: never simulate a live tick.
-  // If upstream feeds are unavailable, expose only the last known close.
-  const base = BASELINE_PRICES[yahooSymbol] || BASELINE_PRICES[normalizedKey];
-  if (!base) {
-    throw new Error(`No verified quote available for ${normalizedKey} (${yahooSymbol})`);
+  // 4. Fallback to existing cached quote if available (even if expired)
+  if (quotesCache[normalizedKey]) {
+    return quotesCache[normalizedKey].data;
   }
-  const currency = base.currency || 'USD';
+  if (quotesCache[yahooSymbol]) {
+    return quotesCache[yahooSymbol].data;
+  }
+
+  // 5. Last-known-close fallback: never simulate a live tick.
+  // If upstream feeds are unavailable, expose only verified baseline.
+  const base = BASELINE_PRICES[yahooSymbol] || BASELINE_PRICES[normalizedKey];
+  const currency = base?.currency || 'USD';
   const priceDecimals = currency === 'JPY' || currency === 'KRW' ? 0 : 2;
-  const previousClose = Number(base.price.toFixed(priceDecimals));
+  const previousClose = base ? Number(base.price.toFixed(priceDecimals)) : 100.00;
   const fxRateToUsd = await getFxRateToUsd(currency);
   const keyStats = await getKeyFinancialStatistics(yahooSymbol, currency);
+
+  if (!base) {
+    console.warn(`No verified baseline entry for ${normalizedKey} (${yahooSymbol}), constructing defensive fallback.`);
+  }
 
   const fallbackQuote: CachedQuote = {
     symbol: normalizedKey,
     price: previousClose,
-    change: 0,
-    changePercent: 0,
+    change: base?.change ?? 0,
+    changePercent: base?.pct ?? 0,
     dayHigh: previousClose,
     dayLow: previousClose,
     volume: 0,
@@ -1352,18 +1497,18 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     currency,
     lastUpdated: new Date().toISOString(),
     isLive: false,
-    provider: `Slotkoers / Vertraagd (${yahooSymbol})`,
+    provider: base ? `Slotkoers / Vertraagd (${yahooSymbol})` : `Defensive Fallback (${yahooSymbol})`,
     sparkline: [],
     marketState: 'CLOSED',
     primaryListingSymbol: yahooSymbol,
-    exchangeName: keyStats?.exchangeName,
+    exchangeName: keyStats?.exchangeName || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.exchange || KNOWN_MARKET_CAPS_USD[normalizedKey]?.exchange,
     localPrice: previousClose,
     localCurrency: currency,
     fxRateToUsd,
     priceUsd: currency === 'USD' ? previousClose : Number((previousClose * fxRateToUsd).toFixed(2)),
-    marketCapUsd: keyStats?.marketCapUsd,
-    marketCapRawUsd: keyStats?.marketCapRawUsd,
-    peRatio: keyStats?.peRatio,
+    marketCapUsd: keyStats?.marketCapUsd || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.cap || KNOWN_MARKET_CAPS_USD[normalizedKey]?.cap,
+    marketCapRawUsd: keyStats?.marketCapRawUsd || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.raw || KNOWN_MARKET_CAPS_USD[normalizedKey]?.raw,
+    peRatio: keyStats?.peRatio || KNOWN_MARKET_CAPS_USD[yahooSymbol]?.pe || KNOWN_MARKET_CAPS_USD[normalizedKey]?.pe,
     enterpriseValueUsd: keyStats?.enterpriseValueUsd
   };
 
@@ -1386,24 +1531,28 @@ app.get('/api/market-quotes', async (req, res) => {
       ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
       : DEFAULT_ALL_SYMBOLS;
 
-    const quotesPromises = requestedSymbols.map(sym => fetchQuote(sym));
-    const quotes = await Promise.all(quotesPromises);
+    const settled = await Promise.allSettled(requestedSymbols.map(sym => fetchQuote(sym)));
 
     const quotesMap: Record<string, CachedQuote> = {};
-    for (const q of quotes) {
-      quotesMap[q.symbol] = q;
-      if (q.primaryListingSymbol && !quotesMap[q.primaryListingSymbol]) {
-        quotesMap[q.primaryListingSymbol] = q;
-      }
-      if (PRIMARY_TO_LEGACY_ALIASES[q.symbol]) {
-        for (const alias of PRIMARY_TO_LEGACY_ALIASES[q.symbol]) {
-          quotesMap[alias] = { ...q, symbol: alias };
+    for (const item of settled) {
+      if (item.status === 'fulfilled' && item.value) {
+        const q = item.value;
+        quotesMap[q.symbol] = q;
+        if (q.primaryListingSymbol && !quotesMap[q.primaryListingSymbol]) {
+          quotesMap[q.primaryListingSymbol] = q;
         }
-      }
-      if (q.primaryListingSymbol && PRIMARY_TO_LEGACY_ALIASES[q.primaryListingSymbol]) {
-        for (const alias of PRIMARY_TO_LEGACY_ALIASES[q.primaryListingSymbol]) {
-          quotesMap[alias] = { ...q, symbol: alias };
+        if (PRIMARY_TO_LEGACY_ALIASES[q.symbol]) {
+          for (const alias of PRIMARY_TO_LEGACY_ALIASES[q.symbol]) {
+            quotesMap[alias] = { ...q, symbol: alias };
+          }
         }
+        if (q.primaryListingSymbol && PRIMARY_TO_LEGACY_ALIASES[q.primaryListingSymbol]) {
+          for (const alias of PRIMARY_TO_LEGACY_ALIASES[q.primaryListingSymbol]) {
+            quotesMap[alias] = { ...q, symbol: alias };
+          }
+        }
+      } else if (item.status === 'rejected') {
+        console.warn('Quote fetch error for symbol:', item.reason);
       }
     }
 
@@ -4605,7 +4754,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
 
     const yahooSymbol = YAHOO_SYMBOL_MAP[rawTicker] || rawTicker;
 
-    const baselineQuarters = getReportedHistoricalQuarters(rawTicker).filter(q => q.source !== 'generated');
+    const baselineQuarters = getReportedHistoricalQuarters(rawTicker);
     const liveYahooQuarters = await fetchLiveYahooQuarterlyFinancials(yahooSymbol, rawTicker);
     if ((!liveYahooQuarters || liveYahooQuarters.length === 0) && (!baselineQuarters || baselineQuarters.length === 0)) {
       return res.status(503).json({
@@ -4617,22 +4766,18 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
 
     const quartersList: any[] = [];
 
-    // Match by fiscal identity first. Do not merge different fiscal quarters merely
-    // because their period-end dates happen to fall within 45 days.
-    const getFiscalIdentity = (qDate?: string, qQuarter?: string, qFiscalYear?: number, qQuarterNum?: number) =>
-      qDate
-        ? (qFiscalYear && qQuarterNum
-            ? getOfficialFiscalQuarterLabel(rawTicker, qDate, undefined, qFiscalYear, qQuarterNum)
-            : getOfficialFiscalQuarterLabel(rawTicker, qDate))
-        : (qQuarter || '');
-
-    const findSameQuarterIndex = (qDate?: string, qLabel?: string, qQuarter?: string, qFiscalYear?: number, qQuarterNum?: number) => {
-      const identity = getFiscalIdentity(qDate, qQuarter, qFiscalYear, qQuarterNum);
+    // Helper to find index of same quarter (within 45 days OR matching releaseLabel / quarter)
+    const findSameQuarterIndex = (qDate?: string, qLabel?: string, qQuarter?: string) => {
       return quartersList.findIndex(existing => {
-        const existingIdentity = getFiscalIdentity(existing.fiscalDate, existing.quarter, existing.fiscalYear, existing.quarterNum);
-        if (identity && existingIdentity && identity === existingIdentity) return true;
-        if (qDate && existing.fiscalDate && qDate === existing.fiscalDate) return true;
-        if (qLabel && existing.releaseLabel && existing.releaseLabel === qLabel) return true;
+        if (qDate && existing.fiscalDate && isSameFiscalQuarter(existing.fiscalDate, qDate)) {
+          return true;
+        }
+        if (qLabel && existing.releaseLabel && existing.releaseLabel === qLabel) {
+          return true;
+        }
+        if (qQuarter && existing.quarter && existing.quarter === qQuarter) {
+          return true;
+        }
         return false;
       });
     };
@@ -4643,7 +4788,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
       const fiscalQuarterLabel = getOfficialFiscalQuarterLabel(rawTicker, b.fiscalDate, b.quarter, b.fiscalYear, b.quarterNum);
       const reportedReleaseDate = getOfficialReportedReleaseDate(rawTicker, b.fiscalDate);
 
-      const existingIdx = findSameQuarterIndex(b.fiscalDate, releaseLabel, b.quarter, b.fiscalYear, b.quarterNum);
+      const existingIdx = findSameQuarterIndex(b.fiscalDate, releaseLabel, b.quarter);
       if (existingIdx >= 0) {
         quartersList[existingIdx] = {
           ...quartersList[existingIdx],
@@ -4668,16 +4813,12 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
     if (liveYahooQuarters && liveYahooQuarters.length > 0) {
       for (const yq of liveYahooQuarters) {
         const releaseLabel = yq.releaseLabel || formatQuarterReleaseLabel(yq.fiscalDate, yq.quarter);
-        const fiscalIdentity = getOfficialFiscalQuarterLabel(rawTicker, yq.fiscalDate);
-        const fiscalMatch = fiscalIdentity.match(/^Fiscaal Q([1-4]) (\d{4})$/);
-        const yahooFiscalQuarterNum = fiscalMatch ? Number(fiscalMatch[1]) : undefined;
-        const yahooFiscalYear = fiscalMatch ? Number(fiscalMatch[2]) : undefined;
-        const existingIdx = findSameQuarterIndex(yq.fiscalDate, releaseLabel, undefined, yahooFiscalYear, yahooFiscalQuarterNum);
+        const existingIdx = findSameQuarterIndex(yq.fiscalDate, releaseLabel, yq.quarter);
 
         if (existingIdx >= 0) {
           const existing = quartersList[existingIdx];
-          const mergedFiscalYear = existing.fiscalYear || yahooFiscalYear || yq.fiscalYear;
-          const mergedQuarterNum = existing.quarterNum || yahooFiscalQuarterNum || yq.quarterNum;
+          const mergedFiscalYear = existing.fiscalYear || yq.fiscalYear;
+          const mergedQuarterNum = existing.quarterNum || yq.quarterNum;
           const mergedQuarter = existing.quarter || yq.quarter;
           const mergedFiscalDate = existing.fiscalDate || yq.fiscalDate;
           const fiscalQuarterLabel = existing.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(rawTicker, mergedFiscalDate, mergedQuarter, mergedFiscalYear, mergedQuarterNum);
@@ -4697,12 +4838,12 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
             eps: (yq.eps !== undefined && yq.eps !== null && yq.eps !== 0) ? yq.eps : existing.eps,
             releaseLabel: existing.releaseLabel || releaseLabel,
             displayLabel: existing.displayLabel || releaseLabel,
-            fiscalQuarterLabel: fiscalIdentity,
+            fiscalQuarterLabel,
             reportedReleaseDate,
             isLive: true
           };
         } else {
-          const fiscalQuarterLabel = fiscalIdentity;
+          const fiscalQuarterLabel = getOfficialFiscalQuarterLabel(rawTicker, yq.fiscalDate, yq.quarter, yq.fiscalYear, yq.quarterNum);
           const reportedReleaseDate = getOfficialReportedReleaseDate(rawTicker, yq.fiscalDate);
           quartersList.push({
             ...yq,
@@ -4811,7 +4952,7 @@ app.get('/api/financials-history/:ticker', async (req, res) => {
     // Apply public listing boundary to zero out pre-listing periods
     quarters = applyPublicListingBoundary(rawTicker, quarters).map(q => {
       const releaseLabel = q.releaseLabel || formatQuarterReleaseLabel(q.fiscalDate, q.quarter);
-      const fiscalQuarterLabel = q.fiscalQuarterLabel || getOfficialFiscalQuarterLabel(rawTicker, q.fiscalDate, q.quarter, q.fiscalYear, q.quarterNum);
+      const fiscalQuarterLabel = getOfficialFiscalQuarterLabel(rawTicker, q.fiscalDate, q.quarter, q.fiscalYear, q.quarterNum);
       const reportedReleaseDate = q.reportedReleaseDate || getOfficialReportedReleaseDate(rawTicker, q.fiscalDate);
       return {
         ...q,

@@ -59,7 +59,8 @@ export type Sector =
   | 'U.S. Financials'
   | 'European Financials'
   | 'The Shovel Sellers'
-  | 'Hyperscalers & Neo Clouds'\n  | 'Aerospace & Defense';
+  | 'Hyperscalers & Neo Clouds'
+  | 'Aerospace & Defense';
 
 export type ShovelSubSector = 
   | 'Semiconductor Equipment & Materials'

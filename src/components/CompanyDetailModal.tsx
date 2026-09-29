@@ -181,13 +181,22 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
 
   // Market session info (Pre/Post market)
   const session = getMarketSessionInfo(result.ticker, quote);
-  const showPrePost = !session.isMarketOpen && session.prePostChangePercent !== undefined;
-  const prePostIsPositive = (session.prePostChangePercent ?? 0) >= 0;
-  const prePostChangeVal = (session.prePostPrice !== undefined && quote?.price) 
-    ? (session.prePostPrice - quote.price) 
-    : undefined;
+  const activePrePostPrice = session.prePostPrice ?? quote?.preMarketPrice ?? quote?.postMarketPrice;
+  const activePrePostPct = session.prePostChangePercent ?? quote?.preMarketChangePercent ?? quote?.postMarketChangePercent;
+  const showPrePost = !session.isMarketOpen && (activePrePostPrice !== undefined || activePrePostPct !== undefined);
+  const prePostIsPositive = activePrePostPct !== undefined 
+    ? activePrePostPct >= 0 
+    : (activePrePostPrice !== undefined && displayPrice ? activePrePostPrice >= displayPrice : true);
+  const prePostChangeVal = quote?.preMarketChange ?? quote?.postMarketChange ?? (
+    (activePrePostPrice !== undefined && displayPrice) 
+      ? (activePrePostPrice - displayPrice) 
+      : undefined
+  );
 
   // Only real Yahoo data or a previously persisted Yahoo snapshot may be shown.
+  const currentStockPrice = (displayPrice && displayPrice > 0) 
+    ? displayPrice 
+    : (meta?.currentPrice && meta.currentPrice > 0 ? meta.currentPrice : undefined);
   const consensus = liveConsensus?.isLiveFeed === true
     ? liveConsensus
     : (result.quarterlyConsensus?.isLiveFeed === true ? result.quarterlyConsensus : null);
@@ -425,27 +434,36 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     <span className="text-xs opacity-85">({isPricePositive ? '+' : ''}{changePct.toFixed(2)}%)</span>
                   </span>
 
-                  {/* Pre/After-Market Session Pill with Currency and % */}
-                  {showPrePost && session.prePostPrice !== undefined && (
+                  {/* Pre/After-Market Session Pill: Rounded gray bar matching the normal change pill, numbers & percentages colored green or red */}
+                  {showPrePost && (activePrePostPrice !== undefined || activePrePostPct !== undefined) && (
                     <span 
-                      className={`inline-flex items-center gap-1 text-[11px] font-mono-code font-semibold px-2 py-0.5 rounded-full border ${
-                        prePostIsPositive ? 'bg-emerald-50/80 text-emerald-700 border-emerald-200' : 'bg-rose-50/80 text-rose-700 border border-rose-200'
-                      }`}
-                      title={`${session.sessionLabel}: ${session.prePostChangePercent! >= 0 ? '+' : ''}${session.prePostChangePercent!.toFixed(2)}%`}
+                      className="inline-flex items-center gap-1.5 font-mono-code text-xs sm:text-sm px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200/70 border border-slate-300/80 text-slate-700 shadow-2xs transition-colors"
+                      title={`${session.sessionLabel}: ${activePrePostPct !== undefined ? (activePrePostPct >= 0 ? '+' : '') + activePrePostPct.toFixed(2) + '%' : ''} ${activePrePostPrice ? `(${displayCur}${activePrePostPrice.toFixed(2)})` : ''}`}
                     >
-                      <span className="text-[9px] uppercase font-bold text-slate-400">
-                        {session.sessionLabel === 'Pre-Market' ? 'PRE' : 'POST'}
+                      <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                        {session.sessionLabel === 'Pre-Market' || quote?.marketState === 'PRE' ? 'PRE' : 'POST'}:
                       </span>
-                      <span>
-                        {displayCur}{session.prePostPrice.toFixed(2)}
-                      </span>
-                      {prePostChangeVal !== undefined && (
-                        <span>
-                          {prePostIsPositive ? '+' : '-'}{displayCur}{Math.abs(prePostChangeVal).toFixed(2)}
+                      {activePrePostPrice !== undefined && (
+                        <span className="font-semibold text-slate-900">
+                          {displayCur}{isNoDecimal ? Math.round(activePrePostPrice).toLocaleString() : activePrePostPrice.toFixed(2)}
                         </span>
                       )}
-                      <span className="opacity-80">
-                        ({prePostIsPositive ? '+' : ''}{session.prePostChangePercent!.toFixed(2)}%)
+                      <span className={`inline-flex items-center gap-0.5 font-bold ${
+                        prePostIsPositive ? 'text-emerald-700' : 'text-rose-700'
+                      }`}>
+                        {prePostIsPositive ? (
+                          <ArrowUpRight className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                        ) : (
+                          <ArrowDownRight className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                        )}
+                        {prePostChangeVal !== undefined && (
+                          <span>
+                            {prePostIsPositive ? '+' : '-'}{displayCur}{Math.abs(prePostChangeVal).toFixed(2)}
+                          </span>
+                        )}
+                        <span className="text-xs">
+                          ({prePostIsPositive ? '+' : ''}{activePrePostPct !== undefined ? activePrePostPct.toFixed(2) : '0.00'}%)
+                        </span>
                       </span>
                     </span>
                   )}
@@ -469,11 +487,11 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 </div>
 
                 <div className="border-l border-slate-200 pl-4 space-y-1 font-mono-code text-[11px] text-slate-600">
-                  <div>Day Range: <strong className="text-slate-800">{displayCur}{(quote?.dayLow || displayPrice * 0.99).toLocaleString()} - {(quote?.dayHigh || displayPrice * 1.01).toLocaleString()}</strong></div>
-                  <div>Market Cap: <strong className="text-slate-800">({(quote?.marketCapUsd || meta?.marketCap || '$100B+').replace(/\s*USD/gi, '').trim()})</strong></div>
+                  <div>Day Range: <strong className="text-slate-800">{quote?.dayLow && quote?.dayHigh ? `${displayCur}${quote.dayLow.toLocaleString()} - ${displayCur}${quote.dayHigh.toLocaleString()}` : '—'}</strong></div>
+                  <div>Market Cap: <strong className="text-slate-800">({(quote?.marketCapUsd || meta?.marketCap || '—').replace(/\s*USD/gi, '').trim()})</strong></div>
                   {quote?.peRatio && <div>P/E (TTM): <strong className="text-slate-800">{quote.peRatio.toFixed(1)}x</strong></div>}
-                  <div>Prev Close: <strong className="text-slate-800">{displayCur}{(quote?.previousClose || displayPrice - changeVal).toLocaleString()}</strong></div>
-                  <div>Volume: <strong className="text-slate-800">{((quote?.volume || 15000000) / 1000000).toFixed(1)}M</strong></div>
+                  <div>Prev Close: <strong className="text-slate-800">{quote?.previousClose !== undefined ? `${displayCur}${quote.previousClose.toLocaleString()}` : (displayPrice && changeVal !== undefined ? `${displayCur}${(displayPrice - changeVal).toLocaleString()}` : '—')}</strong></div>
+                  <div>Volume: <strong className="text-slate-800">{quote?.volume && quote.volume > 0 ? (quote.volume >= 1000000 ? `${(quote.volume / 1000000).toFixed(1)}M` : quote.volume.toLocaleString()) : '—'}</strong></div>
                 </div>
               </div>
             </div>
@@ -699,8 +717,8 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     ? `${consensusTargetCurrency}${outlook.targetPrice.toFixed(2)}`
                     : (outlook.targetPrice || (targetNum ? `${consensusTargetCurrency}${targetNum.toFixed(2)}` : 'N/A'));
 
-                  const upside = (targetNum && safeCurrentPrice > 0)
-                    ? (((targetNum - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1)
+                  const upside = (targetNum && currentStockPrice && currentStockPrice > 0)
+                    ? (((targetNum - currentStockPrice) / currentStockPrice) * 100).toFixed(1)
                     : null;
 
                   return (

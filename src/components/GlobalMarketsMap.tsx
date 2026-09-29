@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Globe, RefreshCw, ChevronDown, ChevronUp,
   RotateCcw, Clock, TrendingUp, TrendingDown,
-  BarChart2
+  BarChart2, Maximize2, Minimize2
 } from 'lucide-react';
 import * as topojson from 'topojson-client';
 import { geoNaturalEarth1, geoPath, geoGraticule } from 'd3-geo';
@@ -1184,6 +1184,17 @@ export const GlobalMarketsMap: React.FC = () => {
     }
     return true;
   });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
   const [activeContinent, setActiveContinent] = useState<string>('world');
   const [selectedHub, setSelectedHub] = useState<CityHub | null>(null);
   
@@ -1663,7 +1674,13 @@ export const GlobalMarketsMap: React.FC = () => {
   };
 
   return (
-    <div className="mb-5 bg-[#070b14] border border-slate-800/90 rounded-2xl overflow-hidden shadow-2xl text-slate-100">
+    <div className={`mb-5 bg-[#070b14] border border-slate-800/90 rounded-2xl overflow-hidden shadow-2xl text-slate-100 transition-all duration-300 ${
+      isFullscreen
+        ? 'fixed inset-0 z-50 rounded-none overflow-y-auto p-2 sm:p-4 bg-[#070b14]'
+        : (isExpanded
+            ? 'w-full xl:w-[calc(100vw-2.5rem)] xl:max-w-[1880px] xl:relative xl:left-1/2 xl:-translate-x-1/2'
+            : 'w-full')
+    }`}>
       {/* 1. Header Bar with Clean Corporate Title & Desk Metrics */}
       <div className="bg-[#0b1120] px-4 py-2.5 border-b border-slate-800/90 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -1696,9 +1713,23 @@ export const GlobalMarketsMap: React.FC = () => {
             <span className="font-mono-code text-[11px] hidden sm:inline">{countdown}s</span>
           </button>
 
+          {/* Toggle Fullscreen / Volledig scherm */}
+          {isExpanded && (
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1 rounded-md bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition cursor-pointer"
+              title={isFullscreen ? 'Verlaat volledig scherm (ESC)' : 'Volledig scherm'}
+            >
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
+
           {/* Toggle Expand */}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => {
+              if (isExpanded && isFullscreen) setIsFullscreen(false);
+              setIsExpanded(!isExpanded);
+            }}
             className="p-1 rounded-md bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition cursor-pointer"
             title={isExpanded ? 'Inklappen' : 'Uitklappen'}
           >
@@ -2045,14 +2076,12 @@ export const GlobalMarketsMap: React.FC = () => {
                         onMouseLeave={() => setHoveredHub(null)}
                         className="cursor-pointer group"
                       >
-                        {/* Leader Callout Line with engineered elbow bend (Thin, sharp, solid - no dashes) */}
+                        {/* Leader Callout Line with engineered elbow bend (Neutral slate gray, matches closed state) */}
                         {hasLeaderLine && (
                           <path
                             d={leaderPath}
                             fill="none"
-                            stroke={isSelected 
-                              ? (isPositive ? '#10b981' : '#ef4444') 
-                              : (isOpen ? (isPositive ? '#10b981' : '#ef4444') : '#64748b')}
+                            stroke={isSelected ? '#94a3b8' : '#64748b'}
                             strokeWidth={isSelected ? "1.0" : "0.65"}
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -2060,44 +2089,91 @@ export const GlobalMarketsMap: React.FC = () => {
                           />
                         )}
 
-                        {/* Animated Pulse Beacon (Flikkeren) for active Open & Pre-Market sessions */}
+                        {/* Radiant Laser Light Emission (Laser Diode Corona & Wave) like NYSE Terminal Feed */}
                         {isFlickering && (
-                          <g>
-                            {/* Expanding CSS ping wave */}
+                          <g pointerEvents="none">
+                            {/* Outer ambient laser aura */}
                             <circle
-                              r={pingRadius}
+                              r={isContinentZoomed ? pinRadius * 2.1 : pinRadius * 2.3}
                               fill={pingColor}
-                              opacity={isPreMarket ? "0.25" : "0.35"}
-                              className="animate-ping"
-                              style={{ transformOrigin: '0 0' }}
-                            />
-                            {/* Native SVG expanding wave to guarantee smooth flicker */}
-                            <circle r={isContinentZoomed ? "1.6" : "2.6"} fill="none" stroke={pingColor} strokeWidth={isContinentZoomed ? "0.8" : "1.2"} opacity="0.8">
-                              <animate 
-                                attributeName="r" 
-                                values={isContinentZoomed ? "1.6;3.2;4.8" : "2.6;6;8.5"} 
-                                dur={isPreMarket ? "2.2s" : "1.5s"} 
-                                repeatCount="indefinite" 
+                              opacity="0.30"
+                            >
+                              <animate
+                                attributeName="opacity"
+                                values="0.36; 0.20; 0.36"
+                                dur={isPreMarket ? "4.0s" : "3.2s"}
+                                repeatCount="indefinite"
+                                keyTimes="0; 0.5; 1"
+                                calcMode="spline"
+                                keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
                               />
-                              <animate attributeName="opacity" values="0.8;0.3;0" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
+                            </circle>
+                            {/* Concentrated intense laser light core */}
+                            <circle
+                              r={isContinentZoomed ? pinRadius * 1.4 : pinRadius * 1.5}
+                              fill={pingColor}
+                              opacity="0.55"
+                            >
+                              <animate
+                                attributeName="opacity"
+                                values="0.70; 0.45; 0.70"
+                                dur={isPreMarket ? "4.0s" : "3.2s"}
+                                repeatCount="indefinite"
+                                keyTimes="0; 0.5; 1"
+                                calcMode="spline"
+                                keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
+                              />
+                            </circle>
+                            {/* Calm smooth expanding radar ring */}
+                            <circle
+                              r={pinRadius}
+                              fill="none"
+                              stroke={pingColor}
+                              strokeWidth={isContinentZoomed ? "0.9" : "1.2"}
+                            >
+                              <animate
+                                attributeName="r"
+                                values={`${pinRadius}; ${(pinRadius * 2.3).toFixed(1)}`}
+                                dur={isPreMarket ? "4.0s" : "3.2s"}
+                                repeatCount="indefinite"
+                                keyTimes="0; 1"
+                                calcMode="spline"
+                                keySplines="0.25 0.1 0.25 1"
+                              />
+                              <animate
+                                attributeName="opacity"
+                                values="0.75; 0"
+                                dur={isPreMarket ? "4.0s" : "3.2s"}
+                                repeatCount="indefinite"
+                                keyTimes="0; 1"
+                                calcMode="spline"
+                                keySplines="0.25 0.1 0.25 1"
+                              />
                             </circle>
                           </g>
                         )}
 
-                        {/* Pin Dot: Scaled down when zoomed into continent so pins never overlap */}
+                        {/* Pin Dot: Laser diode colored core (solid green or red, no white) */}
                         <circle
                           r={pinRadius}
                           fill={pinFill}
-                          stroke={isSelected ? (isClosed ? "#94a3b8" : (isPositive ? "#10b981" : "#ef4444")) : pinStroke}
+                          stroke={isSelected ? (isClosed ? "#94a3b8" : (isPositive ? "#34d399" : "#fb7185")) : pinStroke}
                           strokeWidth={pinStrokeWidth}
-                          filter={isFlickering ? "url(#cityGlow)" : undefined}
                         >
                           {isFlickering && (
-                            <animate attributeName="opacity" values="1;0.7;1" dur={isPreMarket ? "2.2s" : "1.5s"} repeatCount="indefinite" />
+                            <animate
+                              attributeName="opacity"
+                              values="1; 0.85; 1"
+                              dur={isPreMarket ? "4.0s" : "3.2s"}
+                              repeatCount="indefinite"
+                              keyTimes="0; 0.5; 1"
+                              calcMode="spline"
+                              keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
+                            />
                           )}
                         </circle>
 
-                        {/* Name Tag Label with non-overlapping offset - fully clickable to select index */}
+                        {/* Name Tag Label with non-overlapping offset - neutral gray matching closed market appearance */}
                         {showLabel && (
                           <g 
                             className="cursor-pointer transition-transform group-hover:scale-105"
@@ -2111,23 +2187,19 @@ export const GlobalMarketsMap: React.FC = () => {
                               rx="2.5"
                               fill="#080d19"
                               fillOpacity="0.95"
-                              stroke={isSelected 
-                                ? (isClosed ? '#94a3b8' : (isPositive ? '#10b981' : '#ef4444')) 
-                                : (isOpen 
-                                  ? (isPositive ? '#065f46' : '#7f1d1d') 
-                                  : (isPreMarket ? (isPositive ? '#065f46' : '#7f1d1d') : '#334155'))}
+                              stroke={isSelected ? '#94a3b8' : '#334155'}
                               strokeWidth={isSelected ? "1.2" : "0.75"}
-                              className="group-hover:stroke-cyan-400 group-hover:fill-[#0c182c] transition-colors"
+                              className="group-hover:stroke-slate-400 group-hover:fill-[#0c182c] transition-colors"
                             />
                             <text
                               x={textX}
                               y={textY}
                               textAnchor={placement.anchor}
-                              fill="#ffffff"
+                              fill="#cbd5e1"
                               fontSize="6.8"
-                              fontWeight="700"
+                              fontWeight="600"
                               fontFamily="sans-serif"
-                              className="group-hover:fill-cyan-200 transition-colors select-none"
+                              className="group-hover:fill-white transition-colors select-none"
                             >
                               {hub.cityName}
                             </text>

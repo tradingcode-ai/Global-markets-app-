@@ -237,6 +237,21 @@ export function isAssetSessionActive(ticker: string, quote?: LiveQuote | null): 
   return session.isActiveSession;
 }
 
+/**
+ * Returns true if an equity's market is actively in Regular Open, Pre-Market, or After-Hours (Post-Market).
+ * Used for the "ALL" ticker bar filtering to ensure only actively trading equities pass by.
+ */
+export function isEquityActiveSession(ticker: string, quote?: LiveQuote | null): boolean {
+  const normSym = ticker.toUpperCase();
+  if (COMMODITY_SYMBOLS.has(normSym) || BOND_SYMBOLS.has(normSym) || normSym.includes('10Y') || normSym.includes('30Y') || normSym.includes('2Y')) {
+    return false;
+  }
+  const session = getMarketSessionInfo(ticker, quote);
+  return session.isMarketOpen || session.marketState === 'REGULAR' || session.marketState === 'PRE' || session.marketState === 'POST' || session.sessionLabel === 'Pre-Market' || session.sessionLabel === 'After-Hours';
+}
+
+export const isEquityOpenOrPreMarket = isEquityActiveSession;
+
 function isCommoditiesMarketOpen(): boolean {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -309,9 +324,9 @@ function isAsianMarketOpen(): boolean {
 }
 
 export const TICKER_ALIASES: Record<string, string[]> = {
-  'TSM': ['TSM', '2330.TW', '2330'],
-  '2330': ['2330.TW', 'TSM', '2330'],
-  '2330.TW': ['2330.TW', 'TSM', '2330'],
+  'TSM': ['2330.TW', '2330', 'TSM'],
+  '2330': ['2330.TW', '2330', 'TSM'],
+  '2330.TW': ['2330.TW', '2330', 'TSM'],
   'ASML': ['ASML', 'ASML.AS'],
   'SAP': ['SAP', 'SAP.DE'],
   'ARM': ['ARM'],

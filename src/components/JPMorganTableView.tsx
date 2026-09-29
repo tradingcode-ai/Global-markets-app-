@@ -36,7 +36,6 @@ import {
 } from 'lucide-react';
 import { getStockTechnicalMetrics } from '../data/technicalData';
 import { getMarketSessionInfo } from '../utils/marketSession';
-import { AEROSPACE_DEFENSE_COMPANIES, AEROSPACE_DEFENSE_TICKERS } from '../data/aerospaceDefenseData';
 
 interface JPMorganTableViewProps {
   results: QuarterlyResult[];

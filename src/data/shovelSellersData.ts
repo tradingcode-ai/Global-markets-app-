@@ -365,16 +365,16 @@ export const SHOVEL_SELLERS_COMPANIES: Record<string, CompanyMeta> = {
     subSector: 'Semiconductors',
     region: 'Europe',
     country: 'Taiwan',
-    exchange: 'NYSE (TSM)',
+    exchange: 'Taiwan Stock Exchange (TWSE: 2330)',
     logoBg: 'bg-emerald-950',
     logoTextColor: 'text-emerald-300',
-    marketCap: '$980B',
-    currentPrice: 191.45,
-    dayChangePercent: 2.38,
+    marketCap: '$2.03T',
+    currentPrice: 2480.00,
+    dayChangePercent: 0.81,
     description: 'World’s undisputed leader in pure-play semiconductor foundry manufacturing, fabricating over 90% of advanced AI accelerators (NVIDIA Blackwell, AMD Instinct, Apple, Google TPU) with exclusive 3nm/2nm logic and CoWoS advanced packaging.',
-    fiftyTwoWeekHigh: 205.84,
-    fiftyTwoWeekLow: 84.00,
-    twoHundredDayAverage: 172.50
+    fiftyTwoWeekHigh: 2535.00,
+    fiftyTwoWeekLow: 1305.00,
+    twoHundredDayAverage: 2150.00
   },
   NVDA: {
     ticker: 'NVDA',
