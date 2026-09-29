@@ -1,0 +1,57 @@
+name: Deep Market Research Monitor Scheduled Runner
+
+# Automatic schedule for Deep Market Research Engine:
+# Runs every 15 minutes Monday through Friday across global market sessions.
+# Prevents free cloud hosts (like Render) from sleeping, and independently
+# scans 100+ tickers/commodities/rates to trigger Deep Market Research reports.
+
+on:
+  schedule:
+    # Every 15 minutes, Monday through Friday, 00:00 - 23:00 UTC
+    - cron: '*/15 0-23 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      forceScan:
+        description: 'Force immediate market scan'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  run-market-research-monitor:
+    name: Run Deep Market Research Monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit
+
+      - name: Ping live web application (Keep-Alive & Wakeup)
+        env:
+          APP_URL: ${{ secrets.APP_URL || secrets.RENDER_APP_URL || 'https://markets-xp9o.onrender.com' }}
+        run: |
+          if [ -n "$APP_URL" ]; then
+            echo "Sending keep-alive ping and wake-up trigger to $APP_URL/api/research/monitor/run"
+            curl -s -X POST "$APP_URL/api/research/monitor/run" \
+              -H "Content-Type: application/json" \
+              --max-time 15 || true
+          fi
+
+      - name: Run Autonomous Deep Market Research Monitor CLI
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          API_KEY: ${{ secrets.API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npx tsx src/scripts/runMarketResearchMonitorCli.ts
