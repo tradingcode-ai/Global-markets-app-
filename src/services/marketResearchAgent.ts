@@ -392,6 +392,16 @@ export async function executeResearchForEvent(
           type: 'antigravity',
           model: 'gemini-3.8-flash'
         },
+        environment: {
+          type: 'remote',
+          sources: [
+            {
+              type: 'inline',
+              content: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
+              target: '.agents/AGENTS.md'
+            }
+          ]
+        },
         input: prompt,
         system_instruction: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
         tools: [{ type: 'google_search' }]
