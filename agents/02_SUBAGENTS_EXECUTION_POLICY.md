@@ -31,7 +31,7 @@ Delegeer nooit werk dat je zelf nog niet voldoende hebt begrepen.
 
 3. DE SUBAGENTS DOEN HET DAADWERKELIJKE WERK
 
-Wanneer een taak veilig en duidelijk aan een subagent kan worden toegewezen, moet je die taak daadwerkelijk delegeren.
+Wanneer een taak veilig en duidelijk aan een subagent kan worden toegewezen, moet je die taak daadwerkelijk delegeren. Deze subagent moeten altijd niveau Medium hebben nooit high, 
 
 Gebruik subagents niet alleen om ideeën, architectuuradvies of codevoorbeelden te geven.
 
@@ -296,7 +296,7 @@ Inspect → Implement → Test → Debug → Self-Repair → Report
 
 Het uiteindelijke doel is niet dat jij zoveel mogelijk code zelf schrijft.
 
-Het doel is dat jij het beschikbare engineeringteam zo effectief mogelijk aanstuurt en dat het volledige systeem correct, gecontroleerd en production-ready wordt opgeleverd. hieronder in grote lijnen de workflow hoe jij en de subagents te werk moeten gaan.
+Het doel is dat jij het beschikbare engineeringteam zo effectief mogelijk aanstuurt en dat het volledige systeem correct, gecontroleerd en production-ready wordt opgeleverd. hieronder in grote lijnen de workflow van hoe jij en de subagents te werk moeten gaan.
                  MAIN LLM
         Lead Architect / Orchestrator
                     │
