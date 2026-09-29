@@ -35,10 +35,12 @@ export interface MonitorRunResult {
 export async function runMarketResearchMonitor(
   quoteFetcher: QuoteFetcher,
   pool: pg.Pool | null,
-  options?: { autoRunAgent?: boolean }
+  options?: { autoRunAgent?: boolean; waitForAgent?: boolean }
 ): Promise<MonitorRunResult> {
   const config = await getResearchConfig(pool);
   const autoRunAgent = options?.autoRunAgent !== false; // Default true
+  const waitForAgent = Boolean(options?.waitForAgent);
+  const agentPromises: Promise<any>[] = [];
 
   let checkedAssetsCount = 0;
   let triggeredCount = 0;
@@ -125,12 +127,18 @@ export async function runMarketResearchMonitor(
 
       // 5. Trigger Deep Market Research Agent
       if (autoRunAgent) {
-        // Run agent asynchronously in background so monitor cycle does not block
-        executeResearchForEvent(newEvent, pool).catch(agentErr => {
+        const agentPromise = executeResearchForEvent(newEvent, pool).catch(agentErr => {
           console.error(`[Market Monitor] Error executing research agent for ${newEvent.ticker}:`, agentErr);
         });
+        agentPromises.push(agentPromise);
       }
     }
+  }
+
+  // If waitForAgent is requested (e.g. in CLI or test runs), wait for all pending research jobs
+  if (waitForAgent && agentPromises.length > 0) {
+    console.log(`[Market Monitor] Awaiting completion of ${agentPromises.length} Deep Market Research investigations...`);
+    await Promise.allSettled(agentPromises);
   }
 
   recordMarketMonitorRun();

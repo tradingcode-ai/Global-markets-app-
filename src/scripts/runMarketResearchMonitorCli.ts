@@ -84,7 +84,7 @@ async function main() {
   }
 
   console.log('[CLI] Running deterministic market monitor over enabled assets...');
-  const result = await runMarketResearchMonitor(cliQuoteFetcher, pool, { autoRunAgent: true });
+  const result = await runMarketResearchMonitor(cliQuoteFetcher, pool, { autoRunAgent: true, waitForAgent: true });
 
   console.log('----------------------------------------------------');
   console.log(`Assets checked:   ${result.checkedAssetsCount}`);
