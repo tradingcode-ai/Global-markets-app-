@@ -13,6 +13,20 @@ import {
   formatDutchDate, 
   formatDutchShortDate 
 } from './src/utils/fiscalUtils';
+import {
+  getResearchDashboardData,
+  getResearchEvents,
+  getResearchReports,
+  getResearchReport,
+  getResearchConfig as getStoredResearchConfig,
+  saveResearchConfig,
+  ensureResearchTables
+} from './src/services/marketResearchStore';
+import {
+  runMarketResearchMonitor,
+  triggerManualResearch,
+  QuoteFetcher
+} from './src/services/marketResearchMonitor';
 const { Pool } = pg;
 
 dotenv.config({ path: '.env.local' });
@@ -5883,9 +5897,184 @@ app.get('/api/system/health', async (_req, res) => {
   });
 });
 
+// ============================================================================
+// DEEP MARKET RESEARCH API & BACKGROUND MONITOR SCHEDULER
+// ============================================================================
+
+const researchQuoteFetcher: QuoteFetcher = async (symbol: string) => {
+  try {
+    const q = await fetchQuote(symbol);
+    if (!q || typeof q.price !== 'number') return null;
+    return {
+      symbol: q.symbol,
+      price: q.price,
+      changePercent: q.changePercent,
+      previousClose: q.previousClose
+    };
+  } catch {
+    return null;
+  }
+};
+
+let researchSchedulerTimer: NodeJS.Timeout | null = null;
+
+function setupResearchScheduler(intervalMin = 5) {
+  if (researchSchedulerTimer) {
+    clearInterval(researchSchedulerTimer);
+  }
+  const safeMin = Math.max(1, intervalMin);
+  const ms = safeMin * 60 * 1000;
+  console.log(`[Research Scheduler] Market Monitor scheduled to wake every ${safeMin} minutes.`);
+  researchSchedulerTimer = setInterval(async () => {
+    try {
+      console.log(`[Research Scheduler] Periodic wake: scanning enabled assets for threshold triggers...`);
+      const pool = getAgentPgPool();
+      await runMarketResearchMonitor(researchQuoteFetcher, pool, { autoRunAgent: true });
+    } catch (err: any) {
+      console.warn('[Research Scheduler] Error during periodic market monitor cycle:', err.message);
+    }
+  }, ms);
+}
+
+// 1. Research Dashboard summary
+app.get('/api/research/dashboard', async (_req, res) => {
+  try {
+    const pool = getAgentPgPool();
+    const data = await getResearchDashboardData(pool);
+    return res.json({ success: true, ...data });
+  } catch (err: any) {
+    console.error('Error fetching research dashboard:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. Research Events list
+app.get('/api/research/events', async (req, res) => {
+  try {
+    const { status, ticker, limit } = req.query as Record<string, string>;
+    const pool = getAgentPgPool();
+    const events = await getResearchEvents({
+      status,
+      ticker,
+      limit: limit ? parseInt(limit, 10) : undefined
+    }, pool);
+    return res.json({ success: true, count: events.length, events, data: events });
+  } catch (err: any) {
+    console.error('Error fetching research events:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Research Reports list
+app.get('/api/research/reports', async (req, res) => {
+  try {
+    const { ticker, limit } = req.query as Record<string, string>;
+    const pool = getAgentPgPool();
+    const reports = await getResearchReports({
+      ticker,
+      limit: limit ? parseInt(limit, 10) : undefined
+    }, pool);
+    return res.json({ success: true, count: reports.length, reports, data: reports });
+  } catch (err: any) {
+    console.error('Error fetching research reports:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. Single Research Report by ID
+app.get('/api/research/reports/:id', async (req, res) => {
+  try {
+    const pool = getAgentPgPool();
+    const report = await getResearchReport(req.params.id, pool);
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Research report not found' });
+    }
+    return res.json({ success: true, report });
+  } catch (err: any) {
+    console.error('Error fetching research report:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Get Research Config
+app.get('/api/research/config', async (_req, res) => {
+  try {
+    const pool = getAgentPgPool();
+    const config = await getStoredResearchConfig(pool);
+    return res.json({ success: true, config });
+  } catch (err: any) {
+    console.error('Error getting research config:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Update Research Config
+app.post('/api/research/config', async (req, res) => {
+  try {
+    const pool = getAgentPgPool();
+    const current = await getStoredResearchConfig(pool);
+    const body = req.body || {};
+
+    const updated = {
+      ...current,
+      ...body,
+      categories: body.categories ? { ...current.categories, ...body.categories } : current.categories,
+      assets: body.assets ? { ...current.assets, ...body.assets } : current.assets
+    };
+
+    if (body.schedulerIntervalMin && body.schedulerIntervalMin !== current.schedulerIntervalMin) {
+      setupResearchScheduler(body.schedulerIntervalMin);
+    }
+
+    const saved = await saveResearchConfig(updated, pool);
+    return res.json({ success: true, config: saved });
+  } catch (err: any) {
+    console.error('Error saving research config:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. Trigger Market Monitor run
+app.post(['/api/research/monitor/run', '/api/research/scan'], async (_req, res) => {
+  try {
+    const pool = getAgentPgPool();
+    const result = await runMarketResearchMonitor(researchQuoteFetcher, pool, { autoRunAgent: true });
+    return res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('Error running market research monitor:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. Manual Trigger for specific asset
+app.post('/api/research/trigger', async (req, res) => {
+  try {
+    const symbol = req.body?.symbol || req.body?.ticker;
+    const customMovePct = req.body?.customMovePct ?? req.body?.change_percent;
+    const force = req.body?.force;
+    if (!symbol) {
+      return res.status(400).json({ success: false, error: 'Symbol or ticker is required' });
+    }
+    const pool = getAgentPgPool();
+    const result = await triggerManualResearch(
+      symbol,
+      researchQuoteFetcher,
+      pool,
+      { customMovePct: typeof customMovePct === 'number' ? customMovePct : undefined, force: Boolean(force) }
+    );
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error manually triggering research:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Serve frontend in production or proxy in dev
 async function startServer() {
+  const pool = getAgentPgPool();
+  ensureResearchTables(pool).catch(() => {});
+  setupResearchScheduler(5);
+
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, 'dist')));
     app.get('*', (_req, res) => {

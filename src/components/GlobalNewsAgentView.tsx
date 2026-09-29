@@ -10,6 +10,7 @@ import {
 import { fetchNewsTimeline, triggerAgentRun, fetchAgentStatus } from '../services/marketNewsAgentService';
 import { detectNewsAsset, DetectedAsset } from '../utils/newsAssetDetector';
 import { StockLogo } from './StockLogo';
+import { ResearchDashboard } from './ResearchDashboard';
 import { 
   Globe, 
   RefreshCw, 
@@ -53,6 +54,8 @@ export function GlobalNewsAgentView({
   const [isTriggering, setIsTriggering] = useState<boolean>(false);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [status, setStatus] = useState<NewsAgentStatus | null>(null);
+  // Sub-navigation: News vs Deep Market Research
+  const [subTab, setSubTab] = useState<'news' | 'research'>('news');
 
   // Filters
   const [selectedEdition, setSelectedEdition] = useState<NewsEdition | 'ALL'>('ALL');
@@ -210,7 +213,37 @@ export function GlobalNewsAgentView({
 
   return (
     <div className="space-y-6">
-      {/* 1. Header & Agent Protocol Banner */}
+      {/* Primary Sub-Tab Switcher: Global News Agent vs Deep Market Research */}
+      <div className="bg-slate-200/80 p-1.5 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-xl shadow-xs border border-slate-300">
+        <button
+          type="button"
+          onClick={() => setSubTab('news')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+            subTab === 'news'
+              ? 'bg-white text-[#002d62] shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+          }`}
+        >
+          <span>📰 Global News Agent (Scheduled)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab('research')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+            subTab === 'research'
+              ? 'bg-[#002d62] text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+          }`}
+        >
+          <span>🔬 Deep Market Research (Event-Driven)</span>
+        </button>
+      </div>
+
+      {subTab === 'research' ? (
+        <ResearchDashboard onSelectTicker={onSelectTicker} />
+      ) : (
+        <>
+          {/* 1. Header & Agent Protocol Banner */}
       <div className="bg-gradient-to-r from-[#002d62] via-[#051c2c] to-[#0a2540] text-white rounded-2xl p-6 lg:p-8 shadow-sm border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
@@ -697,6 +730,8 @@ export function GlobalNewsAgentView({
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );
