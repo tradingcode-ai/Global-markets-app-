@@ -131,6 +131,11 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
     return { active, completed, events, monitored };
   }, [data]);
 
+  // Genuine in-progress research events (status NEW or RESEARCHING)
+  const inProgressEvents = useMemo(() => {
+    return (data?.activeEvents || []).filter(e => e.status === 'RESEARCHING' || e.status === 'NEW');
+  }, [data?.activeEvents]);
+
   // Filtered reports
   const filteredReports = useMemo(() => {
     if (!data?.recentReports) return [];
@@ -256,26 +261,30 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Active Research KPI */}
         <div className={`p-5 rounded-2xl border transition shadow-xs ${
-          kpi.active > 0 
+          inProgressEvents.length > 0 
             ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20' 
             : 'bg-white border-slate-200'
         }`}>
           <div className="flex items-center justify-between text-xs font-mono text-slate-500 mb-2">
-            <span className="uppercase tracking-wider">Actief Onderzoek</span>
-            {kpi.active > 0 ? (
+            <span className="uppercase tracking-wider">
+              {inProgressEvents.length > 0 ? 'Lopend Onderzoek' : 'Actieve Katalysatoren'}
+            </span>
+            {inProgressEvents.length > 0 ? (
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
               </span>
             ) : (
-              <Radio className="w-4 h-4 text-slate-400" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
             )}
           </div>
           <div className="text-2xl lg:text-3xl font-bold font-mono text-slate-900">
-            {kpi.active}
+            {inProgressEvents.length > 0 ? inProgressEvents.length : kpi.active}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {kpi.active > 0 ? 'Gemini 3.8 Flash onderzoekt...' : 'Geen lopende triggers'}
+            {inProgressEvents.length > 0 
+              ? `${inProgressEvents.length} onderzoek(en) nu actief bezig...` 
+              : `${kpi.active} marktbewegingen gemonitord (rapporten gereed)`}
           </p>
         </div>
 
@@ -322,8 +331,8 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
         </div>
       </div>
 
-      {/* 3. Live Active Research Card (pulsing animation when researching) */}
-      {data?.activeEvents && data.activeEvents.length > 0 && (
+      {/* 3. Live Active Research Card (pulsing animation only when genuinely researching) */}
+      {inProgressEvents.length > 0 && (
         <div className="bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-2xl p-5 border border-blue-700 shadow-md">
           <div className="flex items-center gap-2 mb-3">
             <span className="relative flex h-3 w-3">
@@ -331,11 +340,11 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
               <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-400"></span>
             </span>
             <h3 className="text-sm font-bold font-mono uppercase tracking-wider text-cyan-200">
-              Live Onderzoek in Uitvoering
+              Live Onderzoek in Uitvoering ({inProgressEvents.length})
             </h3>
           </div>
           <div className="space-y-3">
-            {data.activeEvents.map(evt => (
+            {inProgressEvents.map(evt => (
               <div 
                 key={evt.id}
                 className="bg-white/10 rounded-xl p-4 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
