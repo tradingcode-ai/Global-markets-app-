@@ -75,9 +75,10 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
 
   useEffect(() => {
     loadDashboard();
+    // Poll every 20 seconds to keep data fresh without overloading Frankfurt PostgreSQL connection
     const interval = setInterval(() => {
       loadDashboard(true);
-    }, 6000);
+    }, 20000);
     return () => clearInterval(interval);
   }, [loadDashboard]);
 

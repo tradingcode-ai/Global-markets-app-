@@ -146,6 +146,30 @@ export const INITIAL_RESEARCH_EVENTS: ResearchEvent[] = [
 ];
 
 const CONFIG_STORAGE_KEY = 'global_markets_deep_research_config_v2';
+const DASHBOARD_SNAPSHOT_KEY = 'global_markets_research_dashboard_snapshot_v2';
+
+export function getStoredDashboardSnapshot(): ResearchDashboardData | null {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_SNAPSHOT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.recentReports) && parsed.recentReports.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('[MarketResearchService] Error reading stored dashboard snapshot:', err);
+  }
+  return null;
+}
+
+export function persistDashboardSnapshot(data: ResearchDashboardData): void {
+  try {
+    localStorage.setItem(DASHBOARD_SNAPSHOT_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('[MarketResearchService] Error saving dashboard snapshot:', err);
+  }
+}
 
 function getStoredConfig(): ResearchConfig {
   try {
@@ -169,19 +193,41 @@ function persistConfigLocally(cfg: ResearchConfig): void {
 }
 
 /**
- * Fetch Deep Market Research Dashboard overview data
+ * Fetch Deep Market Research Dashboard overview data.
+ * Uses a Local-First Snapshot Architecture:
+ * 1. Checks localStorage for the last saved snapshot.
+ * 2. Fetches from backend with a 3.5s timeout.
+ * 3. On success: persists snapshot to localStorage and returns it.
+ * 4. On slow connection or error: immediately falls back to stored local snapshot.
  */
 export async function fetchResearchDashboard(): Promise<ResearchDashboardData> {
+  const localSnapshot = getStoredDashboardSnapshot();
+
   try {
-    const res = await fetch(`${BASE_URL}/api/research/dashboard`);
+    // 10-second timeout controller so requests have sufficient time to complete
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const res = await fetch(`${BASE_URL}/api/research/dashboard`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const json = await res.json();
-      if (json && (json.stats || json.kpi)) {
+      if (json && (json.stats || json.recentReports)) {
+        // Save fresh snapshot locally
+        persistDashboardSnapshot(json);
         return json;
       }
     }
   } catch (err) {
-    console.warn('[MarketResearchService] API error fetching dashboard, using verified local state:', err);
+    console.warn('[MarketResearchService] API slow or offline, using stored local snapshot:', err);
+  }
+
+  // If network timed out or failed, return the locally stored snapshot immediately
+  if (localSnapshot) {
+    return localSnapshot;
   }
 
   const config = getStoredConfig();
@@ -278,6 +324,16 @@ export async function fetchResearchReports(params?: {
     console.warn('[MarketResearchService] API error fetching reports:', err);
   }
 
+  // Check stored local snapshot if network is slow or offline
+  const snapshot = getStoredDashboardSnapshot();
+  if (snapshot?.recentReports && snapshot.recentReports.length > 0) {
+    let reports = [...snapshot.recentReports];
+    if (params?.ticker) {
+      reports = reports.filter(r => r.ticker.toUpperCase() === params.ticker?.toUpperCase());
+    }
+    return reports;
+  }
+
   let reports = [...INITIAL_RESEARCH_REPORTS];
   if (params?.ticker) {
     reports = reports.filter(r => r.ticker.toUpperCase() === params.ticker?.toUpperCase());
@@ -303,6 +359,11 @@ export async function fetchResearchReportById(id: string): Promise<ResearchRepor
   } catch (err) {
     console.warn('[MarketResearchService] API error fetching report by ID:', err);
   }
+
+  // Check stored local snapshot if network is slow or offline
+  const snapshot = getStoredDashboardSnapshot();
+  const fromSnapshot = snapshot?.recentReports?.find(r => r.id === id);
+  if (fromSnapshot) return fromSnapshot;
 
   const found = INITIAL_RESEARCH_REPORTS.find(r => r.id === id);
   return found || null;

@@ -219,6 +219,43 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
 
       tablesInitialized = true;
       console.log('[Market Research Store] PostgreSQL tables verified and active.');
+
+      // Hydrate in-memory store with reports from PostgreSQL on startup
+      try {
+        const repRes = await client.query('SELECT * FROM market_research_reports ORDER BY created_at DESC LIMIT 50');
+        if (repRes.rows && repRes.rows.length > 0) {
+          const dbReports: ResearchReport[] = repRes.rows.map(r => ({
+            id: r.id,
+            eventId: r.event_id,
+            assetName: r.asset_name,
+            ticker: r.ticker,
+            assetClass: r.asset_class,
+            changePercent: Number(r.change_percent),
+            period: r.period,
+            triggerTimestamp: r.trigger_timestamp instanceof Date ? r.trigger_timestamp.toISOString() : r.trigger_timestamp,
+            executiveSummary: r.executive_summary,
+            immediateCatalyst: r.immediate_catalyst,
+            directMarketImpact: r.direct_market_impact,
+            broaderContext: r.broader_context,
+            whatMarketIsReactingTo: r.what_market_is_reacting_to,
+            whatToWatchNext: r.what_to_watch_next,
+            confidence: r.confidence,
+            confidenceExplanation: r.confidence_explanation || undefined,
+            sources: typeof r.sources === 'string' ? JSON.parse(r.sources) : (r.sources || []),
+            rawMarkdown: r.raw_markdown || undefined,
+            status: r.status,
+            createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
+          }));
+          for (const rep of dbReports) {
+            if (!inMemoryStore.reports.some(r => r.id === rep.id)) {
+              inMemoryStore.reports.push(rep);
+            }
+          }
+          console.log(`[Market Research Store] Hydrated ${dbReports.length} reports into fast RAM store.`);
+        }
+      } catch (hErr: any) {
+        console.warn('[Market Research Store] Startup hydration warning:', hErr.message);
+      }
     } finally {
       client.release();
     }
@@ -717,24 +754,60 @@ export function recordMarketMonitorRun(): void {
   inMemoryStore.lastRunAt = new Date().toISOString();
 }
 
-// ----------------------------------------------------------------------------
-// Dashboard Data Aggregator
-// ----------------------------------------------------------------------------
+let cachedDashboard: { data: ResearchDashboardData; timestamp: number } | null = null;
+const DASHBOARD_CACHE_TTL_MS = 15000; // 15 seconds fast in-memory cache
 
 export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<ResearchDashboardData> {
-  // First auto-clean any stale researching events older than 3 minutes
-  await cleanupStaleResearchEvents(3, pool);
+  const now = Date.now();
+  if (cachedDashboard && now - cachedDashboard.timestamp < DASHBOARD_CACHE_TTL_MS) {
+    return cachedDashboard.data;
+  }
 
-  const [events, reports, config] = await Promise.all([
-    getResearchEvents({ limit: 40 }, pool),
-    getResearchReports({ limit: 20 }, pool),
-    getResearchConfig(pool)
-  ]);
+  // Auto-clean stale events in the background
+  cleanupStaleResearchEvents(3, pool).catch(() => {});
+
+  let events: ResearchEvent[] = [];
+  let reports: ResearchReport[] = [];
+  let config = inMemoryStore.config;
+
+  if (pool) {
+    try {
+      // 2.5s timeout on PostgreSQL so slow intercontinental connections never block the app
+      const result = await Promise.race([
+        Promise.all([
+          getResearchEvents({ limit: 40 }, pool),
+          getResearchReports({ limit: 20 }, pool),
+          getResearchConfig(pool)
+        ]),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Postgres query timeout')), 2500)
+        )
+      ]);
+      events = result[0];
+      reports = result[1];
+      config = result[2];
+
+      // Keep in-memory store synchronized with fresh DB data
+      for (const rep of reports) {
+        if (!inMemoryStore.reports.some(r => r.id === rep.id)) {
+          inMemoryStore.reports.push(rep);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Market Research Store] DB query slow/timed out, serving ultra-fast in-memory fallback:', err.message);
+      events = inMemoryStore.events.slice(0, 40);
+      reports = inMemoryStore.reports.slice(0, 20);
+      config = inMemoryStore.config;
+    }
+  } else {
+    events = inMemoryStore.events.slice(0, 40);
+    reports = inMemoryStore.reports.slice(0, 20);
+  }
 
   const activeEvents = events.filter(e => ['NEW', 'RESEARCHING', 'ACTIVE'].includes(e.status));
   const monitoredAssets = Object.values(config.assets).filter(a => a.enabled);
 
-  return {
+  const data: ResearchDashboardData = {
     activeEvents,
     recentReports: reports,
     recentEvents: events,
@@ -747,4 +820,7 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
     },
     config
   };
+
+  cachedDashboard = { data, timestamp: now };
+  return data;
 }
