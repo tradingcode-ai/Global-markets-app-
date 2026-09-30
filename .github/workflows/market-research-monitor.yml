@@ -14,7 +14,7 @@ on:
       forceScan:
         description: 'Force immediate market scan'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:
