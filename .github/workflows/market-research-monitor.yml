@@ -37,7 +37,7 @@ jobs:
 
       - name: Ping live web application (Keep-Alive & Wakeup)
         env:
-          APP_URL: ${{ secrets.APP_URL || secrets.RENDER_APP_URL || 'https://markets-xp9o.onrender.com' }}
+          APP_URL: 'https://markets-xp9o.onrender.com'
         run: |
           if [ -n "$APP_URL" ]; then
             echo "Sending keep-alive ping and wake-up trigger to $APP_URL/api/research/monitor/run"
