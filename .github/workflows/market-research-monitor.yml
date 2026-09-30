@@ -49,9 +49,6 @@ jobs:
       - name: Run Autonomous Deep Market Research Monitor CLI
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
-          API_KEY: ${{ secrets.API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           npx tsx src/scripts/runMarketResearchMonitorCli.ts
