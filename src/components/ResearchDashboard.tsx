@@ -61,20 +61,24 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'all' | 'reports' | 'events'>('all');
 
   // Load dashboard data
-  const loadDashboard = useCallback(async () => {
-    setIsLoading(true);
+  const loadDashboard = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const res = await fetchResearchDashboard();
       setData(res);
     } catch (err) {
       console.error('[ResearchDashboard] Fout bij laden dashboard:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadDashboard();
+    const interval = setInterval(() => {
+      loadDashboard(true);
+    }, 6000);
+    return () => clearInterval(interval);
   }, [loadDashboard]);
 
   // Handle manual market scan trigger
