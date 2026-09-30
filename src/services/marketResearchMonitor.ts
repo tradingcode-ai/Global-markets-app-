@@ -5,7 +5,8 @@ import {
   findActiveEventForTicker,
   saveResearchEvent,
   updateResearchEvent,
-  recordMarketMonitorRun
+  recordMarketMonitorRun,
+  cleanupStaleResearchEvents
 } from './marketResearchStore';
 import { executeResearchForEvent } from './marketResearchAgent';
 
@@ -37,10 +38,12 @@ export async function runMarketResearchMonitor(
   pool: pg.Pool | null,
   options?: { autoRunAgent?: boolean; waitForAgent?: boolean }
 ): Promise<MonitorRunResult> {
+  // 0. Auto-clean any stale researching events older than 3 minutes
+  await cleanupStaleResearchEvents(3, pool);
+
   const config = await getResearchConfig(pool);
   const autoRunAgent = options?.autoRunAgent !== false; // Default true
   const waitForAgent = Boolean(options?.waitForAgent);
-  const agentPromises: Promise<any>[] = [];
 
   let checkedAssetsCount = 0;
   let triggeredCount = 0;
@@ -124,21 +127,45 @@ export async function runMarketResearchMonitor(
 
       await saveResearchEvent(newEvent, pool);
       newEvents.push(newEvent);
-
-      // 5. Trigger Deep Market Research Agent
-      if (autoRunAgent) {
-        const agentPromise = executeResearchForEvent(newEvent, pool).catch(agentErr => {
-          console.error(`[Market Monitor] Error executing research agent for ${newEvent.ticker}:`, agentErr);
-        });
-        agentPromises.push(agentPromise);
-      }
     }
   }
 
-  // If waitForAgent is requested (e.g. in CLI or test runs), wait for all pending research jobs
-  if (waitForAgent && agentPromises.length > 0) {
-    console.log(`[Market Monitor] Awaiting completion of ${agentPromises.length} Deep Market Research investigations...`);
-    await Promise.allSettled(agentPromises);
+  // 5. Trigger Deep Market Research Agent sequentially (one-by-one)
+  // Executing 1-by-1 avoids concurrent Gemini API load, prevents 429 quota exhaustion,
+  // and ensures each investigation completes reliably before the next one starts.
+  let executionPromise: Promise<void> | null = null;
+  if (autoRunAgent && newEvents.length > 0) {
+    const processSequentially = async () => {
+      console.log(`[Market Monitor] Starting sequential (1-by-1) research queue for ${newEvents.length} event(s)...`);
+      for (let i = 0; i < newEvents.length; i++) {
+        const ev = newEvents[i];
+        try {
+          console.log(`[Market Monitor] Researching [${i + 1}/${newEvents.length}] ${ev.ticker} (${ev.assetName})...`);
+          await executeResearchForEvent(ev, pool);
+        } catch (agentErr: any) {
+          console.error(`[Market Monitor] Error executing research agent for ${ev.ticker}:`, agentErr);
+          await updateResearchEvent(
+            ev.id,
+            {
+              status: 'COOLED_DOWN',
+              catalystSummary: `Research execution error: ${agentErr?.message || 'Unknown error'}`
+            },
+            pool
+          );
+        }
+
+        // Brief 2-second breathing window between consecutive AI research runs
+        if (i < newEvents.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+      console.log(`[Market Monitor] Sequential research queue completed.`);
+    };
+
+    executionPromise = processSequentially();
+    if (waitForAgent) {
+      await executionPromise;
+    }
   }
 
   recordMarketMonitorRun();

@@ -354,7 +354,28 @@ function parseMarkdownReport(rawMarkdown: string): ParsedReportSections {
   };
 }
 
+// Concurrency mutex lock: ensures only 1 Deep Market Research Agent runs at any given moment
+let agentExecutionLock: Promise<any> = Promise.resolve();
+
 export async function executeResearchForEvent(
+  event: ResearchEvent,
+  pool: pg.Pool | null
+): Promise<{ success: boolean; report?: ResearchReport; error?: string }> {
+  // Wait for previous agent execution to complete so research runs strictly 1-by-1
+  const previous = agentExecutionLock;
+  let release: (value?: any) => void = () => {};
+  agentExecutionLock = new Promise(resolve => { release = resolve; });
+
+  await previous.catch(() => {});
+
+  try {
+    return await executeResearchForEventInternal(event, pool);
+  } finally {
+    release();
+  }
+}
+
+async function executeResearchForEventInternal(
   event: ResearchEvent,
   pool: pg.Pool | null
 ): Promise<{ success: boolean; report?: ResearchReport; error?: string }> {

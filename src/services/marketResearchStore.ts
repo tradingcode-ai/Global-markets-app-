@@ -459,6 +459,52 @@ export async function findActiveEventForTicker(
   return found || null;
 }
 
+/**
+ * Automatically clean up and expire events that were stuck in 'RESEARCHING' or 'NEW'
+ * for longer than maxAgeMinutes (default 3 minutes).
+ * Ensures that server restarts, rate limits, or network timeouts never leave
+ * events permanently stuck in the "Onderzoeken..." state.
+ */
+export async function cleanupStaleResearchEvents(
+  maxAgeMinutes = 3,
+  pool?: pg.Pool | null
+): Promise<number> {
+  const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString();
+  let cleanedCount = 0;
+
+  // 1. Clean in-memory store
+  for (const ev of inMemoryStore.events) {
+    if ((ev.status === 'RESEARCHING' || ev.status === 'NEW') && ev.triggeredAt < cutoffTime) {
+      ev.status = 'COOLED_DOWN';
+      ev.catalystSummary = ev.catalystSummary || 'Onderzoek afgerond / timeout hersteld';
+      cleanedCount++;
+    }
+  }
+
+  // 2. Clean PostgreSQL
+  if (pool) {
+    try {
+      await ensureResearchTables(pool);
+      const res = await pool.query(
+        `UPDATE market_research_events 
+         SET status = 'COOLED_DOWN',
+             catalyst_summary = COALESCE(catalyst_summary, 'Onderzoek afgerond / timeout hersteld')
+         WHERE status IN ('NEW', 'RESEARCHING') 
+           AND triggered_at < $1`,
+        [cutoffTime]
+      );
+      if (res.rowCount && res.rowCount > 0) {
+        cleanedCount += res.rowCount;
+        console.log(`[Market Research Store] Auto-recovered ${res.rowCount} stale RESEARCHING events.`);
+      }
+    } catch (err: any) {
+      console.warn('[Market Research Store] cleanupStaleResearchEvents DB warning:', err.message);
+    }
+  }
+
+  return cleanedCount;
+}
+
 // ----------------------------------------------------------------------------
 // Reports Management
 // ----------------------------------------------------------------------------
@@ -676,6 +722,9 @@ export function recordMarketMonitorRun(): void {
 // ----------------------------------------------------------------------------
 
 export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<ResearchDashboardData> {
+  // First auto-clean any stale researching events older than 3 minutes
+  await cleanupStaleResearchEvents(3, pool);
+
   const [events, reports, config] = await Promise.all([
     getResearchEvents({ limit: 40 }, pool),
     getResearchReports({ limit: 20 }, pool),
