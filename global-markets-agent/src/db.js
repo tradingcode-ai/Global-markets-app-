@@ -121,3 +121,43 @@ export async function insertNewsBatch(items) {
     client.release();
   }
 }
+
+export async function recordTokenUsage({
+  agentType = 'flash_news_agent',
+  model = 'gemini-3.8-flash',
+  inputTokens = 0,
+  outputTokens = 0,
+  totalTokens = 0,
+  operation = 'EDITION_RUN',
+  metadata = {}
+}) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gemini_token_usage (
+        id SERIAL PRIMARY KEY,
+        agent_type VARCHAR(64) NOT NULL,
+        model VARCHAR(64) NOT NULL,
+        input_tokens INT NOT NULL DEFAULT 0,
+        output_tokens INT NOT NULL DEFAULT 0,
+        total_tokens INT NOT NULL DEFAULT 0,
+        operation VARCHAR(128),
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO gemini_token_usage (
+        agent_type, model, input_tokens, output_tokens, total_tokens, operation, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7);
+    `, [
+      agentType,
+      model,
+      inputTokens,
+      outputTokens,
+      totalTokens || (inputTokens + outputTokens),
+      operation,
+      JSON.stringify(metadata)
+    ]);
+    console.log(`[Token Usage Logger] ✅ Exact Google usageMetadata opgeslagen: ${inputTokens} in / ${outputTokens} uit (${totalTokens} totaal) voor ${agentType}`);
+  } catch (err) {
+    console.warn('[Token Usage Logger Warning] Kon usageMetadata niet opslaan in DB:', err.message);
+  }
+}

@@ -87,6 +87,31 @@ export default function App() {
   });
   const [preferences, setPreferences] = useState<AlertPreferences>(getStoredPreferences);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
+
+  // News Agent Linked Tickers State (Decoupled from Push Engine, coupled with PostgreSQL database)
+  const [newsAgentTickers, setNewsAgentTickers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('veritas_news_agent_linked_tickers');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return ['ASML', 'MSFT', 'NVDA', 'TSM'];
+  });
+
+  // On mount, synchronize News Agent tickers with PostgreSQL database
+  useEffect(() => {
+    fetch('/api/v1/alerts')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.status === 'success' && Array.isArray(data.tickers) && data.tickers.length > 0) {
+          setNewsAgentTickers(data.tickers);
+          localStorage.setItem('veritas_news_agent_linked_tickers', JSON.stringify(data.tickers));
+        }
+      })
+      .catch(() => {});
+  }, []);
   
   // Real-Time Stock Market Quotes State
   const [quotes, setQuotes] = useState<Record<string, LiveQuote>>({});
@@ -572,6 +597,7 @@ export default function App() {
     }
   };
 
+  // Push Engine Subscriptions (For browser notifications: beats/misses, 52w high/low, >5% moves)
   const handleToggleSubscription = (ticker: string) => {
     let nextList = [...preferences.subscribedTickers];
     if (nextList.includes(ticker)) {
@@ -583,6 +609,37 @@ export default function App() {
       ...preferences,
       subscribedTickers: nextList
     });
+  };
+
+  const handleSetSubscriptions = (tickers: string[]) => {
+    handleUpdatePreferences({
+      ...preferences,
+      subscribedTickers: tickers
+    });
+  };
+
+  // News Agent Tickers (Synchronized with online PostgreSQL database)
+  const handleToggleNewsAgentTicker = (ticker: string) => {
+    const upper = ticker.toUpperCase().trim();
+    const willEnable = !newsAgentTickers.includes(upper);
+    const next = willEnable 
+      ? [...newsAgentTickers, upper] 
+      : newsAgentTickers.filter(t => t !== upper);
+    
+    setNewsAgentTickers(next);
+    localStorage.setItem('veritas_news_agent_linked_tickers', JSON.stringify(next));
+
+    // Synchronize alert toggle with backend PostgreSQL database for News Agent
+    fetch('/api/v1/alerts/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker: upper, enabled: willEnable })
+    }).catch(() => {});
+  };
+
+  const handleSetNewsAgentTickers = (tickers: string[]) => {
+    setNewsAgentTickers(tickers);
+    localStorage.setItem('veritas_news_agent_linked_tickers', JSON.stringify(tickers));
   };
 
   // Trigger test push from detail modal
@@ -1055,8 +1112,9 @@ export default function App() {
         {/* Tab 6: Autonomous Global Markets News Agent */}
         {activeTab === 'globalnewsagent' && (
           <GlobalNewsAgentView
-            subscribedTickers={preferences.subscribedTickers}
-            onToggleSubscription={handleToggleSubscription}
+            subscribedTickers={newsAgentTickers}
+            onToggleSubscription={handleToggleNewsAgentTicker}
+            onSetSubscriptions={handleSetNewsAgentTickers}
             onSelectTicker={handleSelectTickerFromPill}
             onNavigateToAsset={handleNavigateAsset}
           />

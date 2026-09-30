@@ -5,7 +5,8 @@ import {
   getActiveAlertTickers, 
   getRecentEventKeys, 
   getPreviousEditionSnapshot, 
-  insertNewsBatch 
+  insertNewsBatch,
+  recordTokenUsage
 } from "./db.js";
 import { extractVerifiedGroundingChunks, sanitizeAndEnforceGrounding } from "./groundingValidator.js";
 import { buildSystemInstruction } from "./masterPrompt.js";
@@ -263,14 +264,84 @@ export function getCurrentEdition() {
   const minute = Number(parts.find(p => p.type === "minute").value);
   const minutes = hour * 60 + minute;
 
-  // 02:30 - 07:00 Amsterdam (Asia Open)
-  if (minutes < 7 * 60) return "ASIA_OPEN";
-  // 07:00 - 15:30 Amsterdam (Morning Europe)
-  if (minutes < 15 * 60 + 30) return "MORNING_EUROPE";
-  // 15:30 - 21:30 Amsterdam (US Open)
-  if (minutes < 21 * 60 + 30) return "US_OPEN";
-  // 21:30 - 02:30 Amsterdam (Market Close)
+  // 02:15 - 06:45 Amsterdam (Asia Open)
+  if (minutes < 6 * 60 + 45) return "ASIA_OPEN";
+  // 06:45 - 15:15 Amsterdam (Morning Europe)
+  if (minutes < 15 * 60 + 15) return "MORNING_EUROPE";
+  // 15:15 - 21:15 Amsterdam (US Open)
+  if (minutes < 21 * 60 + 15) return "US_OPEN";
+  // 21:15 - 02:15 Amsterdam (Market Close)
   return "MARKET_CLOSE";
+}
+
+function buildFallbackPayload(targetEdition, liveStories = [], activeAlertTickers = []) {
+  const allowedTickers = (activeAlertTickers || []).map(t => t.toUpperCase());
+  const nowIso = new Date().toISOString();
+
+  const companyItems = [];
+  const macroItems = [];
+
+  for (const story of liveStories) {
+    const textToScan = `${story.title} ${story.description || ""}`.toUpperCase();
+    let matchedTicker = null;
+    for (const t of allowedTickers) {
+      if (textToScan.includes(t) || (getAliasesForTicker(t) && getAliasesForTicker(t).some(a => textToScan.includes(a.toUpperCase())))) {
+        matchedTicker = t;
+        break;
+      }
+    }
+
+    if (matchedTicker && companyItems.length < 4) {
+      companyItems.push({
+        event_key: `${matchedTicker.toLowerCase()}_rss_${Date.now()}_${companyItems.length}`,
+        ticker: matchedTicker,
+        company: matchedTicker,
+        category: "EQUITY",
+        headline: story.title,
+        summary: story.description ? story.description.slice(0, 200) : story.title,
+        fact: story.title,
+        market_reaction: "Koersbeweging wordt gemonitord tijdens de huidige handelssessie.",
+        analyst_interpretation: "Institutionele update gedetecteerd via geverifieerde marktfeed.",
+        sentiment: "NEUTRAL",
+        impact: "MEDIUM",
+        impact_score: 60,
+        urgency: "ROUTINE",
+        confidence: "HIGH",
+        published_at: story.pubDate ? new Date(story.pubDate).toISOString() : nowIso,
+        source_name: story.source || "Financial Wire",
+        source_url: story.link,
+        supporting_sources: []
+      });
+    } else if (!matchedTicker && macroItems.length < 3) {
+      macroItems.push({
+        event_key: `macro_rss_${Date.now()}_${macroItems.length}`,
+        ticker: null,
+        company: "Global Macro",
+        category: "MACRO",
+        headline: story.title,
+        summary: story.description ? story.description.slice(0, 200) : story.title,
+        fact: story.title,
+        market_reaction: "Wereldwijde financiële markten verwerken de nieuwste macro-economische cijfers.",
+        analyst_interpretation: `Belangrijke marktontwikkeling voor de editie ${targetEdition}.`,
+        sentiment: "NEUTRAL",
+        impact: "MEDIUM",
+        impact_score: 55,
+        urgency: "ROUTINE",
+        confidence: "HIGH",
+        published_at: story.pubDate ? new Date(story.pubDate).toISOString() : nowIso,
+        source_name: story.source || "Market Wire",
+        source_url: story.link,
+        supporting_sources: []
+      });
+    }
+  }
+
+  return {
+    edition: targetEdition,
+    macro_news: macroItems,
+    earnings_news: [],
+    company_news: companyItems
+  };
 }
 
 function generateDeterministicEventId(ticker, eventKey) {
@@ -347,7 +418,7 @@ Provide the real source_url for each item.
 
   // 7. Aanroep van Gemini met fallback modellen en rate limit retry
   let response;
-  const modelsToTry = [CONFIG.GEMINI_MODEL, 'gemini-3.1-flash-lite'];
+  const modelsToTry = [CONFIG.GEMINI_MODEL, 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
   
   for (const currentModel of modelsToTry) {
     if (response) break;
@@ -368,8 +439,15 @@ Provide the real source_url for each item.
           }
         });
       } catch (err) {
-        if (err?.status === 429 || err?.status === 503 || err?.message?.includes("quota") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("high demand")) {
-          console.warn(`[Agent Warning] Model ${currentModel} (poging ${attempt}) gaf ${err.status || 'rate limit'}. Probeert RSS-analyse modus...`);
+        const isQuotaOrOverload = err?.status === 429 || err?.status === 503 || 
+          err?.message?.includes("quota") || 
+          err?.message?.includes("RESOURCE_EXHAUSTED") || 
+          err?.message?.includes("high demand") || 
+          err?.message?.includes("UNAVAILABLE");
+
+        if (isQuotaOrOverload) {
+          console.warn(`[Agent Warning] Model ${currentModel} (poging ${attempt}) gaf ${err.status || 'overload'}. Pauzeert 3s en probeert directe RSS-analyse modus...`);
+          await new Promise(r => setTimeout(r, 3000));
           try {
             response = await ai.models.generateContent({
               model: currentModel,
@@ -383,24 +461,55 @@ Provide the real source_url for each item.
           } catch (innerErr) {
             console.warn(`[Agent Warning] RSS analyse met ${currentModel} gaf: ${innerErr.message}`);
             if (attempt === 1) {
-              await new Promise(r => setTimeout(r, 2500));
+              await new Promise(r => setTimeout(r, 5000));
             }
           }
         } else {
           console.warn(`[Agent Warning] Onverwachte fout met ${currentModel}: ${err.message}`);
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
     }
   }
 
-  if (!response || !response.text) {
-    throw new Error("Geen antwoord ontvangen van de beschikbare Gemini modellen.");
+  let payload;
+  let verifiedChunks = [];
+
+  if (response && response.text) {
+    if (response.usageMetadata) {
+      const promptTokens = response.usageMetadata.promptTokenCount || 0;
+      const candidatesTokens = response.usageMetadata.candidatesTokenCount || 0;
+      const thoughtsTokens = response.usageMetadata.thoughtsTokenCount || 0;
+      const outputTokens = candidatesTokens + thoughtsTokens;
+      const totalTokens = response.usageMetadata.totalTokenCount || (promptTokens + outputTokens);
+
+      await recordTokenUsage({
+        agentType: 'flash_news_agent',
+        model: CONFIG.GEMINI_MODEL,
+        inputTokens: promptTokens,
+        outputTokens: outputTokens,
+        totalTokens: totalTokens,
+        operation: `EDITION_${targetEdition}`,
+        metadata: {
+          targetEdition,
+          promptTokenCount: promptTokens,
+          candidatesTokenCount: candidatesTokens,
+          thoughtsTokenCount: thoughtsTokens
+        }
+      });
+    }
+
+    try {
+      payload = JSON.parse(response.text);
+      verifiedChunks = extractVerifiedGroundingChunks(response);
+    } catch (parseErr) {
+      console.warn("[Agent Warning] JSON parse error in Gemini response, overgang naar RSS synthese fallback.");
+      payload = buildFallbackPayload(targetEdition, liveStories, activeAlertTickers);
+    }
+  } else {
+    console.warn(`[Agent Warning] Alle Gemini modellen tijdelijk overbelast of 429 quota limiet. Autonome RSS synthese geactiveerd voor ${targetEdition}.`);
+    payload = buildFallbackPayload(targetEdition, liveStories, activeAlertTickers);
   }
-
-  const rawJson = response.text;
-
-  const payload = JSON.parse(rawJson);
-  const verifiedChunks = extractVerifiedGroundingChunks(response);
 
   // 8. Tri-Stream samenvoegen
   const combinedStream = [

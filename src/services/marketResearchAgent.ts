@@ -466,6 +466,40 @@ async function executeResearchForEventInternal(
           rawMarkdown = response.text;
           modelUsed = model;
 
+          // Record exact Google usageMetadata to Postgres
+          if (response.usageMetadata && pool) {
+            const promptTokens = response.usageMetadata.promptTokenCount || 0;
+            const candidatesTokens = response.usageMetadata.candidatesTokenCount || 0;
+            const thoughtsTokens = (response.usageMetadata as any).thoughtsTokenCount || 0;
+            const outputTokens = candidatesTokens + thoughtsTokens;
+            const totalTokens = response.usageMetadata.totalTokenCount || (promptTokens + outputTokens);
+
+            try {
+              await pool.query(`
+                INSERT INTO gemini_token_usage (
+                  agent_type, model, input_tokens, output_tokens, total_tokens, operation, metadata
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              `, [
+                'antigravity_research_agent',
+                modelUsed || model,
+                promptTokens,
+                outputTokens,
+                totalTokens,
+                `RESEARCH_DOSSIER_${event.ticker}`,
+                JSON.stringify({
+                  ticker: event.ticker,
+                  eventId: event.id,
+                  promptTokenCount: promptTokens,
+                  candidatesTokenCount: candidatesTokens,
+                  thoughtsTokenCount: thoughtsTokens
+                })
+              ]);
+              console.log(`[Research Agent] ✅ Exact Google usageMetadata saved: ${promptTokens} in / ${outputTokens} out (${totalTokens} total) for ${event.ticker}`);
+            } catch (err: any) {
+              console.warn(`[Research Agent] Token usage log error:`, err.message);
+            }
+          }
+
           // Extract native Google Search grounding metadata if returned
           const candidate = response.candidates?.[0];
           const metadata = (candidate as any)?.groundingMetadata;

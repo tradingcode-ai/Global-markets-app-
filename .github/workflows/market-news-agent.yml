@@ -65,10 +65,26 @@ jobs:
           if [ -d "global-markets-agent" ]; then
             cd global-markets-agent
           fi
-          if [ "${{ github.event.inputs.edition }}" != "" ] && [ "${{ github.event.inputs.edition }}" != "AUTO" ]; then
-            echo "Running specified edition: ${{ github.event.inputs.edition }}"
-            node src/cli.js "${{ github.event.inputs.edition }}"
+          EDITION="${{ github.event.inputs.edition }}"
+          if [ -z "$EDITION" ] || [ "$EDITION" = "AUTO" ]; then
+            UTC_HOUR=$(date -u +%H)
+            # Map UTC cron trigger hours to editions:
+            # 13:30 UTC -> US_OPEN (15:30 Amsterdam)
+            # 19:30 UTC -> MARKET_CLOSE (21:30 Amsterdam)
+            # 00:30 UTC -> ASIA_OPEN (02:30 Amsterdam)
+            # 05:00 UTC -> MORNING_EUROPE (07:00 Amsterdam)
+            if [ "$UTC_HOUR" -ge 12 ] && [ "$UTC_HOUR" -lt 17 ]; then
+              EDITION="US_OPEN"
+            elif [ "$UTC_HOUR" -ge 17 ] && [ "$UTC_HOUR" -lt 23 ]; then
+              EDITION="MARKET_CLOSE"
+            elif [ "$UTC_HOUR" -ge 4 ] && [ "$UTC_HOUR" -lt 12 ]; then
+              EDITION="MORNING_EUROPE"
+            else
+              EDITION="ASIA_OPEN"
+            fi
+            echo "Cron triggered at $(date -u +%H:%M) UTC -> Mapped to edition: $EDITION"
+            node src/cli.js "$EDITION"
           else
-            echo "Running with automatic Amsterdam time-based edition detection"
-            node src/cli.js
+            echo "Running specified edition: $EDITION"
+            node src/cli.js "$EDITION"
           fi

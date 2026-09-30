@@ -27,6 +27,7 @@
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "topojson-client": "^3.1.0",
+    "tsx": "^4.23.15",
     "vite": "^6.2.3",
     "world-atlas": "^2.0.2"
   },
@@ -39,8 +40,6 @@
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "typescript": "~5.8.2"
   }
 }

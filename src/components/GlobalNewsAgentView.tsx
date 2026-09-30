@@ -11,6 +11,7 @@ import { fetchNewsTimeline, triggerAgentRun, fetchAgentStatus } from '../service
 import { detectNewsAsset, DetectedAsset } from '../utils/newsAssetDetector';
 import { StockLogo } from './StockLogo';
 import { ResearchDashboard } from './ResearchDashboard';
+import { LinkedAgentTickersModal } from './LinkedAgentTickersModal';
 import { 
   Globe, 
   RefreshCw, 
@@ -38,6 +39,7 @@ import {
 interface GlobalNewsAgentViewProps {
   subscribedTickers: string[];
   onToggleSubscription?: (ticker: string) => void;
+  onSetSubscriptions?: (tickers: string[]) => void;
   onSelectTicker?: (ticker: string) => void;
   onNavigateToAsset?: (target: { type: 'equity' | 'commodity' | 'bond'; symbol: string; targetId?: string }) => void;
 }
@@ -45,6 +47,7 @@ interface GlobalNewsAgentViewProps {
 export function GlobalNewsAgentView({
   subscribedTickers,
   onToggleSubscription,
+  onSetSubscriptions,
   onSelectTicker,
   onNavigateToAsset
 }: GlobalNewsAgentViewProps) {
@@ -54,6 +57,7 @@ export function GlobalNewsAgentView({
   const [isTriggering, setIsTriggering] = useState<boolean>(false);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [status, setStatus] = useState<NewsAgentStatus | null>(null);
+  const [isTickersModalOpen, setIsTickersModalOpen] = useState<boolean>(false);
   // Sub-navigation: News vs Deep Market Research
   const [subTab, setSubTab] = useState<'news' | 'research'>('news');
 
@@ -347,14 +351,25 @@ export function GlobalNewsAgentView({
             ))}
           </div>
 
-          {/* Connected Tickers Counter */}
-          <div className="flex items-center gap-2 text-xs text-slate-500 shrink-0">
-            <Bell className="w-3.5 h-3.5 text-blue-600" />
-            <span>Gekoppelde app-alerts:</span>
-            <strong className="text-slate-900 font-mono">
-              {subscribedTickers.length > 0 ? subscribedTickers.join(', ') : 'Standaard watchlist'}
-            </strong>
-          </div>
+          {/* Gekoppelde Tickers Agent Button */}
+          <button
+            type="button"
+            onClick={() => setIsTickersModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/90 hover:bg-blue-100/90 text-blue-900 border border-blue-200/90 rounded-xl transition cursor-pointer text-xs group shrink-0 shadow-2xs"
+            title="Klik om gekoppelde aandelen voor de News Agent te beheren en selecteren"
+          >
+            <div className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+              <Bell className="w-3 h-3" />
+            </div>
+            <span className="font-semibold text-slate-800">Gekoppelde tickers-agent:</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white border border-blue-200 text-blue-700 font-bold font-mono text-[11px]">
+              {subscribedTickers.length} actief
+            </span>
+            <span className="text-slate-600 font-mono text-[11px] hidden sm:inline">
+              ({subscribedTickers.slice(0, 4).join(', ')}{subscribedTickers.length > 4 ? ` +${subscribedTickers.length - 4}` : ''})
+            </span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600 ml-0.5 group-hover:text-blue-800 transition-colors" />
+          </button>
         </div>
 
         {/* Tri-Stream Selector (Macro, Earnings, Companies) */}
@@ -733,6 +748,15 @@ export function GlobalNewsAgentView({
       )}
         </>
       )}
+
+      {/* Linked Agent Tickers Selection Modal */}
+      <LinkedAgentTickersModal
+        isOpen={isTickersModalOpen}
+        onClose={() => setIsTickersModalOpen(false)}
+        subscribedTickers={subscribedTickers}
+        onToggleSubscription={onToggleSubscription || (() => {})}
+        onSetSubscriptions={onSetSubscriptions}
+      />
     </div>
   );
 }

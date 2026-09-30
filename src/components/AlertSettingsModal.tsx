@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AlertPreferences } from '../types';
 import { 
   X, 
@@ -8,9 +8,12 @@ import {
   Radio, 
   Check, 
   Sliders,
-  Activity
+  Activity,
+  Search,
+  Filter
 } from 'lucide-react';
-import { TECH_COMPANIES } from '../data/earningsData';
+import { ALL_APP_STOCKS } from '../data/allAppStocks';
+import { StockLogo } from './StockLogo';
 import MomentumIcon from './MomentumIcon';
 import { SystemStatusPanel } from './SystemStatusPanel';
 
@@ -30,6 +33,8 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
   onClose
 }) => {
   const [activeTab, setActiveTab] = useState<'alerts' | 'system'>('alerts');
+  const [tickerSearch, setTickerSearch] = useState('');
+  const [tickerCategory, setTickerCategory] = useState<string>('ALL');
 
   const toggleTicker = (ticker: string) => {
     let nextList = [...preferences.subscribedTickers];
@@ -47,7 +52,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
   const selectAllTickers = () => {
     onUpdatePreferences({
       ...preferences,
-      subscribedTickers: Object.keys(TECH_COMPANIES)
+      subscribedTickers: ALL_APP_STOCKS.map(s => s.ticker)
     });
   };
 
@@ -58,11 +63,30 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     });
   };
 
+  const filteredStocks = useMemo(() => {
+    const q = tickerSearch.trim().toLowerCase();
+    return ALL_APP_STOCKS.filter(stock => {
+      if (tickerCategory === 'SUBSCRIBED' && !preferences.subscribedTickers.includes(stock.ticker)) {
+        return false;
+      }
+      if (tickerCategory !== 'ALL' && tickerCategory !== 'SUBSCRIBED' && stock.category !== tickerCategory) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        stock.ticker.toLowerCase().includes(q) ||
+        stock.name.toLowerCase().includes(q) ||
+        stock.categoryLabel.toLowerCase().includes(q) ||
+        stock.exchange.toLowerCase().includes(q)
+      );
+    });
+  }, [tickerSearch, tickerCategory, preferences.subscribedTickers]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
       <div 
         id="alert-settings-modal"
-        className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+        className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
       >
         {/* Soft Header */}
         <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
@@ -259,19 +283,25 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* 5. Ticker Subscriptions */}
+              {/* 5. Ticker Subscriptions for Push Engine */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-900 text-xs">
-                    Gevolgde Tickers ({preferences.subscribedTickers.length})
-                  </h4>
-                  <div className="space-x-2 text-[11px]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <Bell className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Push Engine — Gevolgde Aandelen ({preferences.subscribedTickers.length})</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Kies voor welke individuele aandelen je browser push-alerts wilt ontvangen (beats/misses, 52W records, &gt;5% moves). Staat los van de News Agent.
+                    </p>
+                  </div>
+                  <div className="space-x-2 text-[11px] shrink-0">
                     <button
                       type="button"
                       onClick={selectAllTickers}
                       className="text-blue-600 hover:underline cursor-pointer font-semibold"
                     >
-                      Alles Selecteren
+                      Alles ({ALL_APP_STOCKS.length})
                     </button>
                     <span className="text-slate-300">•</span>
                     <button
@@ -284,25 +314,92 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {Object.keys(TECH_COMPANIES).map((ticker) => {
-                    const isSelected = preferences.subscribedTickers.includes(ticker);
-                    return (
+                {/* Search & Category Filter */}
+                <div className="space-y-2 pt-1">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={tickerSearch}
+                      onChange={(e) => setTickerSearch(e.target.value)}
+                      placeholder="Zoek in alle aandelen (bijv. ASML, Apple, Nvidia, Palantir, TSMC)..."
+                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                    />
+                    {tickerSearch && (
                       <button
-                        key={ticker}
                         type="button"
-                        onClick={() => toggleTicker(ticker)}
-                        className={`p-2 rounded-lg border text-center transition cursor-pointer font-mono-code text-xs font-bold flex items-center justify-center gap-1.5 ${
-                          isSelected 
-                            ? 'bg-blue-50 border-blue-400 text-blue-900 shadow-2xs' 
-                            : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800'
+                        onClick={() => setTickerSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px]">
+                    {[
+                      { id: 'ALL', label: `Alles (${ALL_APP_STOCKS.length})` },
+                      { id: 'SUBSCRIBED', label: `Actief (${preferences.subscribedTickers.length})` },
+                      { id: 'mega_cap', label: 'Mega-Cap' },
+                      { id: 'semiconductors', label: 'Chips' },
+                      { id: 'software', label: 'Software' },
+                      { id: 'europe', label: 'Europa' },
+                      { id: 'financials', label: 'Financials' },
+                      { id: 'aerospace', label: 'Defense' }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setTickerCategory(tab.id)}
+                        className={`px-2 py-0.5 rounded-md font-medium transition cursor-pointer shrink-0 ${
+                          tickerCategory === tab.id
+                            ? 'bg-blue-600 text-white font-bold'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        {isSelected && <Check className="w-3 h-3 text-blue-600" />}
-                        <span>{ticker}</span>
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stock Badges Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {filteredStocks.map((stock) => {
+                    const isSelected = preferences.subscribedTickers.includes(stock.ticker);
+                    return (
+                      <button
+                        key={stock.ticker}
+                        type="button"
+                        onClick={() => toggleTicker(stock.ticker)}
+                        className={`p-1.5 rounded-lg border text-left transition cursor-pointer flex items-center justify-between gap-1.5 ${
+                          isSelected 
+                            ? 'bg-blue-50 border-blue-400 text-blue-900 shadow-2xs ring-1 ring-blue-400/20' 
+                            : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="w-5 h-5 rounded-md bg-white border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0">
+                            <StockLogo ticker={stock.ticker} className="w-full h-full object-contain" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-mono-code font-bold text-[11px] block leading-tight">
+                              {stock.ticker}
+                            </span>
+                            <span className="text-[9px] text-slate-400 block truncate leading-tight">
+                              {stock.name}
+                            </span>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
                       </button>
                     );
                   })}
+                  {filteredStocks.length === 0 && (
+                    <div className="col-span-full py-4 text-center text-slate-400 text-xs">
+                      Geen aandelen gevonden voor &ldquo;{tickerSearch}&rdquo;
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -313,8 +410,8 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
         <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
           {activeTab === 'alerts' ? (
             <>
-              <span className="text-[11px] text-slate-500">
-                {preferences.subscribedTickers.length} van {Object.keys(TECH_COMPANIES).length} tickers geselecteerd
+              <span className="text-[11px] text-slate-500 font-medium">
+                {preferences.subscribedTickers.length} van {ALL_APP_STOCKS.length} tickers geselecteerd voor push-meldingen
               </span>
               <button
                 onClick={onClose}

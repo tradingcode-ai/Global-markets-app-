@@ -7,7 +7,11 @@ const STORAGE_KEY_FIRED_ALERTS = 'veritas_institutional_fired_alerts_v2';
 export const DEFAULT_PREFERENCES: AlertPreferences = {
   browserNotificationsEnabled: false,
   soundEnabled: true,
-  subscribedTickers: ['NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'META', 'TSM', 'AVGO', 'ORCL', 'AMD', 'CRM', 'NFLX'],
+  subscribedTickers: [
+    'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'META', 'TSM', 'AVGO', 
+    'ORCL', 'AMD', 'CRM', 'NFLX', 'ASML', 'ARM', 'QCOM', 'INTC', 
+    'MU', 'PLTR', 'NOW', 'PANW', 'CRWD', 'SAP'
+  ],
   alertOnEarningsBeat: true,
   alertOnEarningsMiss: true,
   alertOnSec8K: true,
@@ -220,9 +224,15 @@ export function getStoredPreferences(): AlertPreferences {
     const raw = localStorage.getItem(STORAGE_KEY_PREFS);
     if (raw) {
       const parsed = JSON.parse(raw);
+      let subTickers = parsed.subscribedTickers;
+      if (!Array.isArray(subTickers)) {
+        subTickers = DEFAULT_PREFERENCES.subscribedTickers;
+      }
+
       return {
         ...DEFAULT_PREFERENCES,
         ...parsed,
+        subscribedTickers: subTickers,
         // Map legacy keys to new taxonomy if missing
         alertOnEarningsBeat: parsed.alertOnEarningsBeat ?? parsed.alertOnRelease ?? true,
         alertOnEarningsMiss: parsed.alertOnEarningsMiss ?? parsed.alertOnRelease ?? true,
