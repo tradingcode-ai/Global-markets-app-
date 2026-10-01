@@ -4,12 +4,14 @@ import {
   ResearchEvent,
   ResearchReport,
   ResearchSource,
-  ResearchConfidence
+  ResearchConfidence,
+  VisualBrief
 } from '../types/marketResearch';
 import {
   saveResearchReport,
   updateResearchEvent
 } from './marketResearchStore';
+import { runVisualDesignerAgent } from './visualDesignerAgent';
 
 // System prompt directly from agents/05_EVENT_AND_SYSTEM_PROMPT.md
 export const DEEP_MARKET_RESEARCH_SYSTEM_PROMPT = `You are the Deep Market Research Agent for the Global Markets application.
@@ -354,6 +356,87 @@ function parseMarkdownReport(rawMarkdown: string): ParsedReportSections {
   };
 }
 
+/**
+ * Converts the completed textual report into a constrained hand-off for the
+ * visual specialist. It describes the research question, not financial data.
+ */
+export function deriveVisualBrief(report: ResearchReport): VisualBrief {
+  const ticker = (report.ticker || '').toUpperCase();
+  const assetClass = (report.assetClass || report.asset_class || '').toLowerCase();
+
+  if (ticker === 'ASML' || assetClass.includes('semi')) {
+    return {
+      primaryTheme: 'SEMICONDUCTOR_GEOGRAPHIC_EXPOSURE',
+      suggestedChartTitle: 'Semiconductor equipment exposure by destination',
+      dataSearchQuery: `${ticker} latest revenue by geography official investor relations disclosure`,
+      unit: '% of total revenue',
+      chartType: 'BREAKDOWN',
+      editorialScene: 'SEMICONDUCTOR_CLEANROOM',
+      transmissionSummary: [
+        'Documented policy, demand, or export-control catalyst',
+        'Exposure transmits through customer geography and order visibility',
+        'Earnings and valuation expectations are repriced',
+        'Semiconductor equipment peers react to the revised risk signal'
+      ]
+    };
+  }
+
+  if (
+    ticker.includes('CL') ||
+    ticker.includes('BZ') ||
+    ticker.includes('BRENT') ||
+    assetClass.includes('energy') ||
+    assetClass.includes('commodit')
+  ) {
+    return {
+      primaryTheme: 'CRUDE_OIL_SUPPLY_DEMAND',
+      suggestedChartTitle: 'Verified crude supply, demand, or inventory driver',
+      dataSearchQuery: `${ticker} latest official crude imports inventories or production series`,
+      unit: 'reported units',
+      chartType: 'BAR',
+      editorialScene: 'ENERGY_TERMINAL',
+      transmissionSummary: [
+        'Documented supply, demand, logistics, or geopolitical catalyst',
+        'Physical availability and prompt pricing transmit through the curve',
+        'Downstream margins and transport costs are reassessed',
+        'Energy-sensitive sectors absorb the revised risk premium'
+      ]
+    };
+  }
+
+  if (assetClass.includes('rate') || assetClass.includes('bond') || ticker.includes('TNX')) {
+    return {
+      primaryTheme: 'SOVEREIGN_YIELD_CURVE_DYNAMICS',
+      suggestedChartTitle: 'Verified sovereign yield-curve observations',
+      dataSearchQuery: 'latest official US Treasury yield curve 2Y 5Y 10Y 30Y',
+      unit: 'basis points or percent as reported',
+      chartType: 'YIELD_CURVE',
+      editorialScene: 'CENTRAL_BANK',
+      transmissionSummary: [
+        'Economic or policy data changes the rate-path debate',
+        'Sovereign yields reprice across the maturity curve',
+        'Discount rates transmit into duration-sensitive assets',
+        'Capital rotates across growth, defensives, and fixed income'
+      ]
+    };
+  }
+
+  return {
+    primaryTheme: 'EQUITY_VOLATILITY_AND_EARNINGS',
+    suggestedChartTitle: `${ticker} verified underlying operating or peer driver`,
+    dataSearchQuery: `${ticker} official investor relations latest operating metric or peer disclosure`,
+    unit: 'reported units',
+    chartType: 'LINE',
+    editorialScene: 'WALL_STREET',
+    transmissionSummary: [
+      `The documented ${report.changePercent ?? report.change_percent ?? 'unknown'}% move triggers institutional reassessment`,
+      'Operating, supply-chain, or peer evidence transmits into expectations',
+      'Earnings multiples and risk premia are recalibrated',
+      'Sector components respond to the revised information set'
+    ]
+  };
+}
+
 // Concurrency mutex lock: ensures only 1 Deep Market Research Agent runs at any given moment
 let agentExecutionLock: Promise<any> = Promise.resolve();
 
@@ -616,6 +699,7 @@ async function executeResearchForEventInternal(
     ticker: event.ticker,
     assetClass: event.assetClass,
     changePercent: event.changePercent,
+    marketCapUsdBillions: event.marketCapUsdBillions ?? event.market_cap_usd_billions,
     period: event.period,
     triggerTimestamp: event.triggeredAt,
     executiveSummary: parsed.executiveSummary,
@@ -631,6 +715,18 @@ async function executeResearchForEventInternal(
     status: reportStatus,
     createdAt: new Date().toISOString()
   };
+
+  // Visual enrichment is deliberately non-fatal: textual research remains
+  // available even when the macro search is offline or returns no evidence.
+  try {
+    const visualBrief = deriveVisualBrief(report);
+    const visualPayload = await runVisualDesignerAgent(report, visualBrief);
+    report.visualPayload = visualPayload;
+    report.visual_payload = visualPayload;
+    console.log(`[Research Agent] Visual enrichment attached for ${event.ticker}.`);
+  } catch (visualError: any) {
+    console.warn(`[Research Agent] Visual enrichment failed non-fatally for ${event.ticker}:`, visualError?.message || visualError);
+  }
 
   // 4. Persist Report & Update Event
   await saveResearchReport(report, pool);

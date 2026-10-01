@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { ResearchReport, ResearchSource } from '../types/marketResearch';
 import { StockLogo } from './StockLogo';
+import { ReportMacroChart } from './ReportMacroChart';
 import { 
   X, 
   ExternalLink, 
@@ -134,6 +135,15 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
   const confidence = report.confidence || 'MEDIUM';
   const confidenceExplanation = report.confidenceExplanation || report.confidence_explanation || '';
   const sources = report.sources || [];
+  const visualPayload = report.visualPayload || report.visual_payload;
+  const hero = visualPayload?.hero;
+  const heroImageUrl = hero?.imageUrl || hero?.image_url;
+  const heroCredit = hero?.photographerCredit || hero?.photographer_credit;
+  const heroLocation = hero?.locationLabel || hero?.location_label;
+  const macroChart = visualPayload?.macroChart || visualPayload?.macro_chart;
+  const marketCapImpact = visualPayload?.marketCapImpactUsdBillions ?? visualPayload?.market_cap_impact_usd_billions;
+  const transmissionSteps = visualPayload?.transmissionSteps || visualPayload?.transmission_steps || [];
+  const rigorLabel = confidence === 'HIGH' ? 'HIGH' : confidence === 'LOW' ? 'LIMITED' : 'MEDIUM';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
@@ -142,7 +152,12 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
         className="bg-white border border-slate-300 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto"
       >
         {/* Institutional Document Header */}
-        <div className="bg-gradient-to-r from-[#002d62] via-[#051c2c] to-[#0a2540] text-white p-5 sm:p-6 border-b border-slate-800 shrink-0">
+        <div
+          className="relative shrink-0 overflow-hidden border-b border-slate-800 bg-[#051c2c] text-white"
+          style={heroImageUrl ? { backgroundImage: `url(${heroImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+        >
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/85 to-slate-900/65" />
+          <div className="relative z-10 p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3.5">
               <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0 p-1.5 backdrop-blur-xs">
@@ -221,6 +236,14 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
               </button>
             </div>
           </div>
+          {hero && (
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] font-mono text-slate-300/90">
+              <span>{heroLocation || 'Editorial research image'}</span>
+              <span className="text-slate-500">•</span>
+              <span>{heroCredit || 'Source attribution retained in payload'}</span>
+            </div>
+          )}
+          </div>
         </div>
 
         {/* Scrollable Report Body */}
@@ -235,6 +258,32 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
             <p className="text-sm text-slate-800 leading-relaxed font-sans font-medium">
               {executiveSummary}
             </p>
+          </div>
+
+          {/* Institutional KPI strip */}
+          <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-3">
+            <div className="bg-[#f8fafc] p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-slate-500">Movement</div>
+              <div className={`mt-1 text-xl font-mono font-bold tabular-nums ${isNegative ? 'text-rose-700' : 'text-emerald-700'}`}>
+                {changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}% <span className="text-xs font-normal text-slate-500">{period}</span>
+              </div>
+            </div>
+            <div className="bg-[#f8fafc] p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-slate-500">Market-cap impact</div>
+              <div className="mt-1 text-xl font-mono font-bold tabular-nums text-[#001f3f]">
+                {typeof marketCapImpact === 'number' && Number.isFinite(marketCapImpact)
+                  ? `${marketCapImpact >= 0 ? '+' : ''}$${marketCapImpact.toFixed(1)}B`
+                  : 'Unavailable'}
+              </div>
+              <div className="mt-0.5 text-[10px] text-slate-500">
+                {typeof marketCapImpact === 'number' && Number.isFinite(marketCapImpact) ? 'From verified market-cap input' : 'Verified market-cap input not supplied'}
+              </div>
+            </div>
+            <div className="bg-[#f8fafc] p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-slate-500">Rigor rating</div>
+              <div className="mt-1 text-xl font-mono font-bold text-[#001f3f]">{rigorLabel}</div>
+              <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">{confidenceExplanation || 'Evidence assessment retained in the confidence section.'}</div>
+            </div>
           </div>
 
           {/* 1. Immediate Catalyst: Facts vs Claims vs Inference */}
@@ -315,6 +364,40 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Verified macro driver is intentionally placed between catalyst and impact. */}
+          <ReportMacroChart payload={macroChart} />
+
+          {/* Causal transmission flow */}
+          <section className="space-y-3" aria-label="Causal transmission flow">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <h2 className="flex items-center gap-2 font-serif text-base font-bold text-slate-900">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-xs font-mono font-bold text-amber-800">→</span>
+                <span>Causal Transmission</span>
+              </h2>
+              <span className="text-[11px] font-mono text-slate-500">Catalyst → Financial impact → Sector</span>
+            </div>
+            {transmissionSteps.length > 0 ? (
+              <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
+                {transmissionSteps.map((node, index) => (
+                  <React.Fragment key={`${node.step}-${node.label}`}>
+                    <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#001f3f]">
+                        {String(node.type).replace('_', ' ')} · {node.step}
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-700">{node.label}</p>
+                      {node.detail && <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{node.detail}</p>}
+                    </div>
+                    {index < transmissionSteps.length - 1 && <ArrowRight className="hidden shrink-0 self-center text-amber-600 md:block" size={16} aria-hidden="true" />}
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+                Causal transmission steps unavailable for this legacy report.
+              </div>
+            )}
+          </section>
 
           {/* 2. Direct Market / Sector Impact */}
           <div className="space-y-2">

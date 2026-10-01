@@ -40,6 +40,76 @@ export interface CatalystBreakdown {
   summary?: string;
 }
 
+// Institutional visual and macro-data enrichment. The snake_case aliases are
+// retained for reports written by older API/database serializers.
+export type MacroChartType = 'BAR' | 'LINE' | 'BREAKDOWN' | 'YIELD_CURVE';
+
+export interface MacroChartDatapoint {
+  label: string;
+  value: number;
+  benchmark?: number;
+  highlight?: boolean;
+  benchmark_value?: number;
+  is_highlighted?: boolean;
+}
+
+export interface MacroChartPayload {
+  chartType: MacroChartType;
+  chart_type?: MacroChartType;
+  title: string;
+  subtitle?: string;
+  unit: string;
+  source: string;
+  sourceUrl?: string;
+  source_url?: string;
+  data: MacroChartDatapoint[];
+  data_points?: MacroChartDatapoint[];
+}
+
+export interface TransmissionNode {
+  step: number;
+  label: string;
+  type: 'CATALYST' | 'TRANSMISSION' | 'FINANCIAL_IMPACT' | 'SECTOR_EFFECT';
+  detail?: string;
+  step_number?: number;
+}
+
+export interface EditorialHeroPayload {
+  imageUrl: string;
+  photographerCredit: string;
+  locationLabel: string;
+  source?: string;
+  license?: string;
+  sourceUrl?: string;
+  alt?: string;
+  image_url?: string;
+  photographer_credit?: string;
+  location_label?: string;
+  source_url?: string;
+}
+
+export interface VisualEnrichmentPayload {
+  hero: EditorialHeroPayload;
+  marketCapImpactUsdBillions?: number;
+  market_cap_impact_usd_billions?: number;
+  macroChart?: MacroChartPayload;
+  macro_chart?: MacroChartPayload;
+  transmissionSteps?: TransmissionNode[];
+  transmission_steps?: TransmissionNode[];
+  enrichedAt: string;
+  enriched_at?: string;
+}
+
+export interface VisualBrief {
+  primaryTheme: string;
+  suggestedChartTitle: string;
+  dataSearchQuery: string;
+  unit: string;
+  chartType: MacroChartType;
+  editorialScene: 'WALL_STREET' | 'SEMICONDUCTOR_CLEANROOM' | 'ENERGY_TERMINAL' | 'AEROSPACE_HANGAR' | 'CENTRAL_BANK';
+  transmissionSummary: string[];
+}
+
 export interface ResearchReport {
   id: string;
   eventId?: string;
@@ -52,6 +122,9 @@ export interface ResearchReport {
   asset_class?: string;
   changePercent?: number;
   change_percent?: number;
+  /** Only populated when supplied by a verified upstream market-data record. */
+  marketCapUsdBillions?: number;
+  market_cap_usd_billions?: number;
   period?: string;
   movement_period?: string;
   triggerTimestamp?: string;
@@ -76,6 +149,8 @@ export interface ResearchReport {
   rawMarkdown?: string;
   raw_markdown?: string;
   status: ResearchStatus;
+  visualPayload?: VisualEnrichmentPayload;
+  visual_payload?: VisualEnrichmentPayload;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;
@@ -90,6 +165,9 @@ export interface ResearchEvent {
   asset_class?: string;
   changePercent?: number;
   change_percent?: number;
+  /** Optional verified market-cap input; never inferred from ticker identity. */
+  marketCapUsdBillions?: number;
+  market_cap_usd_billions?: number;
   currentPrice?: number;
   current_price?: number;
   previousClose?: number;

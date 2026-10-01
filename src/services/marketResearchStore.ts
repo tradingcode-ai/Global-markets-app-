@@ -3,7 +3,8 @@ import {
   ResearchEvent,
   ResearchReport,
   ResearchConfig,
-  ResearchDashboardData
+  ResearchDashboardData,
+  VisualEnrichmentPayload
 } from '../types/marketResearch';
 import { getDefaultResearchConfig } from './marketResearchConfig';
 
@@ -161,6 +162,20 @@ let inMemoryStore: InMemoryResearchStore = {
 
 let tablesInitialized = false;
 
+function parseVisualPayload(value: unknown): VisualEnrichmentPayload | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'object') return value as VisualEnrichmentPayload;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? parsed as VisualEnrichmentPayload : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> {
   if (!pool || tablesInitialized) return;
 
@@ -205,6 +220,7 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
           confidence VARCHAR(16) NOT NULL,
           confidence_explanation TEXT,
           sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+          visual_payload JSONB DEFAULT NULL,
           raw_markdown TEXT,
           status VARCHAR(32) NOT NULL,
           created_at TIMESTAMPTZ DEFAULT NOW()
@@ -215,6 +231,13 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
           config JSONB NOT NULL,
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `);
+
+      // Existing deployments may have created the reports table before the
+      // visual layer existed. Keep this migration safe to run repeatedly.
+      await client.query(`
+        ALTER TABLE market_research_reports
+        ADD COLUMN IF NOT EXISTS visual_payload JSONB DEFAULT NULL;
       `);
 
       tablesInitialized = true;
@@ -242,6 +265,8 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
             confidence: r.confidence,
             confidenceExplanation: r.confidence_explanation || undefined,
             sources: typeof r.sources === 'string' ? JSON.parse(r.sources) : (r.sources || []),
+            visualPayload: parseVisualPayload(r.visual_payload || r.visualPayload),
+            visual_payload: parseVisualPayload(r.visual_payload || r.visualPayload),
             rawMarkdown: r.raw_markdown || undefined,
             status: r.status,
             createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
@@ -607,8 +632,9 @@ export async function saveResearchReport(report: ResearchReport, pool: pg.Pool |
           id, event_id, asset_name, ticker, asset_class, change_percent, period,
           trigger_timestamp, executive_summary, immediate_catalyst, direct_market_impact,
           broader_context, what_market_is_reacting_to, what_to_watch_next,
-          confidence, confidence_explanation, sources, raw_markdown, status, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          confidence, confidence_explanation, sources, raw_markdown, status, created_at,
+          visual_payload
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         ON CONFLICT (id) DO UPDATE SET
           executive_summary = EXCLUDED.executive_summary,
           immediate_catalyst = EXCLUDED.immediate_catalyst,
@@ -620,7 +646,8 @@ export async function saveResearchReport(report: ResearchReport, pool: pg.Pool |
           confidence_explanation = EXCLUDED.confidence_explanation,
           sources = EXCLUDED.sources,
           raw_markdown = EXCLUDED.raw_markdown,
-          status = EXCLUDED.status`,
+          status = EXCLUDED.status,
+          visual_payload = EXCLUDED.visual_payload`,
         [
           report.id,
           report.eventId,
@@ -641,7 +668,8 @@ export async function saveResearchReport(report: ResearchReport, pool: pg.Pool |
           JSON.stringify(report.sources || []),
           report.rawMarkdown || null,
           report.status,
-          report.createdAt
+          report.createdAt,
+          JSON.stringify(report.visualPayload || report.visual_payload || null)
         ]
       );
     } catch (err: any) {
@@ -680,6 +708,8 @@ export async function getResearchReport(id: string, pool?: pg.Pool | null): Prom
           confidence: r.confidence,
           confidenceExplanation: r.confidence_explanation || undefined,
           sources: typeof r.sources === 'string' ? JSON.parse(r.sources) : (r.sources || []),
+          visualPayload: parseVisualPayload(r.visual_payload || r.visualPayload),
+          visual_payload: parseVisualPayload(r.visual_payload || r.visualPayload),
           rawMarkdown: r.raw_markdown || undefined,
           status: r.status,
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
@@ -733,6 +763,8 @@ export async function getResearchReports(
           confidence: r.confidence,
           confidenceExplanation: r.confidence_explanation || undefined,
           sources: typeof r.sources === 'string' ? JSON.parse(r.sources) : (r.sources || []),
+          visualPayload: parseVisualPayload(r.visual_payload || r.visualPayload),
+          visual_payload: parseVisualPayload(r.visual_payload || r.visualPayload),
           rawMarkdown: r.raw_markdown || undefined,
           status: r.status,
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
