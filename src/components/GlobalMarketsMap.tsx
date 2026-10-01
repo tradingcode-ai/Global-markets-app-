@@ -1738,8 +1738,8 @@ export const GlobalMarketsMap: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. World Clock Bar (London, New York ET AM/PM, Shanghai, Amsterdam in neutral gray) */}
-      <div className="bg-[#090e1a] px-4 py-2 border-b border-slate-800/80 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar">
+      {/* 2. World Clock Bar (London, New York ET AM/PM, Shanghai in neutral gray) - Centered */}
+      <div className="bg-[#090e1a] px-4 py-2 border-b border-slate-800/80 flex items-center justify-center gap-3 overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-2 text-slate-400 shrink-0 text-xs font-semibold uppercase tracking-wider">
           <Clock className="w-3.5 h-3.5 text-slate-400" />
           <span>Wereldklok:</span>
@@ -1767,33 +1767,6 @@ export const GlobalMarketsMap: React.FC = () => {
             <span className="text-slate-400 font-sans font-medium text-[11px]">Shanghai:</span>
             <span className="text-slate-300 font-semibold tracking-tight">{worldClocks.shanghai}</span>
           </div>
-
-          {/* Amsterdam (CET) */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-800 shrink-0 font-mono-code text-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-            <span className="text-slate-400 font-sans font-medium text-[11px]">Amsterdam:</span>
-            <span className="text-slate-300 font-semibold tracking-tight">{worldClocks.amsterdam}</span>
-          </div>
-        </div>
-
-        {/* Desk Legend */}
-        <div className="hidden xl:flex items-center gap-3 text-[11px] text-slate-400 shrink-0 font-mono-code">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#10b981]"></span>
-            <span className="text-emerald-400 font-semibold">+ Open (Groen)</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#ef4444]"></span>
-            <span className="text-rose-400 font-semibold">- Open (Rood)</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#64748b] border border-emerald-400"></span>
-            <span className="text-slate-300">Pre-Mkt</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#64748b]"></span>
-            <span className="text-slate-400">Uit (Grijs)</span>
-          </span>
         </div>
       </div>
 
