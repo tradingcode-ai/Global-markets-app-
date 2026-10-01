@@ -559,6 +559,22 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
                     const isNegative = change < 0;
                     const reportId = evt.reportId || evt.report_id;
 
+                    // Check if event is from today's active session
+                    const evtDate = evt.triggeredAt ? new Date(evt.triggeredAt) : null;
+                    const today = new Date();
+                    const isTodaySession = evtDate
+                      ? evtDate.getUTCFullYear() === today.getUTCFullYear() &&
+                        evtDate.getUTCMonth() === today.getUTCMonth() &&
+                        evtDate.getUTCDate() === today.getUTCDate()
+                      : false;
+
+                    const formattedTime = evtDate
+                      ? evtDate.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) + ' CET'
+                      : 'Vandaag';
+                    const formattedDate = evtDate
+                      ? evtDate.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                      : '';
+
                     return (
                       <tr key={evt.id} className="hover:bg-slate-50/80 transition">
                         <td className="py-3.5 px-4 font-mono">
@@ -573,20 +589,51 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
                           {evt.assetClass || evt.asset_class}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold">
-                          <span className={isNegative ? 'text-rose-600' : 'text-emerald-600'}>
-                            {change > 0 ? `+${change}%` : `${change}%`}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className={`text-sm ${isNegative ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {change > 0 ? `+${change}%` : `${change}%`}
+                            </span>
+                            {isTodaySession ? (
+                              <span className="text-[10px] text-cyan-700 font-mono flex items-center gap-1 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                                Live sessie
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-mono font-normal">
+                                Eindstand sessie
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
                           {evt.catalystSummary || evt.trigger_reason || 'Drempelwaarde overschreden'}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">
-                          {evt.triggeredAt ? new Date(evt.triggeredAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) + ' CET' : 'Vandaag'}
+                        <td className="py-3.5 px-4 font-mono text-[11px]">
+                          <div className="flex flex-col">
+                            <span className="text-slate-700 font-medium">
+                              {isTodaySession ? `Vandaag, ${formattedTime}` : `${formattedDate}, ${formattedTime}`}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {isTodaySession ? 'Huidige sessie' : 'Afgesloten sessie'}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-50 text-[#002d62] border border-blue-200">
-                            {evt.status}
-                          </span>
+                          {isTodaySession && evt.status === 'ACTIVE' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              LIVE ACTIEF
+                            </span>
+                          ) : isTodaySession && evt.status === 'RESEARCHING' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-cyan-50 text-cyan-800 border border-cyan-200 inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                              ONDERZOEKEN...
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-100 text-slate-600 border border-slate-200">
+                              {evt.status === 'COOLED_DOWN' ? 'SESSIE AFGEROND' : evt.status}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           {reportId ? (

@@ -78,15 +78,17 @@ export async function runMarketResearchMonitor(
       triggeredCount++;
       console.log(`[Market Monitor] Trigger condition met for ${asset.symbol}: |${quote.changePercent.toFixed(2)}%| >= ${thresholdPct}%`);
 
-      // 3. Event Deduplication (Section 12 of specification)
+      // 3. Event Deduplication (Section 12 of specification: per session)
+      const todayDateStr = new Date().toISOString().slice(0, 10);
       const existingActiveEvent = await findActiveEventForTicker(
         asset.symbol,
         config.dedupWindowHours || 24,
-        pool
+        pool,
+        todayDateStr
       );
 
       if (existingActiveEvent) {
-        console.log(`[Market Monitor] Dedup: Active event already exists for ${asset.symbol} (Event ID: ${existingActiveEvent.id}, Status: ${existingActiveEvent.status}). Skipping duplicate creation.`);
+        console.log(`[Market Monitor] Dedup: Active event already exists for ${asset.symbol} in current trading session (Event ID: ${existingActiveEvent.id}, Status: ${existingActiveEvent.status}). Skipping duplicate creation.`);
         // Keep quote movement fresh on active event without spawning duplicate report
         await updateResearchEvent(
           existingActiveEvent.id,
@@ -104,7 +106,6 @@ export async function runMarketResearchMonitor(
       // 4. Create NEW qualifying ResearchEvent
       const eventId = `evt_${Date.now()}_${asset.symbol.toLowerCase()}`;
       const direction = quote.changePercent >= 0 ? 'UP' : 'DOWN';
-      const todayDateStr = new Date().toISOString().slice(0, 10);
       const fingerprint = `${asset.symbol}_${direction}_${todayDateStr}`;
 
       const previousClose = quote.previousClose ?? 
@@ -118,7 +119,7 @@ export async function runMarketResearchMonitor(
         changePercent: Number(quote.changePercent.toFixed(2)),
         currentPrice: Number(quote.price.toFixed(2)),
         previousClose: Number(previousClose.toFixed(2)),
-        period: '1D',
+        period: 'SESSION',
         triggeredAt: new Date().toISOString(),
         status: 'NEW',
         fingerprint,
@@ -219,7 +220,8 @@ export async function triggerManualResearch(
 
   // Check deduplication unless forced
   if (!options?.force) {
-    const existing = await findActiveEventForTicker(normalizedSymbol, config.dedupWindowHours || 24, pool);
+    const todayDateStr = new Date().toISOString().slice(0, 10);
+    const existing = await findActiveEventForTicker(normalizedSymbol, config.dedupWindowHours || 24, pool, todayDateStr);
     if (existing && existing.status !== 'CLOSED' && existing.status !== 'COOLED_DOWN') {
       return {
         success: false,
@@ -240,7 +242,7 @@ export async function triggerManualResearch(
     changePercent: Number(changePercent.toFixed(2)),
     currentPrice: Number(quote.price.toFixed(2)),
     previousClose: Number((quote.previousClose || quote.price).toFixed(2)),
-    period: '1D',
+    period: 'SESSION',
     triggeredAt: new Date().toISOString(),
     status: 'NEW',
     fingerprint,

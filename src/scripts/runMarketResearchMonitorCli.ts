@@ -57,9 +57,20 @@ const cliQuoteFetcher: QuoteFetcher = async (symbol: string) => {
     const meta = data?.chart?.result?.[0]?.meta;
     if (!meta || typeof meta.regularMarketPrice !== 'number') return null;
 
-    const price = meta.regularMarketPrice;
-    const previousClose = meta.chartPreviousClose || meta.previousClose || price;
-    const changePercent = previousClose !== 0 ? ((price - previousClose) / previousClose) * 100 : 0;
+    const price = Number(meta.regularMarketPrice.toFixed(2));
+    
+    // Explicitly use the session change percent from Yahoo Finance
+    const changePercent = typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)
+      ? Number(meta.regularMarketChangePercent.toFixed(2))
+      : (typeof meta.regularMarketPreviousClose === 'number' && meta.regularMarketPreviousClose !== 0
+          ? Number((((price - meta.regularMarketPreviousClose) / meta.regularMarketPreviousClose) * 100).toFixed(2))
+          : (typeof meta.previousClose === 'number' && meta.previousClose !== 0
+              ? Number((((price - meta.previousClose) / meta.previousClose) * 100).toFixed(2))
+              : 0));
+
+    const previousClose = meta.regularMarketPreviousClose || meta.previousClose || (
+      changePercent !== 0 && changePercent !== -100 ? Number((price / (1 + changePercent / 100)).toFixed(2)) : price
+    );
 
     return {
       symbol,

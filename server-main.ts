@@ -1269,7 +1269,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
 
         const price = Number(meta.regularMarketPrice.toFixed(priceDecimals));
 
-        let previousClose = meta.previousClose || meta.regularMarketPreviousClose;
+        let previousClose = meta.chartPreviousClose || meta.previousClose || meta.regularMarketPreviousClose;
         if (!previousClose && typeof meta.regularMarketChangePercent === 'number' && meta.regularMarketChangePercent !== -100) {
           previousClose = Number((price / (1 + meta.regularMarketChangePercent / 100)).toFixed(priceDecimals));
         }
@@ -1279,9 +1279,9 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
         }
 
         const change = Number((price - previousClose).toFixed(priceDecimals));
-        const changePercent = Number((meta.regularMarketChangePercent !== undefined 
+        const changePercent = Number((typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)
           ? meta.regularMarketChangePercent 
-          : (change / previousClose) * 100).toFixed(2));
+          : (change / (previousClose || price)) * 100).toFixed(2));
 
         // Live calculation of 200-Day Moving Average & 52-Week High/Low (cached to keep live 1d polling blazing fast)
         let twoHundredDayAverage: number;
@@ -5838,6 +5838,7 @@ app.get('/api/system/health', async (_req, res) => {
 
   let todayNewsCount = 0;
   let todayResearchCount = 0;
+  let todayResearchCalls = 0;
   let newsInputTokens = 0;
   let newsOutputTokens = 0;
   let repInputTokens = 0;
@@ -5894,14 +5895,20 @@ app.get('/api/system/health', async (_req, res) => {
         for (const row of usageRes.rows) {
           const inTok = parseInt(row.in_tok, 10);
           const outTok = parseInt(row.out_tok, 10);
+          const calls = parseInt(row.call_count || '0', 10);
           if (row.agent_type === 'flash_news_agent' && (inTok > 0 || outTok > 0)) {
             newsInputTokens = inTok;
             newsOutputTokens = outTok;
             newsIsExact = true;
-          } else if (row.agent_type === 'antigravity_research_agent' && (inTok > 0 || outTok > 0)) {
-            repInputTokens = inTok;
-            repOutputTokens = outTok;
-            repIsExact = true;
+          } else if (row.agent_type === 'antigravity_research_agent') {
+            if (inTok > 0 || outTok > 0) {
+              repInputTokens = inTok;
+              repOutputTokens = outTok;
+              repIsExact = true;
+            }
+            if (calls > 0) {
+              todayResearchCalls = calls;
+            }
           }
         }
       } catch {
@@ -5912,38 +5919,23 @@ app.get('/api/system/health', async (_req, res) => {
         const todayNewsRes = await pool.query(`
           SELECT 
             count(*) as count,
-            count(DISTINCT edition) as editions,
-            coalesce(sum(length(headline) + length(summary) + length(coalesce(fact, '')) + length(coalesce(market_reaction, '')) + length(coalesce(analyst_interpretation, ''))), 0) as out_chars
+            count(DISTINCT edition) as editions
           FROM market_news 
           WHERE published_at >= (NOW() AT TIME ZONE 'UTC')::date
              OR created_at >= (NOW() AT TIME ZONE 'UTC')::date
         `);
         todayNewsCount = parseInt(todayNewsRes.rows[0]?.count || '0', 10);
-        const editionCount = parseInt(todayNewsRes.rows[0]?.editions || '0', 10);
-        const outChars = parseInt(todayNewsRes.rows[0]?.out_chars || '0', 10);
-        if (!newsIsExact) {
-          newsOutputTokens = outChars > 0 ? Math.round(outChars / 3.6 + (todayNewsCount * 45)) : (todayNewsCount > 0 ? todayNewsCount * 260 : 0);
-          const effectiveEditions = Math.max(editionCount, Math.ceil(todayNewsCount / 3));
-          newsInputTokens = effectiveEditions > 0 ? effectiveEditions * 2650 : (todayNewsCount > 0 ? 2650 : 0);
-        }
       } catch {
         // fallback
       }
 
       try {
         const todayRepRes = await pool.query(`
-          SELECT 
-            count(*) as count,
-            coalesce(sum(length(coalesce(raw_markdown, '')) + length(coalesce(executive_summary, ''))), 0) as out_chars
+          SELECT count(*) as count
           FROM market_research_reports 
           WHERE created_at >= (NOW() AT TIME ZONE 'UTC')::date
         `);
         todayResearchCount = parseInt(todayRepRes.rows[0]?.count || '0', 10);
-        const outChars = parseInt(todayRepRes.rows[0]?.out_chars || '0', 10);
-        if (!repIsExact) {
-          repOutputTokens = outChars > 0 ? Math.round(outChars / 3.8) : (todayResearchCount > 0 ? todayResearchCount * 3800 : 0);
-          repInputTokens = todayResearchCount > 0 ? todayResearchCount * 3750 : 0;
-        }
       } catch {
         // fallback
       }
@@ -6066,9 +6058,10 @@ app.get('/api/system/health', async (_req, res) => {
   }
 
   // 2b. ANTIGRAVITY API QUOTA (Interactions API / Research Agent)
-  // Google AI Studio Free Tier / Pro Account quota for Antigravity & Reasoning is strictly 20 RPD and 2 RPM
-  const antigravityDailyLimit = 20;
-  const antigravityRequestsUsedToday = Math.min(antigravityDailyLimit, Math.max(1, (dbStatus as any).todayResearchCount || 2));
+  // Google AI Studio Free Tier quota for Antigravity & Reasoning is 100 RPD (Requests Per Day) and 2 RPM
+  const antigravityDailyLimit = 100;
+  const actualResearchUsed = Math.max(todayResearchCalls, todayResearchCount);
+  const antigravityRequestsUsedToday = Math.min(antigravityDailyLimit, actualResearchUsed);
   const antigravityRequestsRemaining = Math.max(0, antigravityDailyLimit - antigravityRequestsUsedToday);
   const antigravityPercentageRemaining = Math.max(0, Math.min(100, Math.round((antigravityRequestsRemaining / antigravityDailyLimit) * 100)));
 
@@ -6092,7 +6085,7 @@ app.get('/api/system/health', async (_req, res) => {
       resetsIn: resetsInStr,
       resetsAtUtc: resetsAtStr,
       status: antigravityPercentageRemaining > 20 ? 'OPTIMAAL' : (antigravityPercentageRemaining > 0 ? 'BEPERKT' : 'BEREIKT'),
-      tier: 'Google AI Studio Pro / Free Tier (2 RPM / 20 RPD)',
+      tier: 'Google AI Studio Free Tier (2 RPM / 100 RPD)',
       tokensUsed: {
         inputTokens: repInputTokens,
         outputTokens: repOutputTokens,

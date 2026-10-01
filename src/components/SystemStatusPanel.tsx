@@ -193,22 +193,22 @@ export const SystemStatusPanel: React.FC = () => {
     ? 'Google AI Studio Free Tier / Pro Account (15 RPM / 20 RPD)' 
     : 'Google AI Studio Developer Tier (15 RPM / 1.500 RPD)';
   const flashTokens = rawFlashQuota?.tokensUsed;
-  const flashInputTokens = flashTokens?.inputTokens ?? 7950;
-  const flashOutputTokens = flashTokens?.outputTokens ?? 2420;
-  const flashTotalTokens = flashTokens?.totalTokens ?? (flashInputTokens + flashOutputTokens);
+  const flashInputTokens = typeof flashTokens?.inputTokens === 'number' ? flashTokens.inputTokens : 0;
+  const flashOutputTokens = typeof flashTokens?.outputTokens === 'number' ? flashTokens.outputTokens : 0;
+  const flashTotalTokens = typeof flashTokens?.totalTokens === 'number' ? flashTokens.totalTokens : (flashInputTokens + flashOutputTokens);
 
   // 2. Calculations for ANTIGRAVITY API QUOTA (Research Agent)
   const rawAntigravityQuota = data?.services.antigravity?.quota;
-  const antigravityDailyLimit = rawAntigravityQuota?.dailyLimit ?? 20;
-  const antigravityUsedToday = rawAntigravityQuota?.requestsUsedToday ?? 2;
+  const antigravityDailyLimit = rawAntigravityQuota?.dailyLimit ?? 100;
+  const antigravityUsedToday = rawAntigravityQuota?.requestsUsedToday ?? 0;
   const antigravityRemaining = Math.max(0, antigravityDailyLimit - antigravityUsedToday);
   const antigravityPct = Math.max(0, Math.min(100, Math.round((antigravityRemaining / antigravityDailyLimit) * 100)));
   const antigravityBarColor = antigravityPct > 40 ? 'bg-emerald-500' : antigravityPct > 15 ? 'bg-amber-500' : 'bg-rose-500';
-  const antigravityTierLabel = rawAntigravityQuota?.tier || 'Google AI Studio Pro / Free Tier (2 RPM / 20 RPD)';
+  const antigravityTierLabel = rawAntigravityQuota?.tier || 'Google AI Studio Free Tier (2 RPM / 100 RPD)';
   const antigravityTokens = rawAntigravityQuota?.tokensUsed;
-  const antigravityInputTokens = antigravityTokens?.inputTokens ?? 37500;
-  const antigravityOutputTokens = antigravityTokens?.outputTokens ?? 39450;
-  const antigravityTotalTokens = antigravityTokens?.totalTokens ?? (antigravityInputTokens + antigravityOutputTokens);
+  const antigravityInputTokens = typeof antigravityTokens?.inputTokens === 'number' ? antigravityTokens.inputTokens : 0;
+  const antigravityOutputTokens = typeof antigravityTokens?.outputTokens === 'number' ? antigravityTokens.outputTokens : 0;
+  const antigravityTotalTokens = typeof antigravityTokens?.totalTokens === 'number' ? antigravityTokens.totalTokens : (antigravityInputTokens + antigravityOutputTokens);
 
   // 3. RSS Monitor Last Poll Formatter
   const rawLastPoll = data?.services.gemini.rssMonitor?.lastSuccessfulPoll;
@@ -365,14 +365,14 @@ export const SystemStatusPanel: React.FC = () => {
           </div>
 
           <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg p-2.5 flex flex-col justify-center">
-            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 block">Token used</span>
+            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 block">Tokens Vandaag (Hele Dag)</span>
             <span className="font-bold text-slate-200 text-xs flex items-center justify-center gap-1.5 my-0.5">
               <span>In: <strong className="text-purple-300">{formatTokens(flashInputTokens)}</strong></span>
               <span className="text-slate-500">•</span>
               <span>Uit: <strong className="text-emerald-300">{formatTokens(flashOutputTokens)}</strong></span>
             </span>
-            <span className="text-[9.5px] text-slate-400 block">
-              {formatTokens(flashTotalTokens)} tokens • usageMetadata
+            <span className="text-[9.5px] text-emerald-400 block font-medium">
+              {formatTokens(flashTotalTokens)} tokens • Exact Google Metadata
             </span>
           </div>
         </div>
@@ -457,20 +457,20 @@ export const SystemStatusPanel: React.FC = () => {
           </div>
 
           <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg p-2.5 flex flex-col justify-center">
-            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 block">Token used</span>
+            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 block">Tokens Vandaag (Hele Dag)</span>
             <span className="font-bold text-slate-200 text-xs flex items-center justify-center gap-1.5 my-0.5">
               <span>In: <strong className="text-indigo-300">{formatTokens(antigravityInputTokens)}</strong></span>
               <span className="text-slate-500">•</span>
               <span>Uit: <strong className="text-emerald-300">{formatTokens(antigravityOutputTokens)}</strong></span>
             </span>
-            <span className="text-[9.5px] text-slate-400 block">
-              {formatTokens(antigravityTotalTokens)} tokens • usageMetadata
+            <span className="text-[9.5px] text-emerald-400 block font-medium">
+              {formatTokens(antigravityTotalTokens)} tokens • Exact Google Metadata
             </span>
           </div>
         </div>
 
         <p className="text-[10px] text-slate-400 leading-relaxed bg-slate-800/50 p-2 rounded-lg border border-slate-700/40">
-          💡 <span className="font-semibold text-slate-300">Slimme Quota Bescherming:</span> Zodra de 20 dagelijkse Antigravity deep-research slots zijn bereikt, buffert het monitor-systeem triggers en worden prioriteitsanalyses opgeslagen tot de volgende dagelijkse reset.
+          💡 <span className="font-semibold text-slate-300">Slimme Quota Bescherming:</span> Zodra de 100 dagelijkse Antigravity deep-research slots zijn bereikt, buffert het monitor-systeem triggers en worden prioriteitsanalyses opgeslagen tot de volgende dagelijkse reset.
         </p>
       </div>
 

@@ -443,23 +443,28 @@ export async function getResearchEvents(
 
 export async function findActiveEventForTicker(
   ticker: string,
-  dedupWindowHours = 24,
-  pool?: pg.Pool | null
+  _dedupWindowHours = 24,
+  pool?: pg.Pool | null,
+  sessionDateStr?: string
 ): Promise<ResearchEvent | null> {
-  const windowMs = dedupWindowHours * 3600 * 1000;
-  const cutoffTime = new Date(Date.now() - windowMs).toISOString();
+  const todaySessionStr = sessionDateStr || new Date().toISOString().slice(0, 10);
 
   if (pool) {
     try {
       await ensureResearchTables(pool);
+      // Strictly session-scoped: only match events created or triggered in the CURRENT trading session
       const res = await pool.query(
         `SELECT * FROM market_research_events 
          WHERE ticker = $1 
            AND status IN ('NEW', 'RESEARCHING', 'ACTIVE') 
-           AND triggered_at >= $2 
+           AND (
+             fingerprint LIKE $2
+             OR (triggered_at AT TIME ZONE 'UTC')::date = $3::date
+             OR (created_at AT TIME ZONE 'UTC')::date = $3::date
+           )
          ORDER BY triggered_at DESC 
          LIMIT 1`,
-        [ticker.toUpperCase(), cutoffTime]
+        [ticker.toUpperCase(), `${ticker.toUpperCase()}_%_${todaySessionStr}`, todaySessionStr]
       );
       if (res.rows && res.rows.length > 0) {
         const r = res.rows[0];
@@ -486,26 +491,65 @@ export async function findActiveEventForTicker(
     }
   }
 
-  // Memory fallback
-  const cutoff = Date.now() - windowMs;
+  // Memory fallback - strictly scoped to todaySessionStr
   const found = inMemoryStore.events.find(
     e => e.ticker.toUpperCase() === ticker.toUpperCase() &&
          ['NEW', 'RESEARCHING', 'ACTIVE'].includes(e.status) &&
-         new Date(e.triggeredAt).getTime() >= cutoff
+         (e.fingerprint?.includes(todaySessionStr) || e.triggeredAt?.startsWith(todaySessionStr))
   );
   return found || null;
 }
 
 /**
+ * Automatically seal previous session events so their recorded price and change percent
+ * remain locked permanently as the final stand (eindstand) of that session.
+ */
+export async function closePreviousSessionEvents(pool?: pg.Pool | null): Promise<number> {
+  let closedCount = 0;
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+
+  // 1. In-memory store
+  for (const ev of inMemoryStore.events) {
+    const evDateStr = ev.triggeredAt ? ev.triggeredAt.slice(0, 10) : '';
+    if (evDateStr && evDateStr < todayDateStr && ['NEW', 'RESEARCHING', 'ACTIVE'].includes(ev.status)) {
+      ev.status = 'COOLED_DOWN';
+      closedCount++;
+    }
+  }
+
+  // 2. PostgreSQL
+  if (pool) {
+    try {
+      await ensureResearchTables(pool);
+      const res = await pool.query(`
+        UPDATE market_research_events 
+        SET status = 'COOLED_DOWN'
+        WHERE status IN ('NEW', 'RESEARCHING', 'ACTIVE') 
+          AND (triggered_at AT TIME ZONE 'UTC')::date < (NOW() AT TIME ZONE 'UTC')::date
+      `);
+      if (res.rowCount && res.rowCount > 0) {
+        closedCount += res.rowCount;
+      }
+    } catch (err: any) {
+      console.warn('[Market Research Store] closePreviousSessionEvents DB warning:', err.message);
+    }
+  }
+
+  return closedCount;
+}
+
+/**
  * Automatically clean up and expire events that were stuck in 'RESEARCHING' or 'NEW'
  * for longer than maxAgeMinutes (default 3 minutes).
- * Ensures that server restarts, rate limits, or network timeouts never leave
- * events permanently stuck in the "Onderzoeken..." state.
+ * Also permanently seals any older events from previous trading sessions.
  */
 export async function cleanupStaleResearchEvents(
   maxAgeMinutes = 3,
   pool?: pg.Pool | null
 ): Promise<number> {
+  // Seal previous session events first
+  await closePreviousSessionEvents(pool).catch(() => {});
+
   const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString();
   let cleanedCount = 0;
 
@@ -772,7 +816,7 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
 
   if (pool) {
     try {
-      // 2.5s timeout on PostgreSQL so slow intercontinental connections never block the app
+      // 5s timeout on PostgreSQL so slow intercontinental connections complete reliably
       const result = await Promise.race([
         Promise.all([
           getResearchEvents({ limit: 40 }, pool),
@@ -780,7 +824,7 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
           getResearchConfig(pool)
         ]),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Postgres query timeout')), 2500)
+          setTimeout(() => reject(new Error('Postgres query timeout')), 5000)
         )
       ]);
       events = result[0];
@@ -788,6 +832,14 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
       config = result[2];
 
       // Keep in-memory store synchronized with fresh DB data
+      for (const ev of events) {
+        const existingIdx = inMemoryStore.events.findIndex(e => e.id === ev.id);
+        if (existingIdx >= 0) {
+          inMemoryStore.events[existingIdx] = { ...ev };
+        } else {
+          inMemoryStore.events.unshift(ev);
+        }
+      }
       for (const rep of reports) {
         if (!inMemoryStore.reports.some(r => r.id === rep.id)) {
           inMemoryStore.reports.push(rep);

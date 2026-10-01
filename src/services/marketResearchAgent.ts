@@ -440,6 +440,58 @@ async function executeResearchForEventInternal(
           rawMarkdown = outputText;
           modelUsed = 'antigravity-preview-05-2026 (gemini-3.8-flash)';
           console.log(`[Research Agent] Successfully completed research via official Antigravity Agent interaction.`);
+
+          // Extract and record exact Google Interactions API token usage
+          const usage = (interactionResponse as any)?.usage || 
+            (interactionResponse as any)?.usage_metadata || 
+            (interactionResponse as any)?.usageMetadata;
+
+          let promptTokens = Number(usage?.total_input_tokens ?? usage?.prompt_tokens ?? usage?.promptTokenCount ?? 0);
+          let candidatesTokens = Number(usage?.total_output_tokens ?? usage?.completion_tokens ?? usage?.candidatesTokenCount ?? 0);
+          let thoughtsTokens = Number(usage?.total_thought_tokens ?? usage?.thoughts_tokens ?? usage?.thoughtsTokenCount ?? 0);
+          let outputTokens = candidatesTokens + thoughtsTokens;
+          let totalTokens = Number(usage?.total_tokens ?? usage?.totalTokenCount ?? (promptTokens + outputTokens));
+
+          // If usage was broken into steps, sum step tokens
+          if (totalTokens === 0 && Array.isArray((interactionResponse as any)?.steps)) {
+            for (const step of (interactionResponse as any).steps) {
+              const stepUsage = step.usage || step.usage_metadata;
+              if (stepUsage) {
+                promptTokens += Number(stepUsage.total_input_tokens || stepUsage.prompt_tokens || 0);
+                outputTokens += Number(stepUsage.total_output_tokens || stepUsage.completion_tokens || 0);
+                totalTokens += Number(stepUsage.total_tokens || 0);
+              }
+            }
+          }
+
+          if (pool && totalTokens > 0) {
+            try {
+              await pool.query(`
+                INSERT INTO gemini_token_usage (
+                  agent_type, model, input_tokens, output_tokens, total_tokens, operation, metadata
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              `, [
+                'antigravity_research_agent',
+                modelUsed,
+                promptTokens,
+                outputTokens,
+                totalTokens,
+                `RESEARCH_DOSSIER_${event.ticker}`,
+                JSON.stringify({
+                  ticker: event.ticker,
+                  eventId: event.id,
+                  promptTokenCount: promptTokens,
+                  candidatesTokenCount: candidatesTokens,
+                  thoughtsTokenCount: thoughtsTokens,
+                  totalTokenCount: totalTokens,
+                  source: 'INTERACTIONS_API'
+                })
+              ]);
+              console.log(`[Research Agent] ✅ Exact Google Interactions usageMetadata saved: ${promptTokens} in / ${outputTokens} out (${totalTokens} total) for ${event.ticker}`);
+            } catch (saveErr: any) {
+              console.warn(`[Research Agent] Failed to save Antigravity token usage to DB:`, saveErr.message);
+            }
+          }
         }
       }
     } catch (err: any) {
