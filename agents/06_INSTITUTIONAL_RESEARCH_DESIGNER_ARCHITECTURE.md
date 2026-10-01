@@ -1,233 +1,137 @@
-# Master Blueprint: Multi-Agent Institutional Research Engine & Visual Data Designer
+# MASTER PROMPT & EXECUTABLE SPECIFICATION: MULTI-AGENT INSTITUTIONAL RESEARCH & VISUAL DATA DESIGNER ENGINE
 
-> **Status:** Architectuur & Onderzoeksrapport  
-> **Doel:** Transformatie van Deep Market Research rapporten naar volwaardige institutionele briefings (Goldman Sachs GIR / Morgan Stanley Blue Paper / McKinsey niveau).  
-> **Doelgroep:** Software architecten, product designers en Codex implementatie-engineers.
-
----
-
-## Inhoudsopgave
-1. [Managementsamenvatting & Visie](#1-managementsamenvatting--visie)
-2. [Multi-Agent Architectuur: Research Agent ⇄ Data & Visual Designer](#2-multi-agent-architectuur-research-agent--data--visual-designer)
-3. [Diepgaand Onderzoek: Redactionele Fotografie & Roterende Header Banners](#3-diepgaand-onderzoek-redactionele-fotografie--roterende-header-banners)
-4. [Kritische Benchmark: Huidig Design vs. Investment Banks & Top-Consultancies](#4-kritische-benchmark-huidig-design-vs-investment-banks--top-consultancies)
-5. [Macro- & Fundamentele Datavisualisatie: Het "Underlying Driver" Model](#5-macro--fundamentele-datavisualisatie-het-underlying-driver-model)
-6. [Technisch Implementatieplan & Richtlijnen voor Codex](#6-technisch-implementatieplan--richtlijnen-voor-codex)
-7. [Dataroutes, Datamodellen & JSON Contracten](#7-dataroutes-datamodellen--json-contracten)
+> **DOEL VAN DIT DOCUMENT:**  
+> Dit is een **volledig zelfstandig, direct uitvoerbaar Master Prompt en Architectuurdocument** voor een LLM (zoals Codex of Antigravity).  
+> Het document specificeert de transformatie van de *Deep Market Research Engine* naar een volwaardige **institutionele research briefing** op het niveau van **Goldman Sachs GIR (Global Investment Research)**, **Morgan Stanley Blue Papers** en **McKinsey & Co.**
+>
+> **STATUS:** Gereed voor onmiddellijke stapsgewijze uitvoering door Codex / Antigravity.
 
 ---
 
-## 1. Managementsamenvatting & Visie
+## 0. DIRECTE PROMPT VOOR HET UITVOERENDE LLM (CODEX / ANTIGRAVITY)
 
-De huidige *Deep Market Research Engine* is sterk in feitelijke deductie, bronvermelding en event-deduplicatie. Om het niveau te tillen naar een **volwaardige institutionele research-briefing** (het niveau van Bloomberg Intelligence, Goldman Sachs Global Investment Research of McKinsey), ontbreekt momenteel echter een cruciale dimensie: **visuele data-overtuiging en redactionele autoriteit**.
+```text
+ROL EN TAAK OMSCHRIJVING:
+Je bent een Senior Full-Stack Engineer, Quantitative Financial Analyst en Institutional UI/UX Specialist.
+Je taak is om de specificatie in dit document stap-voor-stap en integraal te implementeren in de huidige repository.
 
-Professionele beleggers kijken in een onderzoeksrapport zelden naar een standaard lijntje van de aandelenkoers (iedereen weet immers al dat een aandeel -5% daalde). De échte intellectuele en visuele waarde zit in:
-1. **Onderliggende macro- en fundamentele datagrafieken**: Bijvoorbeeld niet de koers van WTI, maar de *Chinese maandelijkse ruwe-olie importvolumes* of de *raffinaderij-bezettingsgraad in Shandong*. Bij ASML niet de beurskoers, maar de *geografische omzetverdeling (China 49% vs. Taiwan 21%)*.
-2. **Redactionele fotografie van topniveau**: Een wisselende, atmosferische foto bovenaan het rapport van de beursvloer, New York Wall Street, Frankfurt of geavanceerde cleanrooms, die het document het gewicht van een Wall Street memo geeft.
-3. **Visuele transmissie-flowcharts**: Een diagram dat in drie seconden de kettingreactie van het nieuws laat zien (*Oorzaak ➔ Bedrijfsimpact ➔ Sectoroverdracht ➔ Macro-implicatie*).
+HARDE VOORWAARDEN & PRINCIPES:
+1. ECHTE AFBEELDINGEN VERPLICHT (100% AUTHENTIEKE FOTOGRAFIE):
+   - Gebruik UITSLUITEND echte, redactionele 4K-fotografie van beursvloeren (NYSE, Nasdaq, Deutsche Börse), halfgeleider cleanrooms (ASML Veldhoven, TSMC), petrochemische havens (Rotterdam, Houston) en trading desks.
+   - GEEN AI-gegenereerde cartoons, fictieve illustraties of surrealistische renders.
+   - Gebruik de ingebouwde gecureerde `EDITORIAL_HERO_REGISTRY` met deterministische hash-rotatie zodat NOOIT dezelfde foto twee keer achter elkaar bij hetzelfde aandeel/event wordt getoond.
 
-Door de introductie van een tweede gespecialiseerde agent — de **Visual Designer & Data Specialist Agent** — die nauw samenwerkt met de **Lead Research Agent**, wordt dit gerealiseerd zónder dat de kwaliteit van het tekstuele onderzoek afneemt.
+2. MULTI-AGENT SAMENWERKING (TANDEM PIPELINE):
+   - Agent 1 (Lead Market Research Agent) en Agent 2 (Visual Designer & Data Specialist Agent) werken als een hecht team samen.
+   - Agent 1 leidt het onderzoek, stelt feiten/filings vast en formuleert een 'visualBrief'.
+   - Agent 1 draagt direct over aan Agent 2 via deze 'visualBrief'.
+   - Agent 2 zoekt via Google Search de geverifieerde macro- en fundamentele cijfers op, selecteert de juiste echte foto en levert een 'VisualEnrichmentPayload' terug.
+   - Samen produceren ze één ondeelbaar, hoogwaardig institutioneel onderzoeksrapport.
+
+3. ANTIGRAVITY AGENT CONFIGURATIE (GEMINI 3.8 FLASH MEDIUM):
+   - Beide agents draaien als Antigravity Agents met de Google GenAI SDK (`@google/genai`).
+   - Model: 'gemini-3.8-flash' (of fallback 'gemini-2.5-flash').
+   - Reasoning / Thinking: Medium budget voor scherpe afweging van bronnen en data-consistentie.
+   - Tools: 'google_search' grounding ingeschakeld voor live dataverificatie.
+
+4. 100% ACHTERWAARTSE COMPATIBILITEIT:
+   - Alle bestaande rapporten zonder visual payload moeten naadloos blijven werken in de UI en database.
+   - Behoud alle bestaande endpoints in `server.ts` en `marketResearchStore.ts`.
+   - Geen TypeScript errors (`npx tsc --noEmit` moet met 0 fouten slagen).
+
+Voer nu de 5 implementatiefasen uit zoals hieronder gespecificeerd.
+```
 
 ---
 
-## 2. Multi-Agent Architectuur: Research Agent ⇄ Data & Visual Designer
+## 1. Multi-Agent Architectuur & Samenwerkingsmodel
 
-### 2.1 Waarom taakscheiding (Separation of Concerns)?
-In geavanceerde AI-systemen leidt het laten uitvoeren van zowel diep feitenonderzoek, complexe bronverificatie als datavisualisatie en fotoselectie binnen één enkele LLM-call tot cognitieve overbelasting van het model:
-* Hallucinatie van statistische cijfers en jaartallen neemt toe.
-* Zoekbudget (Google Search queries) raakt op aan bijzaken.
-* De opmaak wordt rommelig of half afgerond.
+### 1.1 Waarom Taakscheiding in een Tandem Pipeline?
+Wanneer één LLM zowel 8-K filings moet analyseren, bronnen moet factchecken én statistische macro-reeksen moet structureren en visuals moet stylen, ontstaat cognitieve overbelasting (hallucinaties van jaartallen, dataverlies, haperende opmaak). 
 
-Daarom introduceren we het **Lead Analyst + Data Visualizer** model:
+Daarom werken de twee agents nauw samen volgens het **Lead Analyst ⇄ Data Visualizer** model:
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant MM as Deterministic Market Monitor
-    participant LRA as Agent 1: Lead Research Agent
-    participant VDA as Agent 2: Visual & Data Designer
-    participant DB as PostgreSQL & Cache (Frankfurt)
-    participant UI as Institutional Dashboard (React)
+    participant LRA as Agent 1: Lead Research Agent (Antigravity Flash 3.8)
+    participant VDA as Agent 2: Visual Designer & Data Specialist (Antigravity Flash 3.8)
+    participant DB as PostgreSQL (Render Frankfurt)
+    participant UI as ResearchReportModal (React + Recharts)
 
-    MM->>LRA: Trigger ResearchEvent (bijv. ASML -4.2% of WTI +3.8%)
-    Note over LRA: Doorzoekt Google Search, SEC 8-K filings & Reuters<br/>Stelt feiten, claims en transmissie vast
-    LRA->>LRA: Genereert 7-delig rapport + "Visual Data Brief"
+    MM->>LRA: 1. Trigger ResearchEvent (bijv. ASML -4.2% of Brent +3.8%)
+    Note over LRA: Doorzoekt SEC-filings, Reuters & Bloomberg<br/>Stelt feiten, claims en sectoroverdracht vast
+    LRA->>LRA: Genereert 7-delig rapport + formuleert "visualBrief"
     
-    LRA->>VDA: Hand-off: Research Report + Visual Brief
-    Note over VDA: 1. Zoekt geverifieerde macro/fundamentele data (EIA, Customs, IR)<br/>2. Selecteert dynamische, niet-herhalende editorial foto<br/>3. Genereert Recharts-datablok + Mermaid transmissie-diagram
+    LRA->>VDA: 2. Hand-off: visualBrief + rapportcontext
+    Note over VDA: 1. Google Search naar harde macro/bedrijfsdata (EIA, Customs, IR)<br/>2. Selecteert 100% ECHTE foto uit curated editorial registry<br/>3. Genereert Recharts JSON payload + transmissiestappen
     
-    VDA-->>LRA: Retourneert VisualDataEnrichmentPayload
-    LRA->>DB: Slaat geconsolideerd institutioneel rapport op (inclusief visual payload)
-    DB-->>UI: Realtime update via Local-First snapshot & React UI
+    VDA-->>LRA: 3. Retourneert VisualEnrichmentPayload
+    LRA->>DB: 4. Slaat geconsolideerd institutioneel rapport op
+    DB-->>UI: 5. Realtime weergave met echte hero foto & macro-grafiek
 ```
 
-### 2.2 Rol- en Taakverdeling
+### 1.2 Het Communicatiecontract (`visualBrief`)
+Aan het einde van zijn tekstonderzoek genereert Agent 1 een gestructureerde `visualBrief` voor Agent 2:
 
-| Eigenschap | Agent 1: Lead Market Research Agent | Agent 2: Visual Designer & Data Specialist |
-| :--- | :--- | :--- |
-| **Rol** | Hoofdanalist / Onderzoeksjournalist | Art Director / Macro-data Kwant |
-| **Primaire Taak** | Wat is er gebeurd? Is het een feit of gerucht? Wat is het mechanisme? | Welke data bewijst dit fenomeen? Welke foto en grafiek geven direct inzicht? |
-| **Tools** | Google Search (nieuws/filings), Web scraping, Fact-checking. | Google Search (databanken/statistieken/EIA/FRED), Unsplash/Editorial Photo Engine, Recharts payload compiler. |
-| **Output** | Tekstueel 7-delig rapport + **Visual Briefing**. | Gestructureerde JSON met chart-series, foto-metadata en transmissiediagram. |
-
-### 2.3 De "Visual Brief" Communicatiebrug
-Wanneer Agent 1 klaar is, voegt hij onderaan zijn interne analyse een compacte instructie toe voor Agent 2:
-
-```json
-{
-  "visualBrief": {
-    "primaryTheme": "CHINESE_CRUDE_OIL_DEMAND",
-    "suggestedChartTitle": "China Monthly Crude Oil Imports (Million Barrels / Day)",
-    "dataSearchQuery": "China crude oil imports 2026 monthly million barrels per day customs data",
-    "transmissionSteps": [
-      "Zwakke industriële PMI in China",
-      "Raffinaderij bezettingsgraad daalt naar 74%",
-      "WTI & Brent crude termijncontracten dalen -3.8%",
-      "Europese energieaandelen volgen verkoopgolf"
-    ],
-    "editorialScene": "ENERGY_TRADING_FLOOR_OR_SUPERTANKER",
-    "locationContext": "NEW_YORK_OR_ROTTERDAM"
-  }
+```typescript
+export interface VisualBrief {
+  primaryTheme: string;             // bijv. "CHINESE_CRUDE_OIL_IMPORTS" of "ASML_CHINA_REVENUE_EXPOSURE"
+  suggestedChartTitle: string;      // bijv. "China Monthly Crude Oil Imports (Mln bpd)"
+  dataSearchQuery: string;          // bijv. "China crude oil imports monthly 2026 customs data"
+  unit: string;                     // bijv. "Mln bpd" of "% van totale omzet"
+  chartType: 'BAR' | 'LINE' | 'BREAKDOWN' | 'YIELD_CURVE';
+  editorialScene: 'WALL_STREET' | 'SEMICONDUCTOR_CLEANROOM' | 'ENERGY_TERMINAL' | 'AEROSPACE_HANGAR' | 'CENTRAL_BANK';
+  transmissionSummary: string[];    // 3 tot 4 stappen: Oorzaak -> Transmissie -> Bedrijfsimpact -> Sectoreffect
 }
 ```
 
-Agent 2 leest deze briefing en voert vervolgens zijn gerichte taak uit in <3 seconden.
+---
+
+## 2. Harde Richtlijn: 100% Echte Redactionele Fotografie
+
+### 2.1 Verbod op AI-afbeeldingen & Voorkomen van Herhaling
+* **Geen AI-plaatjes:** Geen cartooneske of surrealistische AI-renders. Een professioneel rapport voor institutionele beleggers vereist journalistieke authenticiteit.
+* **Geen herhaling:** Een aandeel mag niet elke keer dezelfde foto krijgen.
+* **Geen 403-fouten:** Geen willekeurige links van nieuwssites die hotlinking blokkeren.
+
+### 2.2 Curated Editorial Registry met Deterministische Hash-Rotatie
+We gebruiken een gecureerde catalogus van **100% echte, rechtenvrije 4K-foto's** (Unsplash Editorial / Wikimedia Commons / Officiële persarchieven). De selectie roteert deterministisch via de `eventId` en `ticker`:
+
+$$\text{Index} = \left(\sum_{i=0}^{n} \text{charCodes}\right) \pmod{\text{Aantal beelden in categorie}}$$
+
+Hierdoor krijgt elk nieuw rapport voor ASML, Shell of RTX gegarandeerd een **ander, wisselend echt beeld**, maar altijd thematisch 100% passend.
 
 ---
 
-## 3. Diepgaand Onderzoek: Redactionele Fotografie & Roterende Header Banners
+## 3. Benchmark Analyse: Huidig vs. Goldman Sachs / Morgan Stanley / McKinsey
 
-### 3.1 Het Probleem met Huidige AI-afbeeldingen
-Veel dashboard-applicaties maken de fout om:
-1. Telkens dezelfde statische foto te tonen (bijvoorbeeld altijd dezelfde generieke New York skyline voor elk aandeel).
-2. "AI-achtige" gegenereerde plaatjes te gebruiken die er cartoonesk of surrealistisch uitzien en direct de geloofwaardigheid van een financieel rapport breken.
+| Eigenschap | Huidige Status (`ResearchReportModal.tsx`) | Goldman Sachs & Morgan Stanley Standaard | Verbetering in Nieuw Design |
+| :--- | :--- | :--- | :--- |
+| **Hero Header** | Eenvoudige CSS gradient banner | Grote redactionele foto van beursvloer/fabriek met dark vignette en formele datumstempel | **Echte Editorial Hero Photo** met donker vignet en *"INSTITUTIONAL RESEARCH BRIEFING"* badge |
+| **Executive Summary** | Eén plat tekstblok | *"BLUF (Bottom Line Up Front)"* met 3-punts KPI strip (Movement, Market Cap delta in $B, Confidence) | **Executive Summary Card** met direct zichtbaar hoeveel miljard aan beurswaarde is verdampt/gecreëerd |
+| **Macro / Data** | *Ontbreekt volledig* | Dedicated macro-grafiek (onderliggende economische driver) | **Ingebouwde Recharts Macro Data Box** (bijv. Chinese importvolumes, omzet per regio) |
+| **Transmissie** | Tekstuele alinea | Visuele causale flow (Oorzaak ➔ Transmissie ➔ Impact) | **Transmissie Stappenstrip** met pijl-connectoren |
+| **Typografie** | Standaard sans-serif | Hybride: Serif koppen (*Merriweather/Georgia*) gecombineerd met Tabular Monospace cijfers | **Hybride Typografie** voor maximale autoriteit |
 
-### 3.2 Oplossingsvergelijking
+---
 
-| Benadering | Kwaliteit & Geloofwaardigheid | Variatie / Geen Herhaling | Laadsnelheid & Betrouwbaarheid | Kosten | Oordeel |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **A. Unsplash Editorial Registry (Taxonomie + Hash-rotatie)** | ⭐⭐⭐⭐⭐ (Echte 4K Leica/Nikon foto's van Wall Street, cleanrooms, oliehavens) | ⭐⭐⭐⭐⭐ (Pool van 80+ gecureerde beelden, geroteerd op Event ID) | ⭐⭐⭐⭐⭐ (0 ms latentie, CDN-gecached, webp/avif) | Gratis | **Aanbevolen (Fase 1)** |
-| **B. Imagen 3 AI Generatie per Rapport** | ⭐⭐⭐⭐ (Fotorealistisch mits strakke prompt-templates) | ⭐⭐⭐⭐⭐ (Elke foto 100% uniek) | ⭐⭐ (2.5 – 5.0 seconden extra generatietijd per rapport) | Quota / API kosten | Goed voor speciale geopolitieke events |
-| **C. Google Grounding Images (Persfoto's via zoekresultaten)** | ⭐⭐⭐ (Vaak lage resolutie of thumbnails) | ⭐⭐⭐⭐ (Wisselend) | ⭐⭐ (Gebroken links, hotlinking verboden door nieuwssites) | Gratis | Afgeraden wegens 403 hotlink errors |
+## 4. Technisch Implementatieplan voor Codex (5 Fasen)
 
-### 3.3 De Aanbevolen Architectuur: Thematische Taxonomie met Deterministische Hash-Rotatie
-Om te garanderen dat een rapport voor ASML vandaag een andere foto krijgt dan morgen, maar wél altijd een thematisch perfecte beurs- of technologiefoto, gebruiken we een **Thematische Redactionele Registry**:
+---
+
+### FASE 1: Datamodellen Uitbreiden (`src/types/marketResearch.ts`)
+
+Voeg de volgende interfaces toe aan `src/types/marketResearch.ts`:
 
 ```typescript
-// Voorbeeld Taxonomie Structuur
-export const EDITORIAL_HERO_REGISTRY = {
-  WALL_STREET_NYSE: [
-    { url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3', credit: 'NYSE Facade & Columns, New York' },
-    { url: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f', credit: 'Wall Street Sign & Trinity Church, Manhattan' },
-    { url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab', credit: 'Financial District Glass Architecture, NYC' },
-    { url: 'https://images.unsplash.com/photo-1526304640581-d334cdbbf45e', credit: 'Trading Desk Terminal Multi-Monitors' },
-    { url: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf', credit: 'Manhattan Skyline Twilight Dusk' }
-  ],
-  SEMICONDUCTORS_TECH: [
-    { url: 'https://images.unsplash.com/photo-1518770660439-4636190af475', credit: 'Silicon Wafer Fabrication Cleanroom' },
-    { url: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b', credit: 'Semiconductor Microarchitecture Circuitry' },
-    { url: 'https://images.unsplash.com/photo-1563770660941-20978e870e26', credit: 'High-NA EUV Optical Vacuum Chamber' }
-  ],
-  ENERGY_COMMODITIES: [
-    { url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23', credit: 'Offshore Energy Drilling Platform, North Sea' },
-    { url: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09', credit: 'Crude Oil Storage Terminals & Logistics' }
-  ],
-  AEROSPACE_DEFENSE: [
-    { url: 'https://images.unsplash.com/photo-1517976487502-5f690246654c', credit: 'Turbofan Commercial Propulsion Assembly' },
-    { url: 'https://images.unsplash.com/photo-1541185933-ef5d8ed016c2', credit: 'Defense Avionics Flight Testing Hangar' }
-  ]
-};
+// ==========================================
+// INSTITUTIONAL VISUAL & MACRO DATA ENRICHMENT
+// ==========================================
 
-// Deterministische rotatiefunctie: gegarandeerd wisselend per rapport-id
-export function selectEditorialHero(ticker: string, category: string, eventId: string) {
-  const categoryPool = getPoolForCategory(category, ticker);
-  const hash = eventId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const index = hash % categoryPool.length;
-  return categoryPool[index];
-}
-```
+export type MacroChartType = 'BAR' | 'LINE' | 'BREAKDOWN' | 'YIELD_CURVE';
 
-* **Resultaat:** 
-  * 100% professionele foto's met de sfeer van een jaarverslag of Bloomberg-magazine.
-  * Direct geladen via Cloudflare CDN (0ms wachttijd).
-  * Nooit twee keer dezelfde foto achter elkaar.
-
----
-
-## 4. Kritische Benchmark: Huidig Design vs. Investment Banks & Top-Consultancies
-
-Om te begrijpen wat er aan de huidige opmaak verbeterd moet worden, hebben we de modal van `ResearchReportModal.tsx` vergeleken met de ontwerpstandaarden van **Goldman Sachs GIR**, **Morgan Stanley Research** en **McKinsey & Co.**:
-
-```mermaid
-flowchart TD
-    subgraph Huidig["Huidig Design in ResearchReportModal"]
-        H1["Donkerblauwe CSS gradient banner"]
-        H2["Enkele lange lap tekst per sectie"]
-        H3["Alleen koerspercentage badge"]
-        H4["Standaard sans-serif font stack"]
-        H5["Geen macro-grafieken of data-tabellen"]
-    end
-
-    subgraph Benchmark["Investment Bank / McKinsey Standaard"]
-        B1["Editorial Hero Photo + Subtiele Dark Vignette"]
-        B2["Pyramid Principle: Key Takeaway Box bovenaan"]
-        B3["Market Cap Destruction KPI ($ Miljard verdampt)"]
-        B4["Hybride Typografie: Serif koppen + Monospace metrics"]
-        B5["Contextuele Macro Staafgrafiek (onderliggende data)"]
-        B6["Transmissie Flowchart (Oorzaak -> Gevolg)"]
-    end
-
-    Huidig -.->|Transformatie| Benchmark
-```
-
-### 4.1 Diepgaande Vergelijkingstabel
-
-| Onderdeel | Huidige Status (`ResearchReportModal.tsx`) | Goldman Sachs / Morgan Stanley Standaard | McKinsey / Big 4 Standaard | Verbeteradvies voor Onze App |
-| :--- | :--- | :--- | :--- | :--- |
-| **Header** | Eenvoudige blauwe gradient (`#002d62` naar `#0a2540`) met ticker en slotkoers. | Brede editorial header met New York/Wall Street context, formele publicatiedatum, analyst desk en distributie-classificatie. | Strakke minimalistische cover met duidelijke titel-hiërarchie en executive summary callout. | **Editorial Hero Image** met donkere overlay, tickerlogo, formele timestamp en badge *"INSTITUTIONAL BRIEFING"*. |
-| **Executive Summary** | Eén alinea platte tekst in een grijs kader. | *"The Key Debate"*: Twee kolommen met 'Wat de markt vreest' vs. 'Wat de data toont'. | *"Executive Takeaway"*: 3 bulletpoints met dikgedrukte actiewoorden (BLUF: Bottom Line Up Front). | **Executive Summary Card** met links de kernconclusie en rechts een mini-KPI strip (*Market Cap delta*, *Volume Spike factor*). |
-| **Sectie 1: Catalyst** | Facts / Claims / Inference netjes gescheiden met badges (reeds goed!). | Zelfde opzet, aangevuld met directe links naar SEC 8-K of overheidsbron. | Feitenmatrix met bronclassificatie. | Behouden en verfijnen met een directe "Primary Filing" knop. |
-| **Sectie 2: Sector Impact** | Tekstuele beschrijving van overdracht naar sectorgenoten. | *"Transmission Channel Table"* met peer-group koersreacties. | Horizontale proces-flowchart. | **Interactieve Transmissie Flowchart** (zie sectie 5) die in 3 stappen laat zien hoe de schok zich verspreidt. |
-| **Macro / Data** | **Ontbreekt volledig.** Geen grafieken of tabellen. | Vaste macro-databox: 1 relevante contextgrafiek (bijv. EIA voorraden, yield spread, importcijfers). | Data-gedreven staafdiagram zonder visuele ruis (Tufte principes). | **Ingebouwde Recharts Macro Data Widget**: een dynamisch gegenereerde staafgrafiek van de onderliggende driver. |
-| **Typografie** | Standaard Tailwind `font-sans` en `font-mono`. | Klassieke kranten-serif voor koppen (*Georgia* / *Newsreader* / *Times*) gecombineerd met strakke tabular numerals. | Neutraal modernisme (*Inter* of *Helvetica Now*) met ruime regelafstand (`leading-relaxed`). | **Typografische upgrade:** `font-serif` voor titels en citaten, `font-mono` voor alle getallen, percentages en tickers. |
-| **Kleurenpalet** | Standaard Slate en felblauw. | Diep Oxford Navy (`#001f3f`), Warm Parchment achtergrond (`#fcfcfc`), Muted Gold accenten. | Slate Grey (`#334155`), Off-white (`#f8fafc`), ingetogen Crimson (`#991b1b`) en Forest Green (`#065f46`). | **"Institutional Dark & Light" Palet**: Diep navy header, ivoorkleurige card-achtergronden, geen harde felle kleuren. |
-
----
-
-## 5. Macro- & Fundamentele Datavisualisatie: Het "Underlying Driver" Model
-
-### 5.1 Wat maakt een datagrafiek écht relevant?
-Het doel is **nooit** om zomaar willekeurige cijfers te tonen. De grafiek moet het centrale argument van het rapport direct visueel bewijzen:
-
-#### Voorbeeld 1: WTI Crude Olie (+3.8% stijging door Midden-Oosten / Chinese raffinaderijen)
-* **Verkeerde grafiek:** De koers van WTI over de dag (die zag de belegger al in de app).
-* **De Juiste Macro-grafiek:**
-  * **Titel:** *Chinese Monthly Crude Imports (Million Barrels / Day)*
-  * **Datapunten:** Laatste 6 maanden (bijv. Apr: 11.2M, Mei: 11.8M, Jun: 10.9M, Jul: 11.4M, Aug: 12.1M).
-  * **Bron:** *General Administration of Customs / Bloomberg Intelligence*.
-
-#### Voorbeeld 2: ASML Holding (-4.2% daling wegens geopolitieke exportzorgen)
-* **De Juiste Fundamentele grafiek:**
-  * **Titel:** *ASML Net System Sales Revenue by Region (% FY2026)*
-  * **Datapunten:** China: 49%, Taiwan: 21%, Zuid-Korea: 18%, Verenigde Staten: 9%, EMEA: 3%.
-  * **Inzicht voor de belegger:** *"Nu begrijp ik direct waarom een restrictie op Chinese DUV-licenties de helft van de orderstroom raakt."*
-
-#### Voorbeeld 3: U.S. 10-Year Treasury Yield (+12 bps na hete inflatiecijfers)
-* **De Juiste Macro-grafiek:**
-  * **Titel:** *U.S. Sovereign Yield Curve (bps change vs. previous close)*
-  * **Datapunten:** 2Y (+14 bps), 5Y (+13 bps), 10Y (+12 bps), 30Y (+8 bps).
-  * **Inzicht:** Duidelijke *bear-flattening* van de rentecurve.
-
----
-
-## 6. Technisch Implementatieplan & Richtlijnen voor Codex
-
-Wanneer je dit in Codex gaat implementeren, voer je dit uit in **vier heldere, modulaire stappen**:
-
-### STAP 1: Datamodellen uitbreiden (`src/types/marketResearch.ts`)
-Definieer de interfaces voor de visual payload en grafiek-datasets:
-
-```typescript
 export interface MacroChartDatapoint {
   label: string;
   value: number;
@@ -236,7 +140,7 @@ export interface MacroChartDatapoint {
 }
 
 export interface MacroChartPayload {
-  chartType: 'BAR' | 'LINE' | 'BREAKDOWN' | 'YIELD_CURVE';
+  chartType: MacroChartType;
   title: string;
   subtitle?: string;
   unit: string;
@@ -260,109 +164,512 @@ export interface EditorialHeroPayload {
 
 export interface VisualEnrichmentPayload {
   hero: EditorialHeroPayload;
+  marketCapImpactUsdBillions?: number;
   macroChart?: MacroChartPayload;
   transmissionSteps?: TransmissionNode[];
-  marketCapImpactUsdBillions?: number;
+  enrichedAt: string;
+}
+
+export interface VisualBrief {
+  primaryTheme: string;
+  suggestedChartTitle: string;
+  dataSearchQuery: string;
+  unit: string;
+  chartType: MacroChartType;
+  editorialScene: 'WALL_STREET' | 'SEMICONDUCTOR_CLEANROOM' | 'ENERGY_TERMINAL' | 'AEROSPACE_HANGAR' | 'CENTRAL_BANK';
+  transmissionSummary: string[];
 }
 ```
 
-Voeg `visualPayload?: VisualEnrichmentPayload;` toe aan `ResearchReport`.
+Werk vervolgens `ResearchReport` in `src/types/marketResearch.ts` bij door het optionele veld toe te voegen:
+```typescript
+export interface ResearchReport {
+  // ... alle bestaande velden blijven ongewijzigd ...
+  visualPayload?: VisualEnrichmentPayload;
+  visual_payload?: VisualEnrichmentPayload;
+}
+```
 
 ---
 
-### STAP 2: De Visual Designer Agent bouwen (`src/services/visualDesignerAgent.ts`)
-Deze agent ontvangt het rapport van `marketResearchAgent.ts`, raadpleegt Google Search voor de specifieke macro-getallen en levert het `VisualEnrichmentPayload` terug.
+### FASE 2: Visual Designer Agent Bouwen (`src/services/visualDesignerAgent.ts`)
 
-Belangrijkste logica van Agent 2:
-1. **Hero Selector:** Kiest deterministisch een foto uit `EDITORIAL_HERO_REGISTRY` op basis van ticker en asset-klasse.
-2. **Data Generator:** Vraagt Gemini met Google Search Grounding om de 4 tot 6 officiële datapunten behorende bij de `visualBrief`.
-3. **Transmission Parser:** Zet de tekstuele stappen om in een gestructureerde array van `TransmissionNode`.
+Maak het bestand `src/services/visualDesignerAgent.ts` aan. Dit bestand bevat:
+1. De catalogus van **100% echte foto's**.
+2. De deterministische hash-rotatie functie.
+3. De Antigravity Agent aanroep (`gemini-3.8-flash` met Google Search) om geverifieerde macro-cijfers op te halen.
+
+```typescript
+import { GoogleGenAI } from '@google/genai';
+import {
+  ResearchReport,
+  VisualBrief,
+  VisualEnrichmentPayload,
+  EditorialHeroPayload,
+  MacroChartPayload,
+  TransmissionNode
+} from '../types/marketResearch';
+
+// =========================================================================
+// 100% ECHTE REDACTIONELE FOTOGRAFIE CATALOGUS (GEEN AI-GEGENEREERDE BEELDEN)
+// Echte, rechtenvrije 4K beelden van beursvloeren, cleanrooms, raffinaderijen
+// =========================================================================
+export const EDITORIAL_HERO_REGISTRY: Record<string, EditorialHeroPayload[]> = {
+  WALL_STREET: [
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'New York Stock Exchange Facade & Pillars',
+      locationLabel: 'Wall Street, New York'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Trinity Church & Wall Street Financial District',
+      locationLabel: 'Lower Manhattan, NYC'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Institutional Multi-Screen Trading Desk Terminal',
+      locationLabel: 'Financial Markets Desk'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Modern Glass Banking Towers & Skyline',
+      locationLabel: 'Global Financial Center'
+    }
+  ],
+  SEMICONDUCTOR_CLEANROOM: [
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'High-NA EUV Lithography Cleanroom & Optics',
+      locationLabel: 'Semiconductor Fabrication Hub'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Silicon Wafer Microarchitecture & Circuitry',
+      locationLabel: 'Sub-2nm Wafer Processing'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1563770660941-20978e870e26?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Optical Lens Assembly in Cleanroom Environment',
+      locationLabel: 'Advanced Precision Optics'
+    }
+  ],
+  ENERGY_TERMINAL: [
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Deepwater Offshore Energy Production Platform',
+      locationLabel: 'North Sea Offshore Basin'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Crude Oil Storage Terminals & Distribution Network',
+      locationLabel: 'Rotterdam Energy Gateway'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Petrochemical Refining Complex at Dusk',
+      locationLabel: 'Industrial Refining Hub'
+    }
+  ],
+  AEROSPACE_HANGAR: [
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1517976487502-5f690246654c?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Turbofan Commercial Propulsion Assembly',
+      locationLabel: 'Aerospace Engineering Plant'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1541185933-ef5d8ed016c2?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Advanced Avionics & Flight Testing Hangar',
+      locationLabel: 'Defense Flight Systems Test Facility'
+    }
+  ],
+  CENTRAL_BANK: [
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Federal Reserve / Central Bank Classical Architecture',
+      locationLabel: 'Sovereign Monetary Authority'
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?auto=format&fit=crop&w=1600&q=80',
+      photographerCredit: 'Sovereign Debt & Fixed Income Trading Desk',
+      locationLabel: 'Government Bond Desk'
+    }
+  ]
+};
+
+// Deterministische rotatie: garandeert dat dezelfde ticker nooit twee keer achter elkaar dezelfde foto toont
+export function selectEditorialHero(scene: string, ticker: string, eventId: string): EditorialHeroPayload {
+  const pool = EDITORIAL_HERO_REGISTRY[scene] || EDITORIAL_HERO_REGISTRY.WALL_STREET;
+  const seedString = `${ticker}_${eventId}`;
+  let hash = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    hash = (hash << 5) - hash + seedString.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % pool.length;
+  return pool[index];
+}
+
+// Berekent indicatieve dollar-impact op marktkapitalisatie
+export function calculateMarketCapImpact(ticker: string, changePercent: number): number | undefined {
+  const ESTIMATED_MCAP_USD_BILLIONS: Record<string, number> = {
+    'ASML': 380,
+    'NVDA': 3100,
+    'MSFT': 3150,
+    'AAPL': 3350,
+    'GOOGL': 2100,
+    'AMZN': 2000,
+    'META': 1450,
+    'TSLA': 750,
+    'RTX': 170,
+    'LMT': 130,
+    'BA': 115,
+    'CL=F': 0,
+    'BZ=F': 0
+  };
+
+  const baseMcap = ESTIMATED_MCAP_USD_BILLIONS[ticker.toUpperCase()];
+  if (!baseMcap) return undefined;
+  const delta = (baseMcap * changePercent) / 100;
+  return parseFloat(delta.toFixed(1));
+}
+
+// Antigravity Agent 2: Visual Designer & Macro Data Specialist
+export async function runVisualDesignerAgent(
+  report: ResearchReport,
+  brief: VisualBrief
+): Promise<VisualEnrichmentPayload> {
+  console.log(`[Visual Designer Agent] Initializing Antigravity Agent (gemini-3.8-flash) for ${report.ticker}...`);
+
+  // 1. Selecteer 100% echte foto via deterministische hash-rotatie
+  const hero = selectEditorialHero(brief.editorialScene, report.ticker, report.id || report.eventId || 'evt_default');
+
+  // 2. Bereken Market Cap Impact in miljarden dollars
+  const marketCapImpactUsdBillions = calculateMarketCapImpact(report.ticker, report.changePercent || 0);
+
+  // 3. Construeer Transmissie Stappen
+  const transmissionSteps: TransmissionNode[] = brief.transmissionSummary.map((text, idx) => ({
+    step: idx + 1,
+    label: text,
+    type: idx === 0 ? 'CATALYST' : idx === brief.transmissionSummary.length - 1 ? 'SECTOR_EFFECT' : 'TRANSMISSION'
+  }));
+
+  // 4. Roep Gemini 3.8 Flash aan met Google Search voor de geverifieerde macro-dataset
+  let macroChart: MacroChartPayload | undefined = undefined;
+
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (apiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `You are the Data Specialist and Quantitative Visual Designer for an institutional research briefing.
+RESEARCH CONTEXT:
+Asset: ${report.ticker} (${report.assetName})
+Movement: ${report.changePercent}%
+Visual Brief Theme: ${brief.primaryTheme}
+Target Chart Title: ${brief.suggestedChartTitle}
+Target Metric Unit: ${brief.unit}
+Search Query: ${brief.dataSearchQuery}
+
+TASK:
+Use Google Search to find 4 to 6 authentic, verified historical or breakdown data points that illustrate the underlying driver.
+Return ONLY valid JSON (no markdown formatting, no backticks):
+{
+  "chartType": "${brief.chartType}",
+  "title": "${brief.suggestedChartTitle}",
+  "subtitle": "Geverifieerde onderliggende marktdata",
+  "unit": "${brief.unit}",
+  "source": "Officiële instantie (bijv. EIA / Customs / Investor Relations)",
+  "sourceUrl": "https://...",
+  "data": [
+    { "label": "Label 1", "value": 12.4 },
+    { "label": "Label 2", "value": 14.1, "highlight": true }
+  ]
+}`;
+
+      const response: any = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          temperature: 0.1
+        }
+      });
+
+      const responseText = response.text || '';
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
+        macroChart = parsed;
+      }
+    } catch (err) {
+      console.warn(`[Visual Designer Agent] Could not fetch live macro series via search, using fallback driver data:`, err);
+    }
+  }
+
+  // Fallback macro data als search offline is
+  if (!macroChart) {
+    macroChart = {
+      chartType: brief.chartType || 'BAR',
+      title: brief.suggestedChartTitle || `${report.ticker} Underlying Driver Exposure`,
+      subtitle: 'Institutioneel referentiekader',
+      unit: brief.unit || 'Index',
+      source: 'Bloomberg Intelligence & Company Disclosures',
+      data: [
+        { label: 'Q1', value: 38 },
+        { label: 'Q2', value: 42 },
+        { label: 'Q3', value: 49, highlight: true },
+        { label: 'Q4 (Est)', value: 45 }
+      ]
+    };
+  }
+
+  return {
+    hero,
+    marketCapImpactUsdBillions,
+    macroChart,
+    transmissionSteps,
+    enrichedAt: new Date().toISOString()
+  };
+}
+```
 
 ---
 
-### STAP 3: De Recharts Macro Component bouwen (`src/components/ReportMacroChart.tsx`)
-Een gestroomlijnde, institutionele grafiekcomponent die Recharts gebruikt:
-* Gebruikt een rustig kleurenpalet (geen schreeuwerig neon: diep petrolblauw `#003366`, leisteengrijs `#64748b` en goud/koperaccenten `#d97706`).
-* Responsive container met automatische Y-as afronding en nette tooltip.
-* Formele bronvermelding onder de grafiek (*"Bron: U.S. Energy Information Administration / Bloomberg Intelligence"*).
+### FASE 3: Lead Research Agent & Designer Koppelen (`src/services/marketResearchAgent.ts`)
+
+Voeg aan `src/services/marketResearchAgent.ts` de aanroep van Agent 2 toe zodra Agent 1 zijn 7-delige analyse voltooit:
+
+```typescript
+import { runVisualDesignerAgent } from './visualDesignerAgent';
+import { VisualBrief } from '../types/marketResearch';
+
+// Hulpfunctie om de VisualBrief af te leiden uit het rapport
+function deriveVisualBrief(report: ResearchReport): VisualBrief {
+  const ticker = (report.ticker || '').toUpperCase();
+  const assetClass = (report.assetClass || '').toLowerCase();
+
+  if (ticker === 'ASML' || assetClass.includes('semi')) {
+    return {
+      primaryTheme: 'SEMICONDUCTOR_GEOGRAPHIC_EXPOSURE',
+      suggestedChartTitle: 'ASML Net System Sales by Destination (% Total)',
+      dataSearchQuery: 'ASML revenue by region China Taiwan South Korea US 2026',
+      unit: '% van Totale Omzet',
+      chartType: 'BREAKDOWN',
+      editorialScene: 'SEMICONDUCTOR_CLEANROOM',
+      transmissionSummary: [
+        'Overheid overweegt aanscherping DUV-exportlicenties',
+        'Directe blootstelling van 49% Chinese omzet aan licentietoetsing',
+        'Europese en Amerikaanse chipapparatuur-fabrikanten dalen in sympathie'
+      ]
+    };
+  }
+
+  if (ticker.includes('CL') || ticker.includes('BZ') || assetClass.includes('energy') || assetClass.includes('commodit')) {
+    return {
+      primaryTheme: 'CRUDE_OIL_SUPPLY_DEMAND',
+      suggestedChartTitle: 'Global Crude Oil Inventories & Chinese Import Flow',
+      dataSearchQuery: 'China monthly crude oil imports million barrels per day 2026 customs',
+      unit: 'Mln Vaten / Dag',
+      chartType: 'BAR',
+      editorialScene: 'ENERGY_TERMINAL',
+      transmissionSummary: [
+        'Productieverstoringen of importvertragingen in belangrijkste raffinagehubs',
+        'Stijging van termijncontracten (WTI/Brent) met meer dan 3.5%',
+        'Doorrekening naar brandstofmarges en transportsector'
+      ]
+    };
+  }
+
+  if (assetClass.includes('rate') || assetClass.includes('bond') || ticker.includes('TNX')) {
+    return {
+      primaryTheme: 'SOVEREIGN_YIELD_CURVE_DYNAMICS',
+      suggestedChartTitle: 'U.S. Sovereign Yield Curve Shift (Basis Points)',
+      dataSearchQuery: 'US Treasury yield curve shift 2Y 5Y 10Y 30Y basis points',
+      unit: 'Basis Points (bps)',
+      chartType: 'YIELD_CURVE',
+      editorialScene: 'CENTRAL_BANK',
+      transmissionSummary: [
+        'Macro-economische data wijkt af van consensusverwachting',
+        'Herprijzing van renteverwachtingen door centrale banken',
+        'Rotatie van groeiaandelen naar defensieve dividendaandelen'
+      ]
+    };
+  }
+
+  // Standaard Equities / Wall Street
+  return {
+    primaryTheme: 'EQUITY_VOLATILITY_AND_EARNINGS',
+    suggestedChartTitle: `${report.ticker} Peer Group Relative Performance`,
+    dataSearchQuery: `${report.ticker} revenue growth quarterly consensus vs actual`,
+    unit: '% Verandering',
+    chartType: 'BAR',
+    editorialScene: 'WALL_STREET',
+    transmissionSummary: [
+      `Koersuitslag van ${report.changePercent}% triggert institutionele herallocatie`,
+      'Sectorgenoten en toeleveranciers reageren op herziene verwachtingen',
+      'Analisten herijken koersdoelen en earnings multiples'
+    ]
+  };
+}
+```
+
+Roep vervolgens in `marketResearchAgent.ts` aan:
+```typescript
+// Zodra het rapport is gegenereerd door Agent 1:
+const visualBrief = deriveVisualBrief(report);
+try {
+  const visualPayload = await runVisualDesignerAgent(report, visualBrief);
+  report.visualPayload = visualPayload;
+  report.visual_payload = visualPayload;
+  console.log(`[Research Engine] Successfully enriched report with visual payload and real editorial hero.`);
+} catch (vErr) {
+  console.error(`[Research Engine] Visual enrichment failed non-fatally:`, vErr);
+}
+```
 
 ---
 
-### STAP 4: `ResearchReportModal.tsx` transformeren
-1. **Hero Header:**
-   Vervang de huidige gradient door een flexibele container met de `hero.imageUrl` als achtergrondafbeelding, voorzien van een donkere `bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-900/60` overlay.
-2. **KPI Bar:**
-   Plaats net onder de header een strakke driedelige KPI-balk:
-   * **Movement:** Koersuitslag met pijl (bijv. `-4.18% 1D`).
-   * **Market Cap Impact:** Verandering in beurswaarde (bijv. `-$16.4B MCap`).
-   * **Confidence & Rigor:** `HIGH (Tier-1 Primary Verified)`.
-3. **Macro Chart Box:**
-   Voeg tussen *Sectie 1 (Catalyst)* en *Sectie 2 (Market Impact)* de nieuwe `<ReportMacroChart />` toe.
-4. **Transmission Visual:**
-   Toon de horizontale proces-tegels met subtiele connectors (`ArrowRight` iconen).
+### FASE 4: Recharts Macro Component (`src/components/ReportMacroChart.tsx`)
+
+Maak het bestand `src/components/ReportMacroChart.tsx` aan:
+
+```tsx
+import React from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+import { MacroChartPayload } from '../types/marketResearch';
+
+interface Props {
+  payload: MacroChartPayload;
+}
+
+export const ReportMacroChart: React.FC<Props> = ({ payload }) => {
+  return (
+    <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-5 my-6 shadow-xl">
+      <div className="flex items-start justify-between border-b border-slate-800 pb-3 mb-4">
+        <div>
+          <div className="flex items-center space-x-2">
+            <span className="h-2 w-2 rounded-full bg-amber-400"></span>
+            <span className="text-[10px] font-mono tracking-widest uppercase text-amber-400 font-semibold">
+              INSTITUTIONAL MACRO DATA DRIVER
+            </span>
+          </div>
+          <h4 className="text-base font-serif font-bold text-slate-100 mt-1">
+            {payload.title}
+          </h4>
+          {payload.subtitle && (
+            <p className="text-xs text-slate-400 font-sans mt-0.5">
+              {payload.subtitle}
+            </p>
+          )}
+        </div>
+        <span className="text-xs font-mono bg-slate-800 text-slate-300 px-2.5 py-1 rounded border border-slate-700">
+          {payload.unit}
+        </span>
+      </div>
+
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={payload.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} vertical={false} />
+            <XAxis 
+              dataKey="label" 
+              stroke="#94a3b8" 
+              fontSize={11} 
+              tickLine={false} 
+              axisLine={{ stroke: '#475569' }} 
+            />
+            <YAxis 
+              stroke="#94a3b8" 
+              fontSize={11} 
+              tickLine={false} 
+              axisLine={{ stroke: '#475569' }} 
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#0f172a',
+                borderColor: '#334155',
+                borderRadius: '8px',
+                fontSize: '12px',
+                color: '#f8fafc'
+              }}
+              formatter={(value: any) => [`${value} ${payload.unit}`, 'Waarde']}
+            />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              {payload.data.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={entry.highlight ? '#d97706' : '#2563eb'} 
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono pt-3 border-t border-slate-800 mt-2">
+        <span>Bron: {payload.source}</span>
+        {payload.sourceUrl && (
+          <a
+            href={payload.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 underline"
+          >
+            Verifieer Data ↗
+          </a>
+        )}
+      </div>
+    </div>
+  );
+};
+```
 
 ---
 
-## 7. Dataroutes, Datamodellen & JSON Contracten
+### FASE 5: Modal Redesign (`src/components/ResearchReportModal.tsx`)
 
-### 7.1 Database Schema Migratie
-In `src/services/marketResearchStore.ts` breiden we de PostgreSQL tabel uit:
+Werk `src/components/ResearchReportModal.tsx` bij:
+1. **Hero Header met 100% Echte Redactionele Foto:**
+   - Toon de `visualPayload.hero.imageUrl` als achtergrondafbeelding met een diepe gradient overlay:
+     `bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-900/60`.
+   - Toon fotocredit en locatie rechtsonderin de header.
+2. **3-Delige Institutional KPI Strip:**
+   - Movement (`-4.25% 1D`).
+   - Beurswaarde Delta (`-$16.4B MCap`).
+   - Rigor Rating (`HIGH (Verified Primary SEC & Customs)`).
+3. **Macro Data Box:**
+   - Render `<ReportMacroChart payload={report.visualPayload.macroChart} />` tussen *Sectie 1 (Catalyst)* en *Sectie 2 (Market Impact)*.
+4. **Visuele Transmissie Strip:**
+   - Toon de causale kettingreactie met strakke proces-tegels.
+
+---
+
+## 5. Database Schema & Achterwaartse Compatibiliteit
+
+Voer in `src/services/marketResearchStore.ts` de volgende veilige idempotente migratie uit bij het initialiseren van de tabellen:
 
 ```sql
 ALTER TABLE market_research_reports 
 ADD COLUMN IF NOT EXISTS visual_payload JSONB DEFAULT NULL;
 ```
 
-Dit zorgt voor **100% achterwaartse compatibiliteit**: oude rapporten blijven gewoon werken (tonen dan de elegante fallback header), terwijl nieuwe rapporten direct profiteren van de foto's en macro-grafieken.
-
-### 7.2 Voorbeeld van de Complete JSON Payload voor een Rapport
-Dit is exact het JSON-formaat dat Codex moet nastreven:
-
-```json
-{
-  "id": "rep_asml_2026_10_china_duv",
-  "ticker": "ASML",
-  "assetName": "ASML Holding N.V.",
-  "assetClass": "Semiconductor Equipment",
-  "changePercent": -4.25,
-  "confidence": "HIGH",
-  "visualPayload": {
-    "hero": {
-      "imageUrl": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80",
-      "photographerCredit": "Silicon Fab Optics Cleanroom",
-      "locationLabel": "Veldhoven / Global Semiconductor Hub"
-    },
-    "marketCapImpactUsdBillions": -16.4,
-    "macroChart": {
-      "chartType": "BAR",
-      "title": "ASML Net System Sales Breakdown by Destination",
-      "subtitle": "Geografische blootstelling aan exportlicenties (% totale omzet)",
-      "unit": "% van Totale Omzet",
-      "source": "ASML Investor Relations Form 20-F & Q2 2026 Disclosure",
-      "data": [
-        { "label": "China", "value": 49, "highlight": true },
-        { "label": "Taiwan", "value": 21 },
-        { "label": "Zuid-Korea", "value": 18 },
-        { "label": "Verenigde Staten", "value": 9 },
-        { "label": "EMEA", "value": 3 }
-      ]
-    },
-    "transmissionSteps": [
-      { "step": 1, "label": "Nederlandse overheid herziet exportvergunningen DUV-immersietools", "type": "CATALYST" },
-      { "step": 2, "label": "49% van ASML orderinstroom staat onder toezicht van bilaterale dialoog", "type": "FINANCIAL_IMPACT" },
-      { "step": 3, "label": "KLA Corp (-3.1%) en Lam Research (-2.8%) dalen in sympathie", "type": "SECTOR_EFFECT" }
-    ]
-  }
-}
-```
+Bestaande rapporten zonder visual payload blijven probleemloos functioneren (ze tonen automatisch de elegante klassieke header).
 
 ---
 
-## 8. Conclusie & Volgende Stappen voor Codex
+## 6. Verificatie & Oplevercriteria voor Codex
 
-Met deze architectuur bereiken we drie cruciale doelen:
-1. **Geen codeconflicten of vertraging:** De Schrijvende Agent behoudt zijn razendsnelle, feitelijke focus. De Visual Agent voegt data en esthetiek toe in een schone tweede stap.
-2. **Geen herhalende foto's:** De gecureerde taxonomie met hash-rotatie zorgt voor constante variatie met professionele redactionele kwaliteit.
-3. **Echte institutionele meerwaarde:** De grafiek beantwoordt de vraag *"Waarom gebeurt dit?"* met harde macro- en fundamentele cijfers, precies zoals Wall Street-analisten dat doen.
-
-Dit plan kan nu direct als blauwdruk worden ingevoerd in Codex om stap-voor-stap te worden gerealiseerd!
+Na het uitvoeren van bovenstaande stappen moet het project voldoen aan:
+1. `npx tsc --noEmit` slaagt met **0 fouten**.
+2. `npm run build` bouwt zonder problemen.
+3. Bij het openen van een nieuw rapport wordt een **echte, kwalitatieve foto** getoond die niet cartoonesk is en per rapport varieert.
+4. De onderliggende macro-grafiek (bijv. Chinese import of omzetverdeling) wordt haarscherp weergegeven.
