@@ -11,35 +11,38 @@
 ## 0. DIRECTE PROMPT VOOR HET UITVOERENDE LLM (CODEX / ANTIGRAVITY)
 
 ```text
-ROL EN TAAK OMSCHRIJVING:
+ROL EN ARCHITECTUUR CONTEXT:
 Je bent een Senior Full-Stack Engineer, Quantitative Financial Analyst en Institutional UI/UX Specialist.
-Je taak is om de specificatie in dit document stap-voor-stap en integraal te implementeren in de huidige repository.
+In deze applicatie bestaan momenteel reeds:
+1. De 'Global News Agent' (in de News sectie: verzorgt geplande markt-edities en artikelen). BLIJFT 100% INTACT.
+2. De 'Deep Market Research Agent' (`src/services/marketResearchAgent.ts`: onderzoekt event-driven marktbewegingen).
 
-HARDE VOORWAARDEN & PRINCIPES:
-1. ECHTE AFBEELDINGEN VERPLICHT (100% AUTHENTIEKE FOTOGRAFIE):
-   - Gebruik UITSLUITEND echte, redactionele 4K-fotografie van beursvloeren (NYSE, Nasdaq, Deutsche Börse), halfgeleider cleanrooms (ASML Veldhoven, TSMC), petrochemische havens (Rotterdam, Houston) en trading desks.
-   - GEEN AI-gegenereerde cartoons, fictieve illustraties of surrealistische renders.
-   - Gebruik de ingebouwde gecureerde `EDITORIAL_HERO_REGISTRY` met deterministische hash-rotatie zodat NOOIT dezelfde foto twee keer achter elkaar bij hetzelfde aandeel/event wordt getoond.
+DE OPDRACHT: BOUW EEN EXTRA AGENT EN COMPLETE WORKFLOW FROM SCRATCH:
+Je opdracht is om een NIEUWE, EXTRA AGENT te bouwen: de 'Visual Designer & Macro Data Specialist Agent' (`src/services/visualDesignerAgent.ts`).
+Deze extra agent werkt direct NAAST de bestaande Research Agent in een tandem-samenwerking.
 
-2. MULTI-AGENT SAMENWERKING (TANDEM PIPELINE):
-   - Agent 1 (Lead Market Research Agent) en Agent 2 (Visual Designer & Data Specialist Agent) werken als een hecht team samen.
-   - Agent 1 leidt het onderzoek, stelt feiten/filings vast en formuleert een 'visualBrief'.
-   - Agent 1 draagt direct over aan Agent 2 via deze 'visualBrief'.
-   - Agent 2 zoekt via Google Search de geverifieerde macro- en fundamentele cijfers op, selecteert de juiste echte foto en levert een 'VisualEnrichmentPayload' terug.
-   - Samen produceren ze één ondeelbaar, hoogwaardig institutioneel onderzoeksrapport.
+HET HOGERE DOEL (ELEVATIE NAAR INSTITUTIONEEL NIVEAU):
+Het doel van deze extra agent is om de VOLLEDIG AUTOMATISCH GEGENEREERDE marktrapporten (die door de Market Monitor worden getriggerd bij plotselinge koersuitslagen) op een véél hoger professioneel niveau te tillen. 
+In plaats van een plat tekstverslag transformeert elk automatisch rapport in een volwaardige institutionele research briefing van Tier-1 niveau (Goldman Sachs GIR, Morgan Stanley Blue Paper, McKinsey):
+- Voorzien van 100% authentieke, wisselende redactionele fotografie (Wall Street, cleanrooms, raffinaderijen).
+- Voorzien van geverifieerde macro- en fundamentele datagrafieken (het "Underlying Driver" model: bijv. Chinese importvolumes, geografische omzetverdeling).
+- Voorzien van een 3-delige KPI-strip (Movement %, Beurswaarde-impact in $ Miljard, Rigor Rating).
+- Voorzien van een visuele transmissieketen (oorzaak ➔ transmissie ➔ impact).
 
-3. ANTIGRAVITY AGENT CONFIGURATIE (GEMINI 3.8 FLASH MEDIUM):
-   - Beide agents draaien als Antigravity Agents met de Google GenAI SDK (`@google/genai`).
-   - Model: 'gemini-3.8-flash' (of fallback 'gemini-2.5-flash').
-   - Reasoning / Thinking: Medium budget voor scherpe afweging van bronnen en data-consistentie.
-   - Tools: 'google_search' grounding ingeschakeld voor live dataverificatie.
+WAT JIJ (CODEX) CONCREET VAN A TOT Z MOET BOUWEN:
+1. BOUW DE NIEUWE AGENT: Maak `src/services/visualDesignerAgent.ts` aan met Antigravity Gemini 3.8 Flash (medium reasoning) + Google Search grounding + deterministische fotoselectie.
+2. BOUW DE SAMENWERKINGS-WORKFLOW: Koppel de Lead Research Agent (`marketResearchAgent.ts`) direct aan de Visual Designer Agent via de `visualBrief` estafette.
+3. BOUW DE GRAFIEKCOMPONENT: Maak `src/components/ReportMacroChart.tsx` aan met Recharts.
+4. HERONTWERP HET RAPPORT: Pas `src/components/ResearchReportModal.tsx` aan met de nieuwe redactionele hero header, KPI-strip en macro-databox.
+5. SCHEMA & OPSLAG: Breid `src/services/marketResearchStore.ts` uit met `visual_payload JSONB`.
 
-4. 100% ACHTERWAARTSE COMPATIBILITEIT:
-   - Alle bestaande rapporten zonder visual payload moeten naadloos blijven werken in de UI en database.
-   - Behoud alle bestaande endpoints in `server.ts` en `marketResearchStore.ts`.
-   - Geen TypeScript errors (`npx tsc --noEmit` moet met 0 fouten slagen).
+HARDE VOORWAARDEN:
+- 100% ECHTE FOTO'S: Uitsluitend authentieke fotografie uit de `EDITORIAL_HERO_REGISTRY`. GEEN AI-gegenereerde cartoons of surrealistische illustraties!
+- NOOIT DUBBELE FOTO'S: Deterministische hash-rotatie garandeert dat opeenvolgende rapporten voor hetzelfde aandeel telkens een ander beeld krijgen.
+- ZERO REGRESSION: Bestaande Global News endpoints en rapporten zonder visual payload blijven 100% werken.
+- BUILD SUCCES: `npx tsc --noEmit` moet met 0 fouten slagen.
 
-Voer nu de 5 implementatiefasen uit zoals hieronder gespecificeerd.
+Voer nu de 5 implementatiefasen hieronder integraal uit!
 ```
 
 ---
