@@ -34,15 +34,16 @@ interface RssMonitorData {
 
 interface ApiQuota {
   dailyLimit: number;
-  requestsUsedToday: number;
-  requestsRemaining: number;
-  percentageRemaining: number;
+  requestsUsedToday: number | null;
+  requestsRemaining: number | null;
+  percentageRemaining: number | null;
   rpmLimit: number;
   tpmLimit: string;
   resetsIn: string;
   resetsAtUtc: string;
-  status: 'OPTIMAAL' | 'BEPERKT' | 'BEREIKT';
+  status: 'OPTIMAAL' | 'BEPERKT' | 'BEREIKT' | 'ONBEKEND';
   tier: string;
+  usageSource?: string;
   devDailyLimit?: number;
   devTier?: string;
   tokensUsed?: {
@@ -93,6 +94,17 @@ interface ServiceHealthData {
       model: string;
       serviceType: string;
       latencyMs: number;
+      status: 'OPERATIONAL' | 'QUOTA_EXCEEDED' | 'AUTH_REQUIRED' | 'ERROR';
+      message: string;
+      quota: ApiQuota;
+    };
+    visualDesigner?: {
+      configured: boolean;
+      agent: string;
+      model: string;
+      serviceType: string;
+      latencyMs: number | null;
+      lastActivityAt: string | null;
       status: 'OPERATIONAL' | 'QUOTA_EXCEEDED' | 'AUTH_REQUIRED' | 'ERROR';
       message: string;
       quota: ApiQuota;
@@ -185,10 +197,10 @@ export const SystemStatusPanel: React.FC = () => {
   // 1. Calculations for 3.8 FLASH API QUOTA
   const rawFlashQuota = data?.services.gemini.quota;
   const flashDailyLimit = flashTierMode === 'free_20' ? 20 : (rawFlashQuota?.devDailyLimit || 1500);
-  const flashUsedToday = rawFlashQuota?.requestsUsedToday ?? 3;
-  const flashRemaining = Math.max(0, flashDailyLimit - flashUsedToday);
-  const flashPct = Math.max(0, Math.min(100, Math.round((flashRemaining / flashDailyLimit) * 100)));
-  const flashBarColor = flashPct > 40 ? 'bg-emerald-500' : flashPct > 15 ? 'bg-amber-500' : 'bg-rose-500';
+  const flashUsedToday = rawFlashQuota?.requestsUsedToday ?? null;
+  const flashRemaining = rawFlashQuota?.requestsRemaining ?? null;
+  const flashPct = rawFlashQuota?.percentageRemaining ?? null;
+  const flashBarColor = flashPct === null ? 'bg-slate-600' : flashPct > 40 ? 'bg-emerald-500' : flashPct > 15 ? 'bg-amber-500' : 'bg-rose-500';
   const flashTierLabel = flashTierMode === 'free_20' 
     ? 'Google AI Studio Free Tier / Pro Account (15 RPM / 20 RPD)' 
     : 'Google AI Studio Developer Tier (15 RPM / 1.500 RPD)';
@@ -200,10 +212,14 @@ export const SystemStatusPanel: React.FC = () => {
   // 2. Calculations for ANTIGRAVITY API QUOTA (Research Agent)
   const rawAntigravityQuota = data?.services.antigravity?.quota;
   const antigravityDailyLimit = rawAntigravityQuota?.dailyLimit ?? 100;
-  const antigravityUsedToday = rawAntigravityQuota?.requestsUsedToday ?? 0;
-  const antigravityRemaining = Math.max(0, antigravityDailyLimit - antigravityUsedToday);
-  const antigravityPct = Math.max(0, Math.min(100, Math.round((antigravityRemaining / antigravityDailyLimit) * 100)));
-  const antigravityBarColor = antigravityPct > 40 ? 'bg-emerald-500' : antigravityPct > 15 ? 'bg-amber-500' : 'bg-rose-500';
+  const antigravityUsedToday = rawAntigravityQuota?.requestsUsedToday ?? null;
+  const antigravityRemaining = rawAntigravityQuota?.requestsRemaining ?? null;
+  const antigravityPct = rawAntigravityQuota?.percentageRemaining ?? null;
+  const antigravityBarColor = antigravityPct === null ? 'bg-slate-600' : antigravityPct > 40 ? 'bg-emerald-500' : antigravityPct > 15 ? 'bg-amber-500' : 'bg-rose-500';
+  const visualDesigner = data?.services.visualDesigner;
+  const visualQuota = visualDesigner?.quota;
+  const visualPct = visualQuota?.percentageRemaining ?? null;
+  const visualBarColor = visualPct === null ? 'bg-slate-600' : visualPct > 40 ? 'bg-emerald-500' : visualPct > 15 ? 'bg-amber-500' : 'bg-rose-500';
   const antigravityTierLabel = rawAntigravityQuota?.tier || 'Google AI Studio Free Tier (2 RPM / 100 RPD)';
   const antigravityTokens = rawAntigravityQuota?.tokensUsed;
   const antigravityInputTokens = typeof antigravityTokens?.inputTokens === 'number' ? antigravityTokens.inputTokens : 0;
@@ -220,7 +236,18 @@ export const SystemStatusPanel: React.FC = () => {
     } catch {
       return 'Onlangs';
     }
-  })() : '16:32:33 (30 sep)';
+  })() : 'Niet beschikbaar';
+
+  const visualLastActivityDisplay = visualDesigner?.lastActivityAt ? (() => {
+    try {
+      const d = new Date(visualDesigner.lastActivityAt);
+      return isNaN(d.getTime()) ? 'Niet beschikbaar' : d.toLocaleString('nl-NL', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    } catch {
+      return 'Niet beschikbaar';
+    }
+  })() : 'Geen geregistreerde aanroep';
 
   return (
     <div className="space-y-4 text-xs text-slate-600">
@@ -312,11 +339,11 @@ export const SystemStatusPanel: React.FC = () => {
             </div>
 
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold border ${
-              flashPct > 20 
+              flashPct !== null && flashPct > 20
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
                 : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
             }`}>
-              {flashPct}% BESCHIKBAAR
+              {flashPct === null ? 'ONBEKEND' : `${flashPct}% BESCHIKBAAR`}
             </span>
           </div>
         </div>
@@ -329,7 +356,7 @@ export const SystemStatusPanel: React.FC = () => {
               <span>Resterende dagelijkse requests (News Agent):</span>
             </span>
             <span className="font-bold text-white text-xs">
-              {`${flashRemaining.toLocaleString('nl-NL')} / ${flashDailyLimit.toLocaleString('nl-NL')} requests`}
+              {flashRemaining === null ? 'Live usage niet beschikbaar' : `${flashRemaining.toLocaleString('nl-NL')} / ${flashDailyLimit.toLocaleString('nl-NL')} requests`}
             </span>
           </div>
 
@@ -337,7 +364,7 @@ export const SystemStatusPanel: React.FC = () => {
           <div className="w-full bg-slate-700/60 rounded-full h-2.5 overflow-hidden p-0.5">
             <div 
               className={`h-full rounded-full transition-all duration-700 ${flashBarColor}`}
-              style={{ width: `${Math.max(5, flashPct)}%` }}
+              style={{ width: `${flashPct === null ? 0 : Math.max(5, flashPct)}%` }}
             />
           </div>
         </div>
@@ -353,7 +380,7 @@ export const SystemStatusPanel: React.FC = () => {
           <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg p-2.5 flex flex-col justify-center">
             <span className="text-[9.5px] uppercase tracking-wider text-slate-400 block">Vandaag Verbruikt</span>
             <span className="font-bold text-slate-200 text-xs">
-              {flashUsedToday} aanroepen
+              {flashUsedToday === null ? '—' : `${flashUsedToday} aanroepen`}
             </span>
             <span className="text-[9.5px] text-emerald-400 block">Binnen veilige marge</span>
           </div>
@@ -404,11 +431,11 @@ export const SystemStatusPanel: React.FC = () => {
               Interactions API
             </span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold border ${
-              antigravityPct > 20 
+              antigravityPct !== null && antigravityPct > 20
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
                 : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
             }`}>
-              {antigravityPct}% BESCHIKBAAR
+              {antigravityPct === null ? 'ONBEKEND' : `${antigravityPct}% BESCHIKBAAR`}
             </span>
           </div>
         </div>
@@ -421,7 +448,7 @@ export const SystemStatusPanel: React.FC = () => {
               <span>Resterende dagelijkse requests (Research Agent):</span>
             </span>
             <span className="font-bold text-white text-xs">
-              {`${antigravityRemaining.toLocaleString('nl-NL')} / ${antigravityDailyLimit.toLocaleString('nl-NL')} requests`}
+              {antigravityRemaining === null ? 'Live usage niet beschikbaar' : `${antigravityRemaining.toLocaleString('nl-NL')} / ${antigravityDailyLimit.toLocaleString('nl-NL')} requests`}
             </span>
           </div>
 
@@ -429,7 +456,7 @@ export const SystemStatusPanel: React.FC = () => {
           <div className="w-full bg-slate-700/60 rounded-full h-2.5 overflow-hidden p-0.5">
             <div 
               className={`h-full rounded-full transition-all duration-700 ${antigravityBarColor}`}
-              style={{ width: `${Math.max(5, antigravityPct)}%` }}
+              style={{ width: `${antigravityPct === null ? 0 : Math.max(5, antigravityPct)}%` }}
             />
           </div>
         </div>
@@ -445,7 +472,7 @@ export const SystemStatusPanel: React.FC = () => {
           <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg p-2.5 flex flex-col justify-center">
             <span className="text-[9.5px] uppercase tracking-wider text-slate-400 block">Vandaag Verbruikt</span>
             <span className="font-bold text-slate-200 text-xs">
-              {antigravityUsedToday} dossiers
+              {antigravityUsedToday === null ? '—' : `${antigravityUsedToday} dossiers`}
             </span>
             <span className="text-[9.5px] text-emerald-400 block">Binnen veilige marge</span>
           </div>
@@ -515,7 +542,7 @@ export const SystemStatusPanel: React.FC = () => {
           <div className="text-[11px] text-slate-500 bg-white/60 rounded-md px-2.5 py-1.5 border border-slate-100 flex items-center justify-between">
             <span>{data?.services.gemini.message}</span>
             <span className="font-mono-code text-[10px] font-semibold text-slate-600">
-              {data?.services.gemini.latencyMs ?? 0} ms ping
+              {data?.services.gemini.latencyMs ?? '—'}{data?.services.gemini.latencyMs !== undefined ? ' ms ping' : ''}
             </span>
           </div>
 
@@ -626,8 +653,60 @@ export const SystemStatusPanel: React.FC = () => {
           <div className="text-[11px] text-slate-500 bg-white/60 rounded-md px-2.5 py-1.5 border border-slate-100 flex items-center justify-between">
             <span>{data?.services.antigravity?.message || 'Interactions API Antigravity Agent gereed.'}</span>
             <span className="font-mono-code text-[10px] font-semibold text-indigo-700">
-              {data?.services.antigravity?.latencyMs ?? 20} ms ping
+              {data?.services.antigravity?.latencyMs ?? '—'}{data?.services.antigravity?.latencyMs !== undefined ? ' ms ping' : ''}
             </span>
+          </div>
+        </div>
+
+        {/* 2c. Visual Designer & Macro Data Agent Card */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center">
+                <BarChart3 className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-bold text-slate-900 text-xs">Visual Designer Agent (Macro Data)</span>
+            </div>
+            {getStatusBadge(
+              visualDesigner?.status === 'OPERATIONAL',
+              visualDesigner?.status === 'QUOTA_EXCEEDED' ? 'QUOTA LIMIET' : 'LIVE DATA ONBEKEND'
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+            <div className="bg-white border border-slate-200/80 rounded-lg p-2">
+              <span className="text-slate-400 block text-[10px] uppercase font-mono-code">Agent & Model</span>
+              <span className="font-semibold text-slate-800">{visualDesigner?.agent || 'visual_designer_agent'}</span>
+              <span className="text-[10px] text-slate-500 block">{visualDesigner?.model || 'gemini-3.8-flash'}</span>
+            </div>
+            <div className="bg-white border border-slate-200/80 rounded-lg p-2">
+              <span className="text-slate-400 block text-[10px] uppercase font-mono-code">Grounding</span>
+              <span className="font-semibold text-slate-800">Google Search</span>
+              <span className="text-[10px] text-slate-500 block">Macrodata alleen met bronbewijs</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-mono-code">
+              <span className="font-semibold text-slate-600">Quota policy (zelfde als Antigravity)</span>
+              <span className="font-bold text-slate-800">{visualPct === null ? 'ONBEKEND' : `${visualPct}% beschikbaar`}</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+              <div className={`h-full rounded-full ${visualBarColor}`} style={{ width: `${visualPct === null ? 0 : Math.max(5, visualPct)}%` }} />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono-code text-slate-500">
+              <span>Requests: {visualQuota?.requestsUsedToday === null || visualQuota?.requestsUsedToday === undefined ? '—' : `${visualQuota.requestsUsedToday} / ${visualQuota.dailyLimit}`}</span>
+              <span>RPM: {visualQuota?.rpmLimit ?? '—'}</span>
+              <span>Tokens: {visualQuota?.tokensUsed?.totalFormatted ?? '—'}</span>
+              <span>Laatste call: {visualLastActivityDisplay}</span>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-1.5 rounded-lg border border-slate-200 bg-white/70 p-2 text-[9.5px] leading-relaxed text-slate-600">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <span>{visualDesigner?.quota?.usageSource === 'EXACT_PERSISTED_USAGE_METADATA'
+              ? 'Usage is gebaseerd op exact opgeslagen Google usageMetadata.'
+              : 'Er is nog geen exacte usage-record beschikbaar; quota- en activitycijfers blijven bewust onbekend.'}</span>
           </div>
         </div>
 

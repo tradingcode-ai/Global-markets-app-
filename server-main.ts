@@ -5838,13 +5838,21 @@ app.get('/api/system/health', async (_req, res) => {
 
   let todayNewsCount = 0;
   let todayResearchCount = 0;
+  let newsCalls = 0;
   let todayResearchCalls = 0;
+  let visualDesignerCalls = 0;
   let newsInputTokens = 0;
   let newsOutputTokens = 0;
   let repInputTokens = 0;
   let repOutputTokens = 0;
+  let visualInputTokens = 0;
+  let visualOutputTokens = 0;
   let newsIsExact = false;
   let repIsExact = false;
+  let visualIsExact = false;
+  let usageTableAvailable = false;
+  let visualLastCallAt: string | null = null;
+  let visualLastLatencyMs: number | null = null;
   let lastNewsPollTime: string | null = null;
   let lastEditionPolled: string = 'US_OPEN';
 
@@ -5887,19 +5895,25 @@ app.get('/api/system/health', async (_req, res) => {
             coalesce(sum(input_tokens), 0) as in_tok,
             coalesce(sum(output_tokens), 0) as out_tok,
             coalesce(sum(total_tokens), 0) as tot_tok,
-            count(*) as call_count
+            count(*) as call_count,
+            max(created_at) as last_call_at,
+            (array_agg(metadata->>'latencyMs' ORDER BY created_at DESC))[1] as last_latency_ms
           FROM gemini_token_usage
           WHERE created_at >= (NOW() AT TIME ZONE 'UTC')::date
           GROUP BY agent_type
         `);
+        usageTableAvailable = true;
         for (const row of usageRes.rows) {
           const inTok = parseInt(row.in_tok, 10);
           const outTok = parseInt(row.out_tok, 10);
           const calls = parseInt(row.call_count || '0', 10);
-          if (row.agent_type === 'flash_news_agent' && (inTok > 0 || outTok > 0)) {
-            newsInputTokens = inTok;
-            newsOutputTokens = outTok;
-            newsIsExact = true;
+          if (row.agent_type === 'flash_news_agent') {
+            newsCalls = calls;
+            if (inTok > 0 || outTok > 0) {
+              newsInputTokens = inTok;
+              newsOutputTokens = outTok;
+              newsIsExact = true;
+            }
           } else if (row.agent_type === 'antigravity_research_agent') {
             if (inTok > 0 || outTok > 0) {
               repInputTokens = inTok;
@@ -5909,6 +5923,13 @@ app.get('/api/system/health', async (_req, res) => {
             if (calls > 0) {
               todayResearchCalls = calls;
             }
+          } else if (row.agent_type === 'visual_designer_agent') {
+            visualInputTokens = inTok;
+            visualOutputTokens = outTok;
+            visualDesignerCalls = calls;
+            visualIsExact = true;
+            visualLastCallAt = row.last_call_at ? new Date(row.last_call_at).toISOString() : null;
+            visualLastLatencyMs = row.last_latency_ms ? Number(row.last_latency_ms) : null;
           }
         }
       } catch {
@@ -5973,9 +5994,9 @@ app.get('/api/system/health', async (_req, res) => {
   // 2a. 3.8 FLASH API QUOTA (Autonomous News Agent)
   // Default to 20 RPD (Free Tier / Pro Account), while supporting developer 1500 RPD
   const flashDailyLimit = 20;
-  const flashRequestsUsedToday = Math.min(flashDailyLimit, Math.max(1, (dbStatus as any).todayNewsCount || (dbStatus.newsArticlesCount > 0 ? (dbStatus.newsArticlesCount % 12) + 2 : 3)));
-  const flashRequestsRemaining = Math.max(0, flashDailyLimit - flashRequestsUsedToday);
-  const flashPercentageRemaining = Math.max(0, Math.min(100, Math.round((flashRequestsRemaining / flashDailyLimit) * 100)));
+  const flashRequestsUsedToday = usageTableAvailable ? Math.min(flashDailyLimit, newsCalls) : null;
+  const flashRequestsRemaining = flashRequestsUsedToday === null ? null : Math.max(0, flashDailyLimit - flashRequestsUsedToday);
+  const flashPercentageRemaining = flashRequestsRemaining === null ? null : Math.max(0, Math.min(100, Math.round((flashRequestsRemaining / flashDailyLimit) * 100)));
 
   let geminiStatus = {
     configured: Boolean(geminiKey),
@@ -5999,7 +6020,7 @@ app.get('/api/system/health', async (_req, res) => {
       tpmLimit: '1.000.000',
       resetsIn: resetsInStr,
       resetsAtUtc: resetsAtStr,
-      status: flashPercentageRemaining > 20 ? 'OPTIMAAL' : (flashPercentageRemaining > 0 ? 'BEPERKT' : 'BEREIKT'),
+      status: flashPercentageRemaining === null ? 'ONBEKEND' : (flashPercentageRemaining > 20 ? 'OPTIMAAL' : (flashPercentageRemaining > 0 ? 'BEPERKT' : 'BEREIKT')),
       tier: 'Google AI Studio Free Tier / Pro Account (15 RPM / 20 RPD)',
       devDailyLimit: 1500,
       devTier: 'Google AI Studio Developer Tier (15 RPM / 1.500 RPD)',
@@ -6060,10 +6081,9 @@ app.get('/api/system/health', async (_req, res) => {
   // 2b. ANTIGRAVITY API QUOTA (Interactions API / Research Agent)
   // Google AI Studio Free Tier quota for Antigravity & Reasoning is 100 RPD (Requests Per Day) and 2 RPM
   const antigravityDailyLimit = 100;
-  const actualResearchUsed = Math.max(todayResearchCalls, todayResearchCount);
-  const antigravityRequestsUsedToday = Math.min(antigravityDailyLimit, actualResearchUsed);
-  const antigravityRequestsRemaining = Math.max(0, antigravityDailyLimit - antigravityRequestsUsedToday);
-  const antigravityPercentageRemaining = Math.max(0, Math.min(100, Math.round((antigravityRequestsRemaining / antigravityDailyLimit) * 100)));
+  const antigravityRequestsUsedToday = usageTableAvailable ? Math.min(antigravityDailyLimit, todayResearchCalls) : null;
+  const antigravityRequestsRemaining = antigravityRequestsUsedToday === null ? null : Math.max(0, antigravityDailyLimit - antigravityRequestsUsedToday);
+  const antigravityPercentageRemaining = antigravityRequestsRemaining === null ? null : Math.max(0, Math.min(100, Math.round((antigravityRequestsRemaining / antigravityDailyLimit) * 100)));
 
   const antigravityStatus = {
     configured: Boolean(geminiKey),
@@ -6084,7 +6104,7 @@ app.get('/api/system/health', async (_req, res) => {
       tpmLimit: '32.000',
       resetsIn: resetsInStr,
       resetsAtUtc: resetsAtStr,
-      status: antigravityPercentageRemaining > 20 ? 'OPTIMAAL' : (antigravityPercentageRemaining > 0 ? 'BEPERKT' : 'BEREIKT'),
+      status: antigravityPercentageRemaining === null ? 'ONBEKEND' : (antigravityPercentageRemaining > 20 ? 'OPTIMAAL' : (antigravityPercentageRemaining > 0 ? 'BEPERKT' : 'BEREIKT')),
       tier: 'Google AI Studio Free Tier (2 RPM / 100 RPD)',
       tokensUsed: {
         inputTokens: repInputTokens,
@@ -6096,6 +6116,55 @@ app.get('/api/system/health', async (_req, res) => {
         window: '00:00 UTC (vandaag)',
         isExact: repIsExact,
         source: repIsExact ? 'EXACT_USAGE_METADATA' : 'REALTIME_INGESTION'
+      }
+    }
+  };
+
+  // 2c. VISUAL DESIGNER AGENT — same Free/Pro policy as Antigravity.
+  // Usage is read only from successful, persisted Google usage records.
+  const visualDesignerDailyLimit = antigravityDailyLimit;
+  const visualDesignerRequestsUsedToday = usageTableAvailable ? Math.min(visualDesignerDailyLimit, visualDesignerCalls) : null;
+  const visualDesignerRequestsRemaining = visualDesignerRequestsUsedToday === null
+    ? null
+    : Math.max(0, visualDesignerDailyLimit - visualDesignerRequestsUsedToday);
+  const visualDesignerPercentageRemaining = visualDesignerRequestsRemaining === null
+    ? null
+    : Math.max(0, Math.min(100, Math.round((visualDesignerRequestsRemaining / visualDesignerDailyLimit) * 100)));
+  const visualDesignerStatus = {
+    configured: Boolean(geminiKey),
+    agent: 'visual_designer_agent',
+    model: 'gemini-3.8-flash',
+    serviceType: 'Google Search grounded visual enrichment',
+    latencyMs: visualLastLatencyMs,
+    lastActivityAt: visualLastCallAt,
+    status: (geminiKey ? 'OPERATIONAL' : 'AUTH_REQUIRED') as 'OPERATIONAL' | 'QUOTA_EXCEEDED' | 'AUTH_REQUIRED' | 'ERROR',
+    message: geminiKey
+      ? 'Visual Designer Agent gebruikt live Google Search grounding voor macrodata.'
+      : 'API key ontbreekt. Visual enrichment is niet actief.',
+    quota: {
+      dailyLimit: visualDesignerDailyLimit,
+      requestsUsedToday: visualDesignerRequestsUsedToday,
+      requestsRemaining: visualDesignerRequestsRemaining,
+      percentageRemaining: visualDesignerPercentageRemaining,
+      rpmLimit: 2,
+      tpmLimit: '32.000',
+      resetsIn: resetsInStr,
+      resetsAtUtc: resetsAtStr,
+      status: visualDesignerPercentageRemaining === null
+        ? 'ONBEKEND'
+        : (visualDesignerPercentageRemaining > 20 ? 'OPTIMAAL' : (visualDesignerPercentageRemaining > 0 ? 'BEPERKT' : 'BEREIKT')),
+      tier: 'Google AI Studio Free Tier / Pro Account (2 RPM / 100 RPD policy)',
+      usageSource: visualIsExact ? 'EXACT_PERSISTED_USAGE_METADATA' : 'NO_VISUAL_USAGE_RECORD',
+      tokensUsed: {
+        inputTokens: visualInputTokens,
+        outputTokens: visualOutputTokens,
+        totalTokens: visualInputTokens + visualOutputTokens,
+        inputFormatted: visualInputTokens.toLocaleString('nl-NL'),
+        outputFormatted: visualOutputTokens.toLocaleString('nl-NL'),
+        totalFormatted: (visualInputTokens + visualOutputTokens).toLocaleString('nl-NL'),
+        window: '00:00 UTC (vandaag)',
+        isExact: visualIsExact,
+        source: visualIsExact ? 'EXACT_USAGE_METADATA' : 'UNAVAILABLE'
       }
     }
   };
@@ -6142,6 +6211,7 @@ app.get('/api/system/health', async (_req, res) => {
       database: dbStatus,
       gemini: geminiStatus,
       antigravity: antigravityStatus,
+      visualDesigner: visualDesignerStatus,
       marketQuotes: quotesStatus,
       secFilings: secStatus,
       scheduler: schedulerStatus

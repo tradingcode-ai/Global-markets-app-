@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import pg from 'pg';
 import {
   EditorialHeroPayload,
   MacroChartPayload,
@@ -232,7 +233,11 @@ function validateMacroChart(
   };
 }
 
-async function fetchVerifiedMacroChart(report: ResearchReport, brief: VisualBrief): Promise<MacroChartPayload | undefined> {
+async function fetchVerifiedMacroChart(
+  report: ResearchReport,
+  brief: VisualBrief,
+  pool: pg.Pool | null
+): Promise<MacroChartPayload | undefined> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_KEY;
   if (!apiKey) {
     console.info('[Visual Designer Agent] Macro data unavailable: no Gemini API key configured.');
@@ -240,6 +245,7 @@ async function fetchVerifiedMacroChart(report: ResearchReport, brief: VisualBrie
   }
 
   try {
+    const startedAt = Date.now();
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: VISUAL_MODEL,
@@ -268,6 +274,8 @@ Every data value must be a finite number and the response must include a real so
       }
     });
 
+    await recordVisualDesignerUsage(pool, response, startedAt, report);
+
     const groundedUrls = new Set<string>();
     const groundingChunks = (response.candidates?.[0] as any)?.groundingMetadata?.groundingChunks;
     if (Array.isArray(groundingChunks)) {
@@ -284,9 +292,59 @@ Every data value must be a finite number and the response must include a real so
   }
 }
 
+async function recordVisualDesignerUsage(
+  pool: pg.Pool | null,
+  response: any,
+  startedAt: number,
+  report: ResearchReport
+): Promise<void> {
+  if (!pool || !response) return;
+
+  const usage = response.usageMetadata || {};
+  const inputTokens = Number(usage.promptTokenCount || 0);
+  const outputTokens = Number(usage.candidatesTokenCount || 0) + Number(usage.thoughtsTokenCount || 0);
+  const totalTokens = Number(usage.totalTokenCount || inputTokens + outputTokens);
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gemini_token_usage (
+        id SERIAL PRIMARY KEY,
+        agent_type VARCHAR(64) NOT NULL,
+        model VARCHAR(64) NOT NULL,
+        input_tokens INT NOT NULL DEFAULT 0,
+        output_tokens INT NOT NULL DEFAULT 0,
+        total_tokens INT NOT NULL DEFAULT 0,
+        operation VARCHAR(128),
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO gemini_token_usage (
+        agent_type, model, input_tokens, output_tokens, total_tokens, operation, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7);
+    `, [
+      'visual_designer_agent',
+      VISUAL_MODEL,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      `VISUAL_MACRO_${report.ticker}`,
+      JSON.stringify({
+        ticker: report.ticker,
+        eventId: report.eventId || report.event_id || report.id,
+        latencyMs: Date.now() - startedAt,
+        usageMetadataAvailable: Boolean(response.usageMetadata),
+        source: 'VISUAL_DESIGNER_GOOGLE_SEARCH'
+      })
+    ]);
+  } catch (error: any) {
+    console.warn('[Visual Designer Agent] Could not persist exact usage metadata:', error?.message || error);
+  }
+}
+
 export async function runVisualDesignerAgent(
   report: ResearchReport,
-  brief: VisualBrief
+  brief: VisualBrief,
+  pool: pg.Pool | null = null
 ): Promise<VisualEnrichmentPayload> {
   const eventId = report.eventId || report.event_id || report.id || 'evt_default';
   const changePercent = report.changePercent ?? report.change_percent;
@@ -306,7 +364,7 @@ export async function runVisualDesignerAgent(
           : 'TRANSMISSION'
   }));
 
-  const macroChart = await fetchVerifiedMacroChart(report, brief);
+  const macroChart = await fetchVerifiedMacroChart(report, brief, pool);
   const payload: VisualEnrichmentPayload = {
     hero: selectEditorialHero(brief.editorialScene, report.ticker, eventId),
     transmissionSteps,

@@ -720,7 +720,7 @@ async function executeResearchForEventInternal(
   // available even when the macro search is offline or returns no evidence.
   try {
     const visualBrief = deriveVisualBrief(report);
-    const visualPayload = await runVisualDesignerAgent(report, visualBrief);
+    const visualPayload = await runVisualDesignerAgent(report, visualBrief, pool);
     report.visualPayload = visualPayload;
     report.visual_payload = visualPayload;
     console.log(`[Research Agent] Visual enrichment attached for ${event.ticker}.`);
