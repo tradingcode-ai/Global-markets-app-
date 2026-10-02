@@ -6133,13 +6133,13 @@ app.get('/api/system/health', async (_req, res) => {
   const visualDesignerStatus = {
     configured: Boolean(geminiKey),
     agent: 'visual_designer_agent',
-    model: 'gemini-3.8-flash',
-    serviceType: 'Google Search grounded visual enrichment',
+    model: 'antigravity-preview-05-2026 (gemini-3.8-flash)',
+    serviceType: 'Antigravity Google Search grounded visual enrichment',
     latencyMs: visualLastLatencyMs,
     lastActivityAt: visualLastCallAt,
     status: (geminiKey ? 'OPERATIONAL' : 'AUTH_REQUIRED') as 'OPERATIONAL' | 'QUOTA_EXCEEDED' | 'AUTH_REQUIRED' | 'ERROR',
     message: geminiKey
-      ? 'Visual Designer Agent gebruikt live Google Search grounding voor macrodata.'
+      ? 'Visual Designer Agent gebruikt Antigravity via de Interactions API met live Google Search grounding voor macrodata.'
       : 'API key ontbreekt. Visual enrichment is niet actief.',
     quota: {
       dailyLimit: visualDesignerDailyLimit,

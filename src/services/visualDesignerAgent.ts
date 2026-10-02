@@ -10,7 +10,23 @@ import {
   VisualEnrichmentPayload
 } from '../types/marketResearch';
 
+const VISUAL_AGENT = 'antigravity-preview-05-2026';
 const VISUAL_MODEL = 'gemini-3.8-flash';
+const VISUAL_AGENT_LABEL = `${VISUAL_AGENT} (${VISUAL_MODEL})`;
+
+const VISUAL_DESIGNER_SYSTEM_PROMPT = `You are the Visual Designer and Macro Data Agent for the Global Markets application.
+Your role is to enrich an institutional research report with one source-verified macro chart dataset.
+
+DATA INTEGRITY
+Never invent, estimate, interpolate, or round market, economic, company, or macroeconomic data.
+Use Google Search only to locate current, authoritative primary sources such as official agencies,
+central banks, exchanges, company investor-relations pages, or regulators. The returned sourceUrl
+must be a URL that appears in the Google Search grounding metadata for this interaction.
+If a source-backed dataset cannot be established, return an empty JSON object.
+
+OUTPUT
+Return ONLY valid JSON matching the requested schema. Every data value must be finite, and every
+chart must include a named source and sourceUrl. Do not include markdown fences or commentary.`;
 
 /** Only stable, direct-photo hosts are permitted in the editorial registry. */
 export const EDITORIAL_HERO_ALLOWED_HOSTS = [
@@ -167,6 +183,80 @@ function parseJsonResponse(responseText: string): unknown {
   }
 }
 
+function extractInteractionText(response: any): string {
+  const directText = response?.output_text || response?.outputText;
+  if (typeof directText === 'string' && directText.trim()) return directText.trim();
+
+  const outputText: string[] = [];
+  const outputs = Array.isArray(response?.outputs) ? response.outputs : [];
+  for (const output of outputs) {
+    if (typeof output?.text === 'string') outputText.push(output.text);
+    const content = Array.isArray(output?.content) ? output.content : [];
+    for (const part of content) {
+      if (typeof part?.text === 'string') outputText.push(part.text);
+    }
+  }
+
+  const steps = Array.isArray(response?.steps) ? response.steps : [];
+  for (const step of steps) {
+    const content = Array.isArray(step?.content) ? step.content : [];
+    for (const part of content) {
+      if (typeof part?.text === 'string') outputText.push(part.text);
+    }
+  }
+  return outputText.join('\n').trim();
+}
+
+/**
+ * Interactions API responses expose search citations in slightly different
+ * metadata containers across SDK versions. Only citation/grounding metadata
+ * is inspected; model output text is never treated as source evidence.
+ */
+function collectGroundingUrls(response: any): Set<string> {
+  const urls = new Set<string>();
+  const metadataRoots = [
+    response?.groundingMetadata,
+    response?.grounding_metadata,
+    response?.metadata?.groundingMetadata,
+    response?.metadata?.grounding_metadata,
+    ...(Array.isArray(response?.steps)
+      ? response.steps.flatMap((step: any) => [step, step?.result])
+      : []),
+    ...(Array.isArray(response?.outputs)
+      ? response.outputs.flatMap((output: any) => [
+        output?.groundingMetadata,
+        output?.grounding_metadata,
+        output?.metadata?.groundingMetadata,
+        output?.metadata?.grounding_metadata,
+        output?.annotations,
+        output?.citations
+      ])
+      : [])
+  ];
+
+  const visit = (node: any): void => {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (typeof node !== 'object') return;
+
+    const uri = node.web?.uri || node.uri;
+    if (typeof uri === 'string' && isHttpUrl(uri)) urls.add(uri);
+
+    const url = node.url;
+    if (typeof url === 'string' && isHttpUrl(url)) urls.add(url);
+
+    Object.entries(node).forEach(([key, value]) => {
+      if (/grounding|citation|annotation|source/i.test(key)) visit(value);
+    });
+  };
+
+  metadataRoots.forEach(visit);
+  return urls;
+}
+
 /** Rejects any result with missing attribution or a malformed/non-finite row. */
 function validateMacroChart(
   candidate: unknown,
@@ -247,9 +337,29 @@ async function fetchVerifiedMacroChart(
   try {
     const startedAt = Date.now();
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: VISUAL_MODEL,
-      contents: `You are the macro-data specialist for an institutional research report.
+    if (!ai.interactions || typeof ai.interactions.create !== 'function') {
+      console.warn('[Visual Designer Agent] Antigravity Interactions API is unavailable in the installed SDK.');
+      return undefined;
+    }
+
+    const response: any = await ai.interactions.create({
+      agent: VISUAL_AGENT,
+      agent_config: {
+        type: 'antigravity',
+        model: VISUAL_MODEL
+      },
+      environment: {
+        type: 'remote',
+        sources: [
+          {
+            type: 'inline',
+            content: VISUAL_DESIGNER_SYSTEM_PROMPT,
+            target: '.agents/VISUAL_DESIGNER_AGENT.md'
+          }
+        ]
+      },
+      system_instruction: VISUAL_DESIGNER_SYSTEM_PROMPT,
+      input: `You are the macro-data specialist for an institutional research report.
 Asset: ${report.ticker} (${report.assetName || report.asset || report.ticker})
 Movement: ${report.changePercent ?? report.change_percent ?? 'unknown'}%
 Theme: ${brief.primaryTheme}
@@ -268,24 +378,14 @@ Use Google Search grounding to find a verified underlying-driver series or break
   "data": [{"label":"...","value":12.3,"highlight":true}]
 }
 Every data value must be a finite number and the response must include a real source and sourceUrl. If those requirements cannot be met, return an empty JSON object.`,
-      config: {
-        tools: [{ googleSearch: {} }],
-        temperature: 0.1
-      }
+      tools: [{ type: 'google_search' }]
     });
 
     await recordVisualDesignerUsage(pool, response, startedAt, report);
 
-    const groundedUrls = new Set<string>();
-    const groundingChunks = (response.candidates?.[0] as any)?.groundingMetadata?.groundingChunks;
-    if (Array.isArray(groundingChunks)) {
-      for (const chunk of groundingChunks) {
-        const uri = chunk?.web?.uri;
-        if (typeof uri === 'string' && isHttpUrl(uri)) groundedUrls.add(uri);
-      }
-    }
+    const groundedUrls = collectGroundingUrls(response);
 
-    return validateMacroChart(parseJsonResponse(response.text || ''), brief, groundedUrls);
+    return validateMacroChart(parseJsonResponse(extractInteractionText(response)), brief, groundedUrls);
   } catch (error) {
     console.warn('[Visual Designer Agent] Verified macro search failed; retaining unavailable state.', error);
     return undefined;
@@ -300,10 +400,20 @@ async function recordVisualDesignerUsage(
 ): Promise<void> {
   if (!pool || !response) return;
 
-  const usage = response.usageMetadata || {};
-  const inputTokens = Number(usage.promptTokenCount || 0);
-  const outputTokens = Number(usage.candidatesTokenCount || 0) + Number(usage.thoughtsTokenCount || 0);
-  const totalTokens = Number(usage.totalTokenCount || inputTokens + outputTokens);
+  const usage = response.usage || response.usage_metadata || response.usageMetadata || {};
+  const inputTokens = Number(
+    usage.total_input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? 0
+  );
+  const candidatesTokens = Number(
+    usage.total_output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? 0
+  );
+  const thoughtsTokens = Number(
+    usage.total_thought_tokens ?? usage.thoughts_tokens ?? usage.thoughtsTokenCount ?? 0
+  );
+  const outputTokens = candidatesTokens + thoughtsTokens;
+  const totalTokens = Number(
+    usage.total_tokens ?? usage.totalTokenCount ?? inputTokens + outputTokens
+  );
 
   try {
     await pool.query(`
@@ -323,7 +433,7 @@ async function recordVisualDesignerUsage(
       ) VALUES ($1, $2, $3, $4, $5, $6, $7);
     `, [
       'visual_designer_agent',
-      VISUAL_MODEL,
+      VISUAL_AGENT_LABEL,
       inputTokens,
       outputTokens,
       totalTokens,
@@ -332,8 +442,10 @@ async function recordVisualDesignerUsage(
         ticker: report.ticker,
         eventId: report.eventId || report.event_id || report.id,
         latencyMs: Date.now() - startedAt,
-        usageMetadataAvailable: Boolean(response.usageMetadata),
-        source: 'VISUAL_DESIGNER_GOOGLE_SEARCH'
+        usageMetadataAvailable: Boolean(response.usage || response.usage_metadata || response.usageMetadata),
+        source: 'VISUAL_DESIGNER_ANTIGRAVITY_INTERACTIONS_API_GOOGLE_SEARCH',
+        agent: VISUAL_AGENT,
+        agentType: 'antigravity'
       })
     ]);
   } catch (error: any) {

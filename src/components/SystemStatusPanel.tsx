@@ -677,11 +677,11 @@ export const SystemStatusPanel: React.FC = () => {
             <div className="bg-white border border-slate-200/80 rounded-lg p-2">
               <span className="text-slate-400 block text-[10px] uppercase font-mono-code">Agent & Model</span>
               <span className="font-semibold text-slate-800">{visualDesigner?.agent || 'visual_designer_agent'}</span>
-              <span className="text-[10px] text-slate-500 block">{visualDesigner?.model || 'gemini-3.8-flash'}</span>
+              <span className="text-[10px] text-slate-500 block">{visualDesigner?.model || 'antigravity-preview-05-2026 (gemini-3.8-flash)'}</span>
             </div>
             <div className="bg-white border border-slate-200/80 rounded-lg p-2">
               <span className="text-slate-400 block text-[10px] uppercase font-mono-code">Grounding</span>
-              <span className="font-semibold text-slate-800">Google Search</span>
+              <span className="font-semibold text-slate-800">Antigravity + Google Search</span>
               <span className="text-[10px] text-slate-500 block">Macrodata alleen met bronbewijs</span>
             </div>
           </div>
