@@ -6406,7 +6406,20 @@ async function startServer() {
     // In development, vite handles requests or tsx can serve
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        watch: {
+          ignored: [
+            '**/server*.ts',
+            '**/server-main.ts',
+            '**/package.json',
+            '**/agents/**',
+            '**/dist/**',
+            '**/.git/**',
+            '**/.env*'
+          ]
+        }
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
