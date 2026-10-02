@@ -263,7 +263,7 @@ export function GlobalNewsAgentView({
               Global News Agent
             </h1>
             <p className="text-sm text-slate-300 max-w-3xl leading-relaxed">
-              Feitelijk geverifieerde marktberichten op basis van institutionele bronnen (Financial Times, Bloomberg, Reuters, CNBC). Automatisch getriggerd op de 4 vaste beurstijdstippen met Google Search Grounding en een temperatuur van 0.1 voor nul hallucinaties.
+              Feitelijk geverifieerde marktberichten op basis van actuele RSS-kandidaten van institutionele bronnen (CNBC en Yahoo Finance). Automatisch getriggerd op de 4 vaste beurstijdstippen; Google Search staat voor deze agent uit.
             </p>
           </div>
 

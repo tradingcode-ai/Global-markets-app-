@@ -399,7 +399,7 @@ export const SystemStatusPanel: React.FC = () => {
               <span>Uit: <strong className="text-emerald-300">{formatTokens(flashOutputTokens)}</strong></span>
             </span>
             <span className="text-[9.5px] text-emerald-400 block font-medium">
-              {formatTokens(flashTotalTokens)} tokens • Exact Google Metadata
+              {formatTokens(flashTotalTokens)} tokens • {data?.services.gemini.quota.tokensUsed?.isExact ? 'Exact Google Metadata' : 'Usage metadata niet beschikbaar'}
             </span>
           </div>
         </div>
@@ -524,7 +524,7 @@ export const SystemStatusPanel: React.FC = () => {
               <span className="font-semibold text-slate-800">
                 {data?.services.gemini.model || 'gemini-3.8-flash'}
               </span>
-              <span className="text-[10px] text-slate-500 block">Thinking: Medium (20-Rules Grounding)</span>
+              <span className="text-[10px] text-slate-500 block">RSS-only synthese (Google Search uit)</span>
             </div>
 
             <div className="bg-white border border-slate-200/80 rounded-lg p-2">

@@ -370,13 +370,14 @@ export async function runAgentCycle(targetEdition = getCurrentEdition()) {
   const existingEventIds = new Set(recentEvents.map(e => e.event_id));
   const previousEditionData = await getPreviousEditionSnapshot();
 
-  // 3. Aliases genereren voor betere search grounding
+  // 3. Aliases genereren voor betere RSS candidate filtering
   const watchlistWithAliases = activeAlertTickers
     .map(ticker => `- ${ticker}: ${getAliasesForTicker(ticker).join(", ")}`)
     .join("\n");
 
   // 4. Robuuste parallelle RSS ingestion afgestemd op de huidige editie
   const liveStories = await fetchLiveRssStories(targetEdition);
+  const candidateUrls = new Set(liveStories.map(story => story.link).filter(Boolean));
 
   // 5. Ultra-efficiënte, token-besparende batch candidate block samenstellen (~30 tokens per candidate)
   const candidateBlock = liveStories.map((s, idx) => {
@@ -411,13 +412,14 @@ Your editorial objectives for this cycle:
 2. SELECT & SYNTHESIZE: Select the most critical market-moving developments and synthesize them directly into the tri-stream format (macro_news, earnings_news, company_news).
 3. VERIFIABLE SOURCE URLS: You MUST set the candidate's real "Link" as the "source_url" in each generated news item. Do NOT invent URLs.
 4. STRICT REGIONAL SCOPE: Ensure regional compliance for ${targetEdition} as mandated in your instructions.
-5. GROUNDING & FACTS: Use Google Search grounding to enrich missing financial metrics (EPS, revenue beats, consensus, percentage changes, market reactions) for the top selected stories. If Google Search is unavailable or throttled (429/503 fallback), synthesize strictly from the candidate facts provided above.
+5. GROUNDING & FACTS: Google Search is disabled for this agent. Use only the verified RSS candidate facts provided above. If a metric or detail is not present in those candidates, leave it unknown instead of searching or guessing.
 6. COMPLIANCE: Every item must have real factual backing, correct sentiment, and strictly adhere to all 20 research rules.
 Provide the real source_url for each item.
 `;
 
   // 7. Aanroep van Gemini met fallback modellen en rate limit retry
   let response;
+  let modelUsed = null;
   const modelsToTry = [CONFIG.GEMINI_MODEL, 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
   
   for (const currentModel of modelsToTry) {
@@ -430,7 +432,6 @@ Provide the real source_url for each item.
           contents: prompt,
           config: {
             systemInstruction,
-            tools: [{ googleSearch: {} }],
             responseMimeType: "application/json",
             responseSchema: triStreamSchema,
             thinkingConfig: {
@@ -438,6 +439,7 @@ Provide the real source_url for each item.
             }
           }
         });
+        modelUsed = currentModel;
       } catch (err) {
         const isQuotaOrOverload = err?.status === 429 || err?.status === 503 || 
           err?.message?.includes("quota") || 
@@ -458,6 +460,7 @@ Provide the real source_url for each item.
                 responseSchema: triStreamSchema
               }
             });
+            modelUsed = currentModel;
           } catch (innerErr) {
             console.warn(`[Agent Warning] RSS analyse met ${currentModel} gaf: ${innerErr.message}`);
             if (attempt === 1) {
@@ -476,28 +479,31 @@ Provide the real source_url for each item.
   let verifiedChunks = [];
 
   if (response && response.text) {
-    if (response.usageMetadata) {
-      const promptTokens = response.usageMetadata.promptTokenCount || 0;
-      const candidatesTokens = response.usageMetadata.candidatesTokenCount || 0;
-      const thoughtsTokens = response.usageMetadata.thoughtsTokenCount || 0;
-      const outputTokens = candidatesTokens + thoughtsTokens;
-      const totalTokens = response.usageMetadata.totalTokenCount || (promptTokens + outputTokens);
+    const usageMetadata = response.usageMetadata || {};
+    const promptTokens = Number(usageMetadata.promptTokenCount || 0);
+    const candidatesTokens = Number(usageMetadata.candidatesTokenCount || 0);
+    const thoughtsTokens = Number(usageMetadata.thoughtsTokenCount || 0);
+    const outputTokens = candidatesTokens + thoughtsTokens;
+    const totalTokens = Number(usageMetadata.totalTokenCount || (promptTokens + outputTokens));
 
-      await recordTokenUsage({
-        agentType: 'flash_news_agent',
-        model: CONFIG.GEMINI_MODEL,
-        inputTokens: promptTokens,
-        outputTokens: outputTokens,
-        totalTokens: totalTokens,
-        operation: `EDITION_${targetEdition}`,
-        metadata: {
-          targetEdition,
-          promptTokenCount: promptTokens,
-          candidatesTokenCount: candidatesTokens,
-          thoughtsTokenCount: thoughtsTokens
-        }
-      });
-    }
+    // Persist every successful call. Some SDK paths omit usageMetadata; the
+    // request count is still real while the token values remain explicitly 0.
+    await recordTokenUsage({
+      agentType: 'flash_news_agent',
+      model: modelUsed || CONFIG.GEMINI_MODEL,
+      inputTokens: promptTokens,
+      outputTokens,
+      totalTokens,
+      operation: `EDITION_${targetEdition}`,
+      metadata: {
+        targetEdition,
+        usageMetadataAvailable: Boolean(response.usageMetadata),
+        googleSearchEnabled: false,
+        promptTokenCount: promptTokens,
+        candidatesTokenCount: candidatesTokens,
+        thoughtsTokenCount: thoughtsTokens
+      }
+    });
 
     try {
       payload = JSON.parse(response.text);
@@ -537,7 +543,7 @@ Provide the real source_url for each item.
     }
 
     try {
-      const sanitized = sanitizeAndEnforceGrounding(item, verifiedChunks);
+      const sanitized = sanitizeAndEnforceGrounding(item, verifiedChunks, candidateUrls);
 
       recordsToInsert.push({
         event_id: eventId,
@@ -582,4 +588,3 @@ Provide the real source_url for each item.
     items: recordsToInsert
   };
 }
-

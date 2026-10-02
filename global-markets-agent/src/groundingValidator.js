@@ -32,7 +32,7 @@ export function inferTier(sourceName = "", sourceUrl = "") {
   return 4;
 }
 
-export function sanitizeAndEnforceGrounding(item, verifiedChunks) {
+export function sanitizeAndEnforceGrounding(item, verifiedChunks, candidateUrls = new Set()) {
   const validUrlRegex = /^https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i;
   
   const isGroundedUrl = (url) => verifiedChunks.some(vc => {
@@ -48,12 +48,24 @@ export function sanitizeAndEnforceGrounding(item, verifiedChunks) {
   let primaryUrl = item.source_url;
   let primaryName = item.source_name;
 
-  if (!primaryUrl || !validUrlRegex.test(primaryUrl) || (!isGroundedUrl(primaryUrl) && verifiedChunks.length > 0)) {
+  const normalizedCandidateUrls = new Set(
+    [...candidateUrls]
+      .filter(url => typeof url === 'string')
+      .map(url => url.replace(/\/$/, ''))
+  );
+  const isCandidateUrl = typeof primaryUrl === 'string'
+    && normalizedCandidateUrls.has(primaryUrl.replace(/\/$/, ''));
+
+  if (!primaryUrl || !validUrlRegex.test(primaryUrl) || (
+    verifiedChunks.length > 0
+      ? !isGroundedUrl(primaryUrl)
+      : !isCandidateUrl
+  )) {
     if (verifiedChunks.length > 0) {
       primaryUrl = verifiedChunks[0].url;
       primaryName = verifiedChunks[0].name;
     } else {
-      throw new Error(`Item afgewezen: Geen verifieerbare grounding URL voor headline: "${item.headline}"`);
+      throw new Error(`Item afgewezen: source_url staat niet in de aangeleverde RSS-kandidaten voor headline: "${item.headline}"`);
     }
   }
 

@@ -5480,7 +5480,58 @@ async function fetchFreeMarketRssStories(): Promise<RawRssStory[]> {
   return allStories.slice(0, 15);
 }
 
-// 3. Autonomous Market News Agent with Gemini 3.8 Flash (No Google Search Grounding quota needed)
+async function recordNativeNewsAgentUsage(
+  response: any,
+  model: string,
+  edition: string,
+  startedAt: number
+): Promise<void> {
+  const pool = getAgentPgPool();
+  if (!pool) return;
+
+  const usage = response?.usageMetadata || response?.usage_metadata || response?.usage || {};
+  const inputTokens = Number(usage.promptTokenCount ?? usage.prompt_tokens ?? usage.total_input_tokens ?? 0);
+  const candidatesTokens = Number(usage.candidatesTokenCount ?? usage.completion_tokens ?? usage.total_output_tokens ?? 0);
+  const thoughtsTokens = Number(usage.thoughtsTokenCount ?? usage.thoughts_tokens ?? usage.total_thought_tokens ?? 0);
+  const outputTokens = candidatesTokens + thoughtsTokens;
+  const totalTokens = Number(usage.totalTokenCount ?? usage.total_tokens ?? inputTokens + outputTokens);
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gemini_token_usage (
+        id SERIAL PRIMARY KEY,
+        agent_type VARCHAR(64) NOT NULL,
+        model VARCHAR(64) NOT NULL,
+        input_tokens INT NOT NULL DEFAULT 0,
+        output_tokens INT NOT NULL DEFAULT 0,
+        total_tokens INT NOT NULL DEFAULT 0,
+        operation VARCHAR(128),
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO gemini_token_usage (
+        agent_type, model, input_tokens, output_tokens, total_tokens, operation, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7);
+    `, [
+      'flash_news_agent',
+      model,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      `EDITION_${edition}`,
+      JSON.stringify({
+        edition,
+        latencyMs: Date.now() - startedAt,
+        usageMetadataAvailable: Boolean(response?.usageMetadata || response?.usage_metadata || response?.usage),
+        googleSearchEnabled: false
+      })
+    ]);
+  } catch (error: any) {
+    console.warn('[News Agent Usage Warning]:', error?.message || error);
+  }
+}
+
+// 3. Autonomous Market News Agent with Gemini 3.8 Flash (RSS-only; Google Search disabled)
 async function runNativeNewsAgentCycle(targetEdition?: string, watchlist?: string[]): Promise<{
   success: boolean;
   inserted: number;
@@ -5492,6 +5543,7 @@ async function runNativeNewsAgentCycle(targetEdition?: string, watchlist?: strin
     return { success: false, inserted: 0, items: [], error: 'GEMINI_API_KEY is niet geconfigureerd in de omgeving.' };
   }
 
+  const startedAt = Date.now();
   const edition = targetEdition || getCurrentAmsterdamEdition();
   const stories = await fetchFreeMarketRssStories();
 
@@ -5548,6 +5600,7 @@ Organize findings strictly into the three streams:
   try {
     let responseText: string | null = null;
     let lastError: any = null;
+    let modelUsed = 'gemini-3.8-flash';
 
     const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
     for (const currentModel of modelsToTry) {
@@ -5601,6 +5654,8 @@ Organize findings strictly into the three streams:
           });
 
           responseText = response.text;
+          modelUsed = currentModel;
+          await recordNativeNewsAgentUsage(response, modelUsed, edition, startedAt);
           if (responseText) break;
         } catch (genErr: any) {
           lastError = genErr;
@@ -6005,11 +6060,11 @@ app.get('/api/system/health', async (_req, res) => {
       : 'Niet geconfigureerd',
     model: 'gemini-3.8-flash',
     thinkingLevel: 'MEDIUM',
-    searchGrounding: 'Google Search & RSS Fallback',
+    searchGrounding: 'RSS-only synthesis (Google Search uitgeschakeld)',
     latencyMs: 0,
     status: (geminiKey ? 'OPERATIONAL' : 'AUTH_REQUIRED') as 'OPERATIONAL' | 'QUOTA_EXCEEDED' | 'AUTH_REQUIRED' | 'ERROR',
     message: geminiKey 
-      ? 'Google Gemini API-sleutel is ingesteld en operationeel.' 
+      ? 'Google Gemini API-sleutel is ingesteld; news agent gebruikt alleen RSS-kandidaten.'
       : 'API key ontbreekt. Voeg GEMINI_API_KEY toe aan GitHub Secrets of omgevingsvariabelen.',
     quota: {
       dailyLimit: flashDailyLimit,
@@ -6042,7 +6097,7 @@ app.get('/api/system/health', async (_req, res) => {
       lastSuccessfulPoll: lastNewsPollTime || new Date().toISOString(),
       lastEdition: lastEditionPolled,
       isFallbackActive: false,
-      protocol: 'Autonomous Zero-Quota RSS Ingestion',
+      protocol: 'RSS candidate feeds + Gemini synthesis (geen Google Search)',
       feedsCount: 16,
       feeds: [
         'CNBC Top News', 'CNBC Markets', 'Yahoo Finance', 'MarketWatch Top Stories',
