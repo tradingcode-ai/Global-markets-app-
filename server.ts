@@ -10,7 +10,7 @@ if (!isTsx) {
   const __dirname = path.dirname(__filename);
   const serverMain = path.join(__dirname, 'server-main.ts');
 
-  const child = spawn(process.execPath, ['--import', 'tsx', serverMain], {
+  const child = spawn(process.execPath, ['--max-old-space-size=4096', '--import', 'tsx', serverMain], {
     stdio: 'inherit',
     env: process.env
   });
