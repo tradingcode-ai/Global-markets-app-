@@ -3089,8 +3089,7 @@ async function getYahooCrumb(): Promise<{ cookie: string; crumb: string } | null
 
 // ==========================================
 // QUARTERLY ANALYST OUTLOOK + CONSENSUS SNAPSHOT
-// Yahoo Finance source. This endpoint is intended to be called only once per
-// quarter by the client; the client stores the returned snapshot locally.
+// Yahoo Finance source; refresh every six hours and expire snapshots after 12.
 // ==========================================
 interface QuarterlyAnalystOutlookPayload {
   ticker: string;
@@ -3105,6 +3104,17 @@ interface QuarterlyAnalystOutlookPayload {
   lowPriceTarget?: number;
   highPriceTarget?: number;
   targetCurrency?: string;
+  consensusCurrency?: string;
+  consensusPeriodEnd?: string;
+  reportedFinancials?: {
+    fiscalDate: string;
+    eps?: number;
+    revenue?: number;
+    currency?: string;
+    snapshotDate: string;
+    isCachedSnapshot?: boolean;
+    provider?: string;
+  };
   nextQuarterEps?: number;
   nextQuarterEpsLow?: number;
   nextQuarterEpsHigh?: number;
@@ -3121,6 +3131,7 @@ interface QuarterlyAnalystOutlookPayload {
   conversionNote?: string;
   revenueIsAnalystConsensus?: boolean;
   isLiveFeed?: boolean;
+  isProviderCache?: boolean;
   outlooks: Array<{
     bankName: string;
     logoColor?: string;
@@ -3370,18 +3381,111 @@ function rawNumber(v: any): number | undefined {
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 }
 
-async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: string): Promise<QuarterlyAnalystOutlookPayload | null> {
+type YahooReportedFinancials = NonNullable<QuarterlyAnalystOutlookPayload['reportedFinancials']>;
+
+const quarterlyReportedFinancialsCache: Record<string, { data: YahooReportedFinancials; timestamp: number }> = {};
+const QUARTERLY_REPORTED_FINANCIALS_CACHE_TTL_MS = 1000 * 60 * 60 * 12;
+
+async function getYahooCrumbWithin(timeoutMs = 8000): Promise<{ cookie: string; crumb: string } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getYahooCrumb(),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchYahooReportedFinancials(symbol: string, forceRefresh = false): Promise<YahooReportedFinancials | null> {
+  const now = Date.now();
+  const cached = quarterlyReportedFinancialsCache[symbol];
+  if (!forceRefresh && cached && now - cached.timestamp < QUARTERLY_REPORTED_FINANCIALS_CACHE_TTL_MS) {
+    return { ...cached.data, isCachedSnapshot: true };
+  }
+
+  const end = Math.floor(now / 1000);
+  const start = end - (6 * 365 * 24 * 60 * 60);
+  const types = 'quarterlyDilutedEPS,quarterlyBasicEPS,quarterlyTotalRevenue';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const url = `https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types}&period1=${start}&period2=${end}&lang=en-US&region=US`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GlobalMarkets/1.0)' },
+      signal: controller.signal
+    });
+    if (!response.ok) return null;
+    const json = await response.json();
+    const series = json?.timeseries?.result || [];
+    const extract = (key: string) => series.flatMap((entry: any) => Array.isArray(entry?.[key]) ? entry[key] : [])
+      .filter((point: any) => {
+        if (typeof point?.asOfDate !== 'string' || !Number.isFinite(rawNumber(point?.reportedValue))) return false;
+        const fiscalTimestamp = Date.parse(point.asOfDate);
+        const periodType = String(point?.periodType || '').toUpperCase();
+        return Number.isFinite(fiscalTimestamp)
+          && fiscalTimestamp <= now
+          && fiscalTimestamp >= now - 7 * 365 * 24 * 60 * 60 * 1000
+          && (!periodType || periodType === '3M');
+      })
+      .map((point: any) => ({
+        fiscalDate: point.asOfDate,
+        value: rawNumber(point.reportedValue) as number,
+        currency: point.currencyCode || point.currency
+      }));
+    const eps = [...extract('quarterlyDilutedEPS'), ...extract('quarterlyBasicEPS')]
+      .sort((a, b) => b.fiscalDate.localeCompare(a.fiscalDate));
+    const revenue = extract('quarterlyTotalRevenue').sort((a, b) => b.fiscalDate.localeCompare(a.fiscalDate));
+    const dates = Array.from(new Set([...eps, ...revenue].map(point => point.fiscalDate))).sort((a, b) => b.localeCompare(a));
+    const fiscalDate = dates[0];
+    if (!fiscalDate) return null;
+    const epsPoint = eps.find(point => point.fiscalDate === fiscalDate);
+    const revenuePoint = revenue.find(point => point.fiscalDate === fiscalDate);
+    const currency = epsPoint?.currency || revenuePoint?.currency;
+    // Do not expose a number without an explicit Yahoo reporting currency.
+    if (!currency || (epsPoint?.currency && revenuePoint?.currency && epsPoint.currency !== revenuePoint.currency)) return null;
+    const data: YahooReportedFinancials = {
+      fiscalDate,
+      eps: epsPoint?.currency === currency ? epsPoint.value : undefined,
+      revenue: revenuePoint?.currency === currency ? revenuePoint.value / 1e9 : undefined,
+      currency,
+      snapshotDate: new Date(now).toISOString(),
+      isCachedSnapshot: false,
+      provider: 'Yahoo Finance fundamentals-timeseries'
+    };
+    quarterlyReportedFinancialsCache[symbol] = { data, timestamp: now };
+    return data;
+  } catch (error) {
+    console.warn(`[Yahoo Reported Financials] Error for ${symbol}:`, error);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: string, forceRefresh = false): Promise<QuarterlyAnalystOutlookPayload | null> {
   const now = Date.now();
   // Check memory cache first
   if (quarterlyAnalystCache[normalized]) {
     const cached = quarterlyAnalystCache[normalized];
-    if (now - cached.timestamp < QUARTERLY_ANALYST_CACHE_TTL_MS) {
-      return cached.data;
+    if (!forceRefresh && now - cached.timestamp < QUARTERLY_ANALYST_CACHE_TTL_MS) {
+      return {
+        ...cached.data,
+        isProviderCache: true,
+        reportedFinancials: cached.data.reportedFinancials
+          ? { ...cached.data.reportedFinancials, isCachedSnapshot: true }
+          : undefined
+      };
     }
   }
 
-  const session = await getYahooCrumb();
   const yahooSymbol = YAHOO_SYMBOL_MAP[normalized] || normalized;
+  // Actuals are fetched independently from earningsTrend, which only contains
+  // estimates and may be unavailable for a covered equity.
+  const reportedFinancialsPromise = fetchYahooReportedFinancials(yahooSymbol, forceRefresh);
+  const session = await getYahooCrumbWithin();
   const modules = [
     'upgradeDowngradeHistory',
     'recommendationTrend',
@@ -3395,15 +3499,24 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
   try {
     if (session) {
       const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooSymbol)}?modules=${modules}&crumb=${encodeURIComponent(session.crumb)}`;
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Cookie': session.cookie
-        }
-      });
+      const quoteSummaryController = new AbortController();
+      const quoteSummaryTimeout = setTimeout(() => quoteSummaryController.abort(), 8000);
+      let response: Response;
+      let json: any;
+      try {
+        response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Cookie': session.cookie
+          },
+          signal: quoteSummaryController.signal
+        });
+        if (response.ok) json = await response.json();
+      } finally {
+        clearTimeout(quoteSummaryTimeout);
+      }
 
       if (response.ok) {
-        const json = await response.json();
         const summary = json?.quoteSummary?.result?.[0];
         if (summary) {
           const financial = summary.financialData || {};
@@ -3411,6 +3524,9 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
           const recommendation = summary.recommendationTrend?.trend || [];
           const history = summary.upgradeDowngradeHistory?.history || [];
           const earningsTrend = summary.earningsTrend?.trend || [];
+          // Price targets follow the quoted security currency. EPS and revenue
+          // estimates follow the issuer's reporting currency, which can differ
+          // for ADRs and local listings.
           const analystCurrency = normalizeYahooCurrency(priceModule?.currency || financial?.financialCurrency || 'USD');
 
           // Pick the latest recommendation period available.
@@ -3434,30 +3550,41 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
               )
             : undefined;
 
-          const future = earningsTrend.filter((t: any) => ['0q', '+1q', '+2q'].includes(t.period));
+          // Consensus values are valid only for Yahoo's current/forward quarterly
+          // periods. Do not fall back to an arbitrary historical earningsTrend row.
           const next = earningsTrend.find((t: any) => t.period === '0q')
             || earningsTrend.find((t: any) => t.period === '+1q')
-            || future[0]
-            || earningsTrend[0];
+            || earningsTrend.find((t: any) => t.period === '+2q');
+          // Reporting currency must be explicit, never inferred from a listing
+          // (e.g. an ADR's USD quote). Conflicting metric currencies stay N/A.
+          const epsCurrency = String(next?.earningsEstimate?.currency || financial?.financialCurrency || '').trim();
+          const revenueCurrency = String(next?.revenueEstimate?.currency || financial?.financialCurrency || '').trim();
+          const consensusCurrency = epsCurrency && revenueCurrency && epsCurrency !== revenueCurrency
+            ? undefined : (epsCurrency || revenueCurrency || undefined);
 
           const previous = earningsTrend.find((t: any) => t.period === '-1q');
           const yearAgo = next?.earningsEstimate?.yearAgoEps !== undefined ? next : undefined;
 
           const endDate = next?.endDate || next?.period;
-          const fallbackQuarter = VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized]?.quarter || 'Q4 2026';
-          const nextQuarterLabel = formatQuarterLabel(endDate, fallbackQuarter);
+          const rawConsensusPeriodEnd = typeof next?.endDate === 'string'
+            ? next.endDate
+            : rawNumber(next?.endDate);
+          const consensusPeriodEnd = typeof rawConsensusPeriodEnd === 'string'
+            ? rawConsensusPeriodEnd
+            : (typeof rawConsensusPeriodEnd === 'number' ? new Date(rawConsensusPeriodEnd * 1000).toISOString().slice(0, 10) : undefined);
+          const nextQuarterLabel = formatQuarterLabel(endDate, 'N/A');
 
-          const isNonEu = !isEuropeanFinancialTicker(normalized);
-          const needsUsdConversion = isNonEu && analystCurrency !== 'USD';
-          const fx = needsUsdConversion ? await getReliableFxRateToUsd(analystCurrency) : 1;
+          // Yahoo's earningsTrend figures remain in Yahoo's reported currency.
+          // A fixed FX fallback would make a displayed consensus look more precise
+          // than its source and can mismatch the associated price target currency.
+          const needsUsdConversion = false;
+          const fx = 1;
 
           const normalizeRevB = (val?: number | null): number | undefined => {
             if (val === undefined || val === null || isNaN(val)) return undefined;
-            const converted = val * fx;
-            if (Math.abs(converted) >= 1e6) {
-              return Number((converted / 1e9).toFixed(2));
-            }
-            return Number(converted.toFixed(2));
+            // Yahoo revenue estimates are absolute source-currency units,
+            // including values below one million and zero/negative values.
+            return val / 1e9;
           };
 
           const normalizeEps = (val?: number | null): number | undefined => {
@@ -3465,8 +3592,8 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
             return Number((val * fx).toFixed(2));
           };
 
-          const rawEpsAvg = normalizeEps(rawNumber(next?.earningsEstimate?.avg));
-          const rawRevAvg = normalizeRevB(rawNumber(next?.revenueEstimate?.avg));
+          const rawEpsAvg = epsCurrency === consensusCurrency ? normalizeEps(rawNumber(next?.earningsEstimate?.avg)) : undefined;
+          const rawRevAvg = revenueCurrency === consensusCurrency ? normalizeRevB(rawNumber(next?.revenueEstimate?.avg)) : undefined;
           const curSymbol = analystCurrency === 'EUR' ? '€' : '$';
           const nextEpsStr = rawEpsAvg !== undefined ? `${curSymbol}${rawEpsAvg.toFixed(2)}` : undefined;
           const nextRevStr = rawRevAvg !== undefined ? `${curSymbol}${rawRevAvg.toFixed(1)}B` : undefined;
@@ -3529,6 +3656,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
             ticker: normalized,
             quarterKey,
             nextQuarterLabel,
+            consensusPeriodEnd,
             snapshotDate: new Date().toISOString(),
             consensusRating,
             recommendationCounts: counts,
@@ -3536,6 +3664,7 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
             lowPriceTarget: rawNumber(financial.targetLowPrice),
             highPriceTarget: rawNumber(financial.targetHighPrice),
             targetCurrency: analystCurrency || undefined,
+            consensusCurrency: consensusCurrency || undefined,
             nextQuarterEps: rawEpsAvg,
             nextQuarterEpsLow: normalizeEps(rawNumber(next?.earningsEstimate?.low)),
             nextQuarterEpsHigh: normalizeEps(rawNumber(next?.earningsEstimate?.high)),
@@ -3552,6 +3681,8 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
             originalCurrency: analystCurrency,
             revenueIsAnalystConsensus: rawRevAvg !== undefined,
             isLiveFeed: true,
+            isProviderCache: false,
+            reportedFinancials: await reportedFinancialsPromise || undefined,
             conversionNote: needsUsdConversion
               ? `Yahoo Finance omzet- en EPS-consensus genormaliseerd van ${analystCurrency} naar USD; koersdoelen blijven in ${analystCurrency}.`
               : undefined,
@@ -3567,18 +3698,39 @@ async function fetchYahooQuarterlySnapshot(normalized: string, quarterKey: strin
     console.warn(`[Yahoo Quarterly Outlook] Error for ${normalized}:`, error);
   }
 
-  // If live fetch fails, check if we have an older cached snapshot
-  if (quarterlyAnalystCache[normalized]) {
-    return quarterlyAnalystCache[normalized].data;
+  const reportedFinancials = await reportedFinancialsPromise;
+  // A forced refresh can fail even while the previous verified consensus is
+  // still valid. Retain its original timestamp, and update actuals independently.
+  const fallback = quarterlyAnalystCache[normalized];
+  if (fallback && Date.now() - fallback.timestamp < QUARTERLY_ANALYST_CACHE_TTL_MS) {
+    return {
+      ...fallback.data,
+      isProviderCache: true,
+      reportedFinancials: reportedFinancials || (fallback.data.reportedFinancials
+        ? { ...fallback.data.reportedFinancials, isCachedSnapshot: true } : undefined)
+    };
+  }
+  if (reportedFinancials) {
+    return {
+      ticker: normalized,
+      quarterKey,
+      nextQuarterLabel: 'N/A',
+      snapshotDate: reportedFinancials.snapshotDate,
+      reportedFinancials,
+      isLiveFeed: true,
+      isProviderCache: reportedFinancials.isCachedSnapshot === true,
+      outlooks: []
+    };
   }
 
-  // No synthetic analyst fallback. The client may use its persisted Yahoo snapshot.
+  // No synthetic analyst fallback. The client may use a still-valid persisted Yahoo snapshot.
   return null;
 }
 
 app.get('/api/quarterly-analyst-outlook', async (req, res) => {
   try {
     const symbolsParam = req.query.symbols as string;
+    const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
       : [...DEFAULT_TECH_SYMBOLS, ...DEFAULT_SHOVEL_SYMBOLS, ...DEFAULT_AEROSPACE_DEFENSE_SYMBOLS, ...DEFAULT_US_FINANCIAL_SYMBOLS, ...DEFAULT_EU_FINANCIAL_SYMBOLS];
@@ -3587,11 +3739,13 @@ app.get('/api/quarterly-analyst-outlook', async (req, res) => {
     const data: Record<string, QuarterlyAnalystOutlookPayload> = {};
     // Keep Yahoo request concurrency modest so a quarterly refresh remains
     // reliable for the full international universe.
-    const batchSize = 6;
+    // Ten concurrent Yahoo calls keeps a full covered-universe refresh bounded
+    // while each individual quote/actual request has its own eight-second cap.
+    const batchSize = 10;
     for (let i = 0; i < requestedSymbols.length; i += batchSize) {
       const batch = requestedSymbols.slice(i, i + batchSize);
       const results = await Promise.all(
-        batch.map(async symbol => [symbol, await fetchYahooQuarterlySnapshot(symbol, quarterKey)] as const)
+        batch.map(async symbol => [symbol, await fetchYahooQuarterlySnapshot(symbol, quarterKey, forceRefresh)] as const)
       );
       for (const [symbol, value] of results) {
         if (value) data[symbol] = value;
@@ -6450,7 +6604,13 @@ app.post('/api/research/trigger', async (req, res) => {
 async function startServer() {
   const pool = getAgentPgPool();
   ensureResearchTables(pool).catch(() => {});
-  setupResearchScheduler(5);
+  // Keep the review-only local app responsive without firing metered research
+  // agent runs. Normal app startup remains unchanged.
+  if (process.env.MATRIX_REVIEW_MODE === '1') {
+    console.log('[Research Scheduler] Paused for local Consensus Matrix review.');
+  } else {
+    setupResearchScheduler(5);
+  }
 
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, 'dist')));

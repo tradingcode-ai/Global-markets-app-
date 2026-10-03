@@ -225,6 +225,7 @@ export interface QuarterlyResult {
   subSector?: ShovelSubSector | string;
   liveDateProvider?: string;
   isDateConfirmed?: boolean;
+  consensusMatrix?: boolean;
 }
 
 export interface LiveEarningsDate {
@@ -418,6 +419,17 @@ export interface QuarterlyConsensusSnapshot {
   lowPriceTarget?: number;
   highPriceTarget?: number;
   targetCurrency?: string;
+  consensusCurrency?: string;
+  consensusPeriodEnd?: string;
+  reportedFinancials?: {
+    fiscalDate: string;
+    eps?: number;
+    revenue?: number;
+    currency?: string;
+    snapshotDate: string;
+    isCachedSnapshot?: boolean;
+    provider?: string;
+  };
   nextQuarterEps?: number;
   nextQuarterEpsLow?: number;
   nextQuarterEpsHigh?: number;
@@ -439,6 +451,10 @@ export interface QuarterlyConsensusSnapshot {
   conversionNote?: string;
   revenueIsAnalystConsensus?: boolean;
   isLiveFeed?: boolean;
+  isProviderCache?: boolean;
+  isCachedSnapshot?: boolean;
+  snapshotSavedAt?: string;
+  isConsensusMatrixRow?: boolean;
 }
 
 export interface EarningsConsensusData {
@@ -463,4 +479,3 @@ export interface EarningsConsensusData {
     key_notes: string;
   }>;
 }
-

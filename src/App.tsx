@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   QuarterlyResult, 
   AlertPreferences, 
@@ -37,8 +37,10 @@ import { CorporateHeader } from './components/CorporateHeader';
 import { RealTimeTrackerBar } from './components/RealTimeTrackerBar';
 import { GlobalMarketsMap } from './components/GlobalMarketsMap';
 import { EarningsTableView } from './components/EarningsTableView';
+import { buildConsensusMatrixRows, CONSENSUS_MATRIX_SYMBOLS } from './utils/consensusMatrix';
 import { EarningsCalendarView } from './components/EarningsCalendarView';
 import { CompanyDetailModal } from './components/CompanyDetailModal';
+import { ConsensusCompanyModal } from './components/ConsensusCompanyModal';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { AlertSettingsModal } from './components/AlertSettingsModal';
 import { LivePushToast } from './components/LivePushToast';
@@ -68,8 +70,8 @@ export default function App() {
   const [results, setResults] = useState<QuarterlyResult[]>(() => {
     const combined = [...INITIAL_EARNINGS_RESULTS, ...FINANCIAL_RESULTS, ...AEROSPACE_DEFENSE_RESULTS];
     return combined.map(item => {
-      const base = HYPERSCALER_TICKERS.has(item.ticker) 
-        ? { ...item, sector: 'Hyperscalers & Neo Clouds' as any, subSector: item.subSector || (['GOOGL','MSFT','AMZN','ORCL','META'].includes(item.ticker) ? 'Hyperscalers' : 'Neo Clouds') } 
+      const base = HYPERSCALER_TICKERS.has(item.ticker)
+        ? { ...item, sector: 'Hyperscalers & Neo Clouds' as any, subSector: item.subSector || (['GOOGL','MSFT','AMZN','ORCL','META'].includes(item.ticker) ? 'Hyperscalers' : 'Neo Clouds') }
         : item;
       return {
         ...base,
@@ -80,6 +82,13 @@ export default function App() {
   });
   const [quarterlyOutlookLoaded, setQuarterlyOutlookLoaded] = useState(false);
   const [quarterlySnapshots, setQuarterlySnapshots] = useState<Record<string, any>>({});
+  const [isConsensusLoading, setIsConsensusLoading] = useState(false);
+  const consensusInFlight = useRef(false);
+  const consensusMounted = useRef(true);
+  const matrixResults = useMemo(
+    () => buildConsensusMatrixRows(results, quarterlySnapshots),
+    [results, quarterlySnapshots]
+  );
 
   const [notifications, setNotifications] = useState<PushNotificationItem[]>(() => {
     const stored = getStoredNotifications();
@@ -169,11 +178,13 @@ export default function App() {
     }));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadQuarterlySnapshot = async () => {
+  const loadQuarterlySnapshot = useCallback(async (forceRefresh = false) => {
+      if (consensusInFlight.current) return;
+      consensusInFlight.current = true;
+      setIsConsensusLoading(true);
       try {
         const allSymbols = Array.from(new Set([
+          ...CONSENSUS_MATRIX_SYMBOLS,
           ...INITIAL_EARNINGS_RESULTS.map(r => r.ticker),
           ...Object.keys(TECH_COMPANIES),
           ...Object.keys(SHOVEL_SELLERS_COMPANIES),
@@ -181,29 +192,45 @@ export default function App() {
           ...Object.keys(FINANCIAL_COMPANIES),
           ...Object.keys(AEROSPACE_DEFENSE_COMPANIES)
         ]));
-        const response = await fetchQuarterlyAnalystOutlook(allSymbols);
-        const stored = getStoredAnalystSnapshots();
-        const merged = mergeAnalystSnapshots(response?.data || {}, stored);
-        if (cancelled) return;
-        if (Object.keys(response?.data || {}).length > 0) {
+        const live: Record<string, any> = {};
+        const publish = () => {
+          if (!consensusMounted.current) return;
+          const merged = mergeAnalystSnapshots(live, getStoredAnalystSnapshots());
+          // Empty/expired responses also clear the last displayed snapshot.
           saveAnalystSnapshots(merged);
-        }
-        if (Object.keys(merged).length > 0) {
           applyQuarterlySnapshot(merged);
-          setQuarterlyOutlookLoaded(true);
-        }
+        };
+        publish();
+        // Publish each bounded batch as it arrives; one slow/missing listing
+        // must not hold back consensus for the rest of the universe.
+        const batches = Array.from({ length: Math.ceil(allSymbols.length / 20) }, (_, i) => allSymbols.slice(i * 20, (i + 1) * 20));
+        let nextBatch = 0;
+        await Promise.all(Array.from({ length: Math.min(2, batches.length) }, async () => {
+          while (consensusMounted.current && nextBatch < batches.length) {
+            const symbols = batches[nextBatch++];
+            const response = await fetchQuarterlyAnalystOutlook(symbols, forceRefresh);
+            Object.assign(live, response.data || {});
+            publish();
+          }
+        }));
+        if (consensusMounted.current) setQuarterlyOutlookLoaded(true);
       } catch (error) {
         console.warn('Live Yahoo analyst consensus could not be loaded:', error);
+      } finally {
+        consensusInFlight.current = false;
+        if (consensusMounted.current) setIsConsensusLoading(false);
       }
-    };
+  }, [applyQuarterlySnapshot]);
 
+  useEffect(() => {
+    consensusMounted.current = true;
     loadQuarterlySnapshot();
     const timer = window.setInterval(loadQuarterlySnapshot, ANALYST_REFRESH_MS);
     return () => {
-      cancelled = true;
+      consensusMounted.current = false;
       window.clearInterval(timer);
     };
-  }, [applyQuarterlySnapshot]);
+  }, [loadQuarterlySnapshot]);
 
   // Sync notification permission state
   useEffect(() => {
@@ -1066,7 +1093,11 @@ export default function App() {
         {/* Tab 2: Classic Consensus vs Actual Matrix */}
         {activeTab === 'matrix' && (
           <EarningsTableView
-            results={filteredResults}
+            // The consensus matrix owns its search and sector filters so that
+            // the shared desk header cannot hide covered companies.
+            results={matrixResults}
+            onRefresh={() => loadQuarterlySnapshot(true)}
+            isLoading={isConsensusLoading}
             subscribedTickers={preferences.subscribedTickers}
             quotes={quotes}
             recentTicks={recentTicks}
@@ -1155,7 +1186,14 @@ export default function App() {
       </footer>
 
       {/* Modals */}
-      {selectedResultForModal && (
+      {selectedResultForModal?.consensusMatrix && (
+        <ConsensusCompanyModal
+          result={matrixResults.find(row => row.ticker === selectedResultForModal.ticker) || selectedResultForModal}
+          quote={quotes[selectedResultForModal.ticker]}
+          onClose={() => setSelectedResultForModal(null)}
+        />
+      )}
+      {selectedResultForModal && !selectedResultForModal.consensusMatrix && (
         <CompanyDetailModal
           key={`company-modal-${selectedResultForModal.ticker}`}
           result={selectedResultForModal}
