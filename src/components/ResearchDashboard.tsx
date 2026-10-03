@@ -555,24 +555,24 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredEvents.map(evt => {
-                    const change = evt.changePercent ?? evt.change_percent ?? 0;
-                    const isNegative = change < 0;
+                    const isLiveSession = evt.sessionState === 'LIVE';
+                    const isClosedSession = evt.sessionState === 'CLOSED' || !!evt.sessionClosedAt;
+                    const displayedChange = isClosedSession
+                      ? evt.sessionCloseChangePercent
+                      : evt.changePercent ?? evt.change_percent;
+                    const isNegative = typeof displayedChange === 'number' && displayedChange < 0;
                     const reportId = evt.reportId || evt.report_id;
 
-                    // Check if event is from today's active session
                     const evtDate = evt.triggeredAt ? new Date(evt.triggeredAt) : null;
                     const today = new Date();
-                    const isTodaySession = evtDate
-                      ? evtDate.getUTCFullYear() === today.getUTCFullYear() &&
-                        evtDate.getUTCMonth() === today.getUTCMonth() &&
-                        evtDate.getUTCDate() === today.getUTCDate()
-                      : false;
+                    const localDay = (date: Date) => date.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+                    const isToday = evtDate ? localDay(evtDate) === localDay(today) : false;
 
                     const formattedTime = evtDate
-                      ? evtDate.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) + ' CET'
-                      : 'Vandaag';
+                      ? evtDate.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
+                      : 'Tijd onbekend';
                     const formattedDate = evtDate
-                      ? evtDate.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                      ? evtDate.toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', day: 'numeric', month: 'short' })
                       : '';
 
                     return (
@@ -591,16 +591,27 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
                         <td className="py-3.5 px-4 font-mono font-bold">
                           <div className="flex flex-col">
                             <span className={`text-sm ${isNegative ? 'text-rose-600' : 'text-emerald-600'}`}>
-                              {change > 0 ? `+${change}%` : `${change}%`}
+                              {typeof displayedChange === 'number'
+                                ? `${displayedChange > 0 ? '+' : ''}${displayedChange.toFixed(2)}%`
+                                : 'Slotbeweging onbekend'}
                             </span>
-                            {isTodaySession ? (
+                            {isClosedSession && evt.sessionClosePrice !== undefined ? (
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                Slotkoers {evt.sessionClosePrice.toLocaleString('nl-NL', { maximumFractionDigits: 4 })} · {evt.sessionCloseSource || 'Yahoo dagkoers'}
+                              </span>
+                            ) : isLiveSession ? (
                               <span className="text-[10px] text-cyan-700 font-mono flex items-center gap-1 font-semibold">
                                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-                                Live sessie
+                                Reguliere sessie · laatst gemeten
                               </span>
                             ) : (
                               <span className="text-[10px] text-slate-400 font-mono font-normal">
-                                Eindstand sessie
+                                {isClosedSession ? 'Slotkoers niet bevestigd' : 'Sessie niet geverifieerd'}
+                              </span>
+                            )}
+                            {evt.triggerPrice !== undefined && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                Triggerkoers {evt.triggerPrice.toLocaleString('nl-NL', { maximumFractionDigits: 4 })}
                               </span>
                             )}
                           </div>
@@ -611,27 +622,27 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
                         <td className="py-3.5 px-4 font-mono text-[11px]">
                           <div className="flex flex-col">
                             <span className="text-slate-700 font-medium">
-                              {isTodaySession ? `Vandaag, ${formattedTime}` : `${formattedDate}, ${formattedTime}`}
+                              {isToday ? `Vandaag, ${formattedTime}` : `${formattedDate}, ${formattedTime}`}
                             </span>
                             <span className="text-[10px] text-slate-400">
-                              {isTodaySession ? 'Huidige sessie' : 'Afgesloten sessie'}
+                              {isLiveSession ? 'Huidige sessie' : isClosedSession ? 'Afgesloten sessie' : 'Sessie onbekend'}
                             </span>
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          {isTodaySession && evt.status === 'ACTIVE' ? (
+                          {isLiveSession && evt.status === 'ACTIVE' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                               LIVE ACTIEF
                             </span>
-                          ) : isTodaySession && evt.status === 'RESEARCHING' ? (
+                          ) : isLiveSession && evt.status === 'RESEARCHING' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-cyan-50 text-cyan-800 border border-cyan-200 inline-flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
                               ONDERZOEKEN...
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-100 text-slate-600 border border-slate-200">
-                              {evt.status === 'COOLED_DOWN' ? 'SESSIE AFGEROND' : evt.status}
+                              {isClosedSession ? 'SESSIE AFGEROND' : evt.status === 'COOLED_DOWN' ? 'ONDERZOEK GESTOPT' : 'STATUS ONBEKEND'}
                             </span>
                           )}
                         </td>

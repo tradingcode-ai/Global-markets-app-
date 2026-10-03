@@ -15,6 +15,12 @@ export interface MarketQuoteInput {
   price: number;
   changePercent: number;
   previousClose?: number;
+  marketSymbol?: string;
+  quoteTime?: string;
+  sessionStart?: string;
+  sessionEnd?: string;
+  sessionDate?: string;
+  isVerifiedRegularSession?: boolean;
 }
 
 export type QuoteFetcher = (symbol: string) => Promise<MarketQuoteInput | null>;
@@ -39,7 +45,7 @@ export async function runMarketResearchMonitor(
   options?: { autoRunAgent?: boolean; waitForAgent?: boolean }
 ): Promise<MonitorRunResult> {
   // 0. Auto-clean any stale researching events older than 3 minutes
-  await cleanupStaleResearchEvents(3, pool);
+  await cleanupStaleResearchEvents(60, pool);
 
   const config = await getResearchConfig(pool);
   const autoRunAgent = options?.autoRunAgent !== false; // Default true
@@ -65,7 +71,8 @@ export async function runMarketResearchMonitor(
       continue;
     }
 
-    if (!quote || typeof quote.changePercent !== 'number' || isNaN(quote.changePercent)) {
+    if (!quote?.isVerifiedRegularSession || !Number.isFinite(quote.price) || quote.price <= 0 ||
+        !Number.isFinite(quote.changePercent) || !quote.previousClose || quote.previousClose <= 0) {
       continue; // Never evaluate on missing or fabricated quote data
     }
 
@@ -74,34 +81,29 @@ export async function runMarketResearchMonitor(
     const thresholdPct = asset.customThresholdPct ?? category?.thresholdPct ?? 5.0;
 
     const absChange = Math.abs(quote.changePercent);
+    // Refresh an open event even if the move has dropped below the threshold.
+    const todayDateStr = quote.sessionDate || quote.quoteTime?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const existingActiveEvent = await findActiveEventForTicker(
+      asset.symbol, config.dedupWindowHours || 24, pool, todayDateStr,
+      quote.sessionStart, quote.sessionEnd
+    );
+    if (existingActiveEvent) {
+      await updateResearchEvent(existingActiveEvent.id, {
+        changePercent: quote.changePercent,
+        currentPrice: quote.price,
+        lastCheckedAt: quote.quoteTime || new Date().toISOString()
+      }, pool);
+      if (absChange >= thresholdPct) {
+        triggeredCount++;
+        skippedDedupCount++;
+      }
+      continue;
+    }
     if (absChange >= thresholdPct) {
       triggeredCount++;
       console.log(`[Market Monitor] Trigger condition met for ${asset.symbol}: |${quote.changePercent.toFixed(2)}%| >= ${thresholdPct}%`);
 
-      // 3. Event Deduplication (Section 12 of specification: per session)
-      const todayDateStr = new Date().toISOString().slice(0, 10);
-      const existingActiveEvent = await findActiveEventForTicker(
-        asset.symbol,
-        config.dedupWindowHours || 24,
-        pool,
-        todayDateStr
-      );
-
-      if (existingActiveEvent) {
-        console.log(`[Market Monitor] Dedup: Active event already exists for ${asset.symbol} in current trading session (Event ID: ${existingActiveEvent.id}, Status: ${existingActiveEvent.status}). Skipping duplicate creation.`);
-        // Keep quote movement fresh on active event without spawning duplicate report
-        await updateResearchEvent(
-          existingActiveEvent.id,
-          {
-            changePercent: quote.changePercent,
-            currentPrice: quote.price,
-            lastCheckedAt: new Date().toISOString()
-          },
-          pool
-        );
-        skippedDedupCount++;
-        continue;
-      }
+      // 3. New qualifying ResearchEvent in this exchange session.
 
       // 4. Create NEW qualifying ResearchEvent
       const eventId = `evt_${Date.now()}_${asset.symbol.toLowerCase()}`;
@@ -116,14 +118,17 @@ export async function runMarketResearchMonitor(
         ticker: asset.symbol,
         assetName: asset.name,
         assetClass: asset.assetClass,
-        changePercent: Number(quote.changePercent.toFixed(2)),
-        currentPrice: Number(quote.price.toFixed(2)),
-        previousClose: Number(previousClose.toFixed(2)),
+        changePercent: Number(quote.changePercent.toFixed(4)),
+        currentPrice: Number(quote.price.toFixed(6)),
+        triggerPrice: quote.price,
+        triggerChangePercent: quote.changePercent,
+        marketSymbol: quote.marketSymbol,
+        previousClose: Number(previousClose.toFixed(6)),
         period: 'SESSION',
-        triggeredAt: new Date().toISOString(),
+        triggeredAt: quote.quoteTime || new Date().toISOString(),
         status: 'NEW',
         fingerprint,
-        lastCheckedAt: new Date().toISOString()
+        lastCheckedAt: quote.quoteTime || new Date().toISOString()
       };
 
       await saveResearchEvent(newEvent, pool);
@@ -202,27 +207,21 @@ export async function triggerManualResearch(
   };
 
   // Fetch real quote if available
-  let quote = await quoteFetcher(normalizedSymbol);
-  if (!quote && options?.customMovePct !== undefined) {
-    quote = {
-      symbol: normalizedSymbol,
-      price: 100.0,
-      changePercent: options.customMovePct,
-      previousClose: 100.0 / (1 + options.customMovePct / 100)
-    };
+  const quote = await quoteFetcher(normalizedSymbol);
+  if (!quote?.isVerifiedRegularSession || !Number.isFinite(quote.price) || quote.price <= 0 ||
+      !quote.previousClose || quote.previousClose <= 0) {
+    return { success: false, error: `Geen verifieerbare reguliere beurskoers voor ${normalizedSymbol}; trigger niet aangemaakt.` };
   }
-
-  if (!quote) {
-    return { success: false, error: `Could not fetch quote for ${normalizedSymbol}. Cannot fabricate market data.` };
+  if (options?.customMovePct !== undefined) {
+    return { success: false, error: 'Handmatige procentuele koersoverschrijving is uitgeschakeld; alleen geverifieerde beursdata wordt gebruikt.' };
   }
-
-  const changePercent = options?.customMovePct !== undefined ? options.customMovePct : quote.changePercent;
+  const changePercent = quote.changePercent;
 
   // Check deduplication unless forced
   if (!options?.force) {
-    const todayDateStr = new Date().toISOString().slice(0, 10);
-    const existing = await findActiveEventForTicker(normalizedSymbol, config.dedupWindowHours || 24, pool, todayDateStr);
-    if (existing && existing.status !== 'CLOSED' && existing.status !== 'COOLED_DOWN') {
+    const todayDateStr = quote.sessionDate || quote.quoteTime?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const existing = await findActiveEventForTicker(normalizedSymbol, config.dedupWindowHours || 24, pool, todayDateStr, quote.sessionStart, quote.sessionEnd);
+    if (existing) {
       return {
         success: false,
         error: `Active research event already in progress for ${normalizedSymbol} (ID: ${existing.id}).`
@@ -239,14 +238,17 @@ export async function triggerManualResearch(
     ticker: normalizedSymbol,
     assetName: assetConfig.name,
     assetClass: assetConfig.assetClass,
-    changePercent: Number(changePercent.toFixed(2)),
-    currentPrice: Number(quote.price.toFixed(2)),
-    previousClose: Number((quote.previousClose || quote.price).toFixed(2)),
+    changePercent: Number(changePercent.toFixed(4)),
+    currentPrice: Number(quote.price.toFixed(6)),
+    triggerPrice: quote.price,
+    triggerChangePercent: changePercent,
+    marketSymbol: quote.marketSymbol,
+    previousClose: Number((quote.previousClose || quote.price).toFixed(6)),
     period: 'SESSION',
-    triggeredAt: new Date().toISOString(),
+    triggeredAt: quote.quoteTime || new Date().toISOString(),
     status: 'NEW',
     fingerprint,
-    lastCheckedAt: new Date().toISOString()
+    lastCheckedAt: quote.quoteTime || new Date().toISOString()
   };
 
   await saveResearchEvent(event, pool);

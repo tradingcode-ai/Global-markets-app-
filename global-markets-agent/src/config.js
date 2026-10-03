@@ -11,7 +11,7 @@ function getValidDatabaseUrl() {
   if (envUrl && (envUrl.startsWith("postgres://") || envUrl.startsWith("postgresql://"))) {
     return envUrl;
   }
-  return "postgresql://thecreator:gqD02DGaFbThHMgJIsiIqrvTYP2zrp7G@dpg-daq83h97lnhs73c1f75g-a.frankfurt-postgres.render.com/markets_xp9o";
+  return null;
 }
 
 export const CONFIG = {
@@ -128,4 +128,3 @@ export function getFeedsForEdition(edition) {
     ...RSS_FEEDS_CONFIG.EUROPE
   ];
 }
-

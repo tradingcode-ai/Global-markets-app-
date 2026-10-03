@@ -170,6 +170,17 @@ export interface ResearchEvent {
   market_cap_usd_billions?: number;
   currentPrice?: number;
   current_price?: number;
+  /** Price/percent captured at the trigger, never overwritten by later scans. */
+  triggerPrice?: number;
+  triggerChangePercent?: number;
+  marketSymbol?: string;
+  /** Exchange regular-session close, not the report creation price. */
+  sessionClosePrice?: number;
+  sessionCloseChangePercent?: number;
+  sessionClosedAt?: string;
+  sessionCloseSource?: string;
+  /** Ephemeral verification from the quote provider; UNKNOWN is never shown as live. */
+  sessionState?: 'LIVE' | 'CLOSED' | 'UNKNOWN';
   previousClose?: number;
   previous_close?: number;
   period?: string;

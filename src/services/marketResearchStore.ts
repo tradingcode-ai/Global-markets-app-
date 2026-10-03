@@ -7,6 +7,7 @@ import {
   VisualEnrichmentPayload
 } from '../types/marketResearch';
 import { getDefaultResearchConfig } from './marketResearchConfig';
+import { getResearchSessionSnapshot } from './researchSessionQuotes';
 
 // In-Memory Fallback Store
 interface InMemoryResearchStore {
@@ -154,8 +155,9 @@ const SEED_REPORT_BRENT: ResearchReport = {
 };
 
 let inMemoryStore: InMemoryResearchStore = {
-  events: [SEED_EVENT_RTX, SEED_EVENT_BRENT],
-  reports: [SEED_REPORT_RTX, SEED_REPORT_BRENT],
+  // Demo content must never appear in actual research history or downtime fallback.
+  events: [],
+  reports: [],
   config: getDefaultResearchConfig(),
   lastRunAt: new Date(Date.now() - 10 * 60 * 1000).toISOString()
 };
@@ -239,6 +241,16 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
         ALTER TABLE market_research_reports
         ADD COLUMN IF NOT EXISTS visual_payload JSONB DEFAULT NULL;
       `);
+      await client.query(`
+        ALTER TABLE market_research_events
+          ADD COLUMN IF NOT EXISTS trigger_price NUMERIC(20,8),
+          ADD COLUMN IF NOT EXISTS trigger_change_percent NUMERIC(12,6),
+          ADD COLUMN IF NOT EXISTS market_symbol VARCHAR(32),
+          ADD COLUMN IF NOT EXISTS session_close_price NUMERIC(20,8),
+          ADD COLUMN IF NOT EXISTS session_close_change_percent NUMERIC(12,6),
+          ADD COLUMN IF NOT EXISTS session_closed_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS session_close_source VARCHAR(128);
+      `);
 
       tablesInitialized = true;
       console.log('[Market Research Store] PostgreSQL tables verified and active.');
@@ -293,7 +305,29 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
 // Events Management
 // ----------------------------------------------------------------------------
 
+function mapResearchEventRow(r: any): ResearchEvent {
+  return {
+    id: r.id, ticker: r.ticker, assetName: r.asset_name, assetClass: r.asset_class,
+    changePercent: Number(r.change_percent), currentPrice: Number(r.current_price),
+    previousClose: Number(r.previous_close), period: r.period,
+    triggeredAt: r.triggered_at instanceof Date ? r.triggered_at.toISOString() : r.triggered_at,
+    status: r.status, fingerprint: r.fingerprint, reportId: r.report_id || undefined,
+    catalystSummary: r.catalyst_summary || undefined,
+    lastCheckedAt: r.last_checked_at instanceof Date ? r.last_checked_at.toISOString() : r.last_checked_at,
+    cooldownUntil: r.cooldown_until instanceof Date ? r.cooldown_until.toISOString() : r.cooldown_until,
+    triggerPrice: r.trigger_price == null ? undefined : Number(r.trigger_price),
+    triggerChangePercent: r.trigger_change_percent == null ? undefined : Number(r.trigger_change_percent),
+    marketSymbol: r.market_symbol || undefined,
+    sessionClosePrice: r.session_close_price == null ? undefined : Number(r.session_close_price),
+    sessionCloseChangePercent: r.session_close_change_percent == null ? undefined : Number(r.session_close_change_percent),
+    sessionClosedAt: r.session_closed_at instanceof Date ? r.session_closed_at.toISOString() : r.session_closed_at || undefined,
+    sessionCloseSource: r.session_close_source || undefined,
+    sessionState: r.session_closed_at ? 'CLOSED' : verifiedSessionStates.get(r.id) || 'UNKNOWN'
+  };
+}
+
 export async function saveResearchEvent(event: ResearchEvent, pool: pg.Pool | null): Promise<ResearchEvent> {
+  cachedDashboard = null;
   // Update in-memory store
   const existingIdx = inMemoryStore.events.findIndex(e => e.id === event.id);
   if (existingIdx >= 0) {
@@ -309,8 +343,9 @@ export async function saveResearchEvent(event: ResearchEvent, pool: pg.Pool | nu
       await pool.query(
         `INSERT INTO market_research_events (
           id, ticker, asset_name, asset_class, change_percent, current_price, previous_close,
-          period, triggered_at, status, fingerprint, report_id, catalyst_summary, last_checked_at, cooldown_until
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          period, triggered_at, status, fingerprint, report_id, catalyst_summary, last_checked_at, cooldown_until,
+          trigger_price, trigger_change_percent, market_symbol
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (id) DO UPDATE SET
           change_percent = EXCLUDED.change_percent,
           current_price = EXCLUDED.current_price,
@@ -334,7 +369,10 @@ export async function saveResearchEvent(event: ResearchEvent, pool: pg.Pool | nu
           event.reportId || null,
           event.catalystSummary || null,
           event.lastCheckedAt || null,
-          event.cooldownUntil || null
+          event.cooldownUntil || null,
+          event.triggerPrice ?? null,
+          event.triggerChangePercent ?? null,
+          event.marketSymbol || null
         ]
       );
     } catch (err: any) {
@@ -350,9 +388,13 @@ export async function updateResearchEvent(
   updates: Partial<ResearchEvent>,
   pool: pg.Pool | null
 ): Promise<ResearchEvent | null> {
+  cachedDashboard = null;
   const existing = inMemoryStore.events.find(e => e.id === eventId);
   if (existing) {
     Object.assign(existing, updates);
+    if (existing.sessionClosedAt && ['NEW', 'RESEARCHING', 'ACTIVE'].includes(existing.status)) {
+      existing.status = 'COOLED_DOWN';
+    }
   }
 
   if (pool) {
@@ -363,7 +405,8 @@ export async function updateResearchEvent(
       let i = 1;
 
       if (updates.status !== undefined) {
-        fields.push(`status = $${i++}`);
+        fields.push(`status = CASE WHEN session_closed_at IS NOT NULL AND $${i} IN ('NEW', 'RESEARCHING', 'ACTIVE') THEN 'COOLED_DOWN' ELSE $${i} END`);
+        i++;
         values.push(updates.status);
       }
       if (updates.reportId !== undefined) {
@@ -389,6 +432,22 @@ export async function updateResearchEvent(
       if (updates.cooldownUntil !== undefined) {
         fields.push(`cooldown_until = $${i++}`);
         values.push(updates.cooldownUntil);
+      }
+      if (updates.sessionClosePrice !== undefined) {
+        fields.push(`session_close_price = $${i++}`);
+        values.push(updates.sessionClosePrice);
+      }
+      if (updates.sessionCloseChangePercent !== undefined) {
+        fields.push(`session_close_change_percent = $${i++}`);
+        values.push(updates.sessionCloseChangePercent);
+      }
+      if (updates.sessionClosedAt !== undefined) {
+        fields.push(`session_closed_at = $${i++}`);
+        values.push(updates.sessionClosedAt);
+      }
+      if (updates.sessionCloseSource !== undefined) {
+        fields.push(`session_close_source = $${i++}`);
+        values.push(updates.sessionCloseSource);
       }
 
       if (fields.length > 0) {
@@ -430,32 +489,17 @@ export async function getResearchEvents(
       params.push(limit);
 
       const res = await pool.query(sql, params);
-      if (res.rows && res.rows.length > 0) {
-        return res.rows.map(r => ({
-          id: r.id,
-          ticker: r.ticker,
-          assetName: r.asset_name,
-          assetClass: r.asset_class,
-          changePercent: Number(r.change_percent),
-          currentPrice: Number(r.current_price),
-          previousClose: Number(r.previous_close),
-          period: r.period,
-          triggeredAt: r.triggered_at instanceof Date ? r.triggered_at.toISOString() : r.triggered_at,
-          status: r.status,
-          fingerprint: r.fingerprint,
-          reportId: r.report_id || undefined,
-          catalystSummary: r.catalyst_summary || undefined,
-          lastCheckedAt: r.last_checked_at instanceof Date ? r.last_checked_at.toISOString() : r.last_checked_at,
-          cooldownUntil: r.cooldown_until instanceof Date ? r.cooldown_until.toISOString() : r.cooldown_until
-        }));
-      }
+      return res.rows.map(mapResearchEventRow);
     } catch (err: any) {
       console.warn('[Market Research Store] DB getEvents error, falling back to memory store:', err.message);
     }
   }
 
   // Memory fallback
-  let list = [...inMemoryStore.events];
+  let list = inMemoryStore.events.map(ev => ({
+    ...ev,
+    sessionState: ev.sessionClosedAt ? 'CLOSED' : verifiedSessionStates.get(ev.id) || 'UNKNOWN'
+  }));
   if (options?.status && options.status !== 'ALL') {
     list = list.filter(e => e.status === options.status);
   }
@@ -470,46 +514,31 @@ export async function findActiveEventForTicker(
   ticker: string,
   _dedupWindowHours = 24,
   pool?: pg.Pool | null,
-  sessionDateStr?: string
+  sessionDateStr?: string,
+  sessionStart?: string,
+  sessionEnd?: string
 ): Promise<ResearchEvent | null> {
   const todaySessionStr = sessionDateStr || new Date().toISOString().slice(0, 10);
 
   if (pool) {
     try {
       await ensureResearchTables(pool);
-      // Strictly session-scoped: only match events created or triggered in the CURRENT trading session
+      // Use the provider's exchange session boundaries, never a UTC calendar date.
       const res = await pool.query(
         `SELECT * FROM market_research_events 
          WHERE ticker = $1 
-           AND status IN ('NEW', 'RESEARCHING', 'ACTIVE') 
+           AND session_closed_at IS NULL
            AND (
              fingerprint LIKE $2
-             OR (triggered_at AT TIME ZONE 'UTC')::date = $3::date
-             OR (created_at AT TIME ZONE 'UTC')::date = $3::date
+             OR ($3::timestamptz IS NOT NULL AND $4::timestamptz IS NOT NULL
+                 AND triggered_at >= $3::timestamptz AND triggered_at < $4::timestamptz)
            )
          ORDER BY triggered_at DESC 
          LIMIT 1`,
-        [ticker.toUpperCase(), `${ticker.toUpperCase()}_%_${todaySessionStr}`, todaySessionStr]
+        [ticker.toUpperCase(), `${ticker.toUpperCase()}_%_${todaySessionStr}`, sessionStart || null, sessionEnd || null]
       );
       if (res.rows && res.rows.length > 0) {
-        const r = res.rows[0];
-        return {
-          id: r.id,
-          ticker: r.ticker,
-          assetName: r.asset_name,
-          assetClass: r.asset_class,
-          changePercent: Number(r.change_percent),
-          currentPrice: Number(r.current_price),
-          previousClose: Number(r.previous_close),
-          period: r.period,
-          triggeredAt: r.triggered_at instanceof Date ? r.triggered_at.toISOString() : r.triggered_at,
-          status: r.status,
-          fingerprint: r.fingerprint,
-          reportId: r.report_id || undefined,
-          catalystSummary: r.catalyst_summary || undefined,
-          lastCheckedAt: r.last_checked_at instanceof Date ? r.last_checked_at.toISOString() : r.last_checked_at,
-          cooldownUntil: r.cooldown_until instanceof Date ? r.cooldown_until.toISOString() : r.cooldown_until
-        };
+        return mapResearchEventRow(res.rows[0]);
       }
     } catch (err: any) {
       console.warn('[Market Research Store] DB findActiveEvent error:', err.message);
@@ -519,68 +548,66 @@ export async function findActiveEventForTicker(
   // Memory fallback - strictly scoped to todaySessionStr
   const found = inMemoryStore.events.find(
     e => e.ticker.toUpperCase() === ticker.toUpperCase() &&
-         ['NEW', 'RESEARCHING', 'ACTIVE'].includes(e.status) &&
-         (e.fingerprint?.includes(todaySessionStr) || e.triggeredAt?.startsWith(todaySessionStr))
+         !e.sessionClosedAt &&
+         (e.fingerprint?.includes(todaySessionStr) ||
+           (!!sessionStart && !!sessionEnd && !!e.triggeredAt && e.triggeredAt >= sessionStart && e.triggeredAt < sessionEnd))
   );
   return found || null;
 }
 
-/**
- * Automatically seal previous session events so their recorded price and change percent
- * remain locked permanently as the final stand (eindstand) of that session.
- */
-export async function closePreviousSessionEvents(pool?: pg.Pool | null): Promise<number> {
-  let closedCount = 0;
-  const todayDateStr = new Date().toISOString().slice(0, 10);
+const verifiedSessionStates = new Map<string, ResearchEvent['sessionState']>();
 
-  // 1. In-memory store
-  for (const ev of inMemoryStore.events) {
-    const evDateStr = ev.triggeredAt ? ev.triggeredAt.slice(0, 10) : '';
-    if (evDateStr && evDateStr < todayDateStr && ['NEW', 'RESEARCHING', 'ACTIVE'].includes(ev.status)) {
-      ev.status = 'COOLED_DOWN';
+/** Reconcile event sessions against exchange-local Yahoo daily bars. */
+export async function closePreviousSessionEvents(pool?: pg.Pool | null): Promise<number> {
+  const events = await getResearchEvents({ limit: 100 }, pool);
+  let closedCount = 0;
+  await Promise.all(events.slice(0, 40).map(async ev => {
+    if (ev.sessionClosedAt && ev.sessionClosePrice !== undefined) {
+      verifiedSessionStates.set(ev.id, 'CLOSED');
+      return;
+    }
+    const snapshot = await getResearchSessionSnapshot(ev);
+    const oldEnoughToBeClosed = !!ev.triggeredAt &&
+      Date.now() - Date.parse(ev.triggeredAt) > 36 * 60 * 60_000;
+    const state = snapshot.state === 'UNKNOWN' && oldEnoughToBeClosed ? 'CLOSED' : snapshot.state;
+    verifiedSessionStates.set(ev.id, state);
+    if (state !== 'CLOSED') return;
+
+    const updates: Partial<ResearchEvent> = {};
+    if (!ev.sessionClosedAt) updates.sessionClosedAt = new Date().toISOString();
+    if (['NEW', 'RESEARCHING', 'ACTIVE'].includes(ev.status)) {
+      updates.status = 'COOLED_DOWN';
       closedCount++;
     }
-  }
-
-  // 2. PostgreSQL
-  if (pool) {
-    try {
-      await ensureResearchTables(pool);
-      const res = await pool.query(`
-        UPDATE market_research_events 
-        SET status = 'COOLED_DOWN'
-        WHERE status IN ('NEW', 'RESEARCHING', 'ACTIVE') 
-          AND (triggered_at AT TIME ZONE 'UTC')::date < (NOW() AT TIME ZONE 'UTC')::date
-      `);
-      if (res.rowCount && res.rowCount > 0) {
-        closedCount += res.rowCount;
-      }
-    } catch (err: any) {
-      console.warn('[Market Research Store] closePreviousSessionEvents DB warning:', err.message);
+    if (snapshot.closePrice !== undefined && ev.sessionClosePrice === undefined) {
+      updates.sessionClosePrice = snapshot.closePrice;
+      updates.sessionCloseChangePercent = snapshot.closeChangePercent;
+      updates.sessionCloseSource = snapshot.closeSource;
     }
-  }
-
+    if (Object.keys(updates).length) await updateResearchEvent(ev.id, updates, pool || null);
+  }));
   return closedCount;
 }
 
 /**
- * Automatically clean up and expire events that were stuck in 'RESEARCHING' or 'NEW'
- * for longer than maxAgeMinutes (default 3 minutes).
- * Also permanently seals any older events from previous trading sessions.
+ * Recover genuinely stale research; do not time out an active AI run after 3 minutes.
  */
 export async function cleanupStaleResearchEvents(
-  maxAgeMinutes = 3,
+  maxAgeMinutes = 60,
   pool?: pg.Pool | null
 ): Promise<number> {
   // Seal previous session events first
-  await closePreviousSessionEvents(pool).catch(() => {});
+  await closePreviousSessionEvents(pool).catch(err => {
+    console.warn('[Market Research Store] Session reconciliation warning:', err?.message || err);
+  });
 
   const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString();
   let cleanedCount = 0;
 
   // 1. Clean in-memory store
   for (const ev of inMemoryStore.events) {
-    if ((ev.status === 'RESEARCHING' || ev.status === 'NEW') && ev.triggeredAt < cutoffTime) {
+    if ((ev.status === 'RESEARCHING' || ev.status === 'NEW') &&
+        (ev.lastCheckedAt || ev.triggeredAt) < cutoffTime) {
       ev.status = 'COOLED_DOWN';
       ev.catalystSummary = ev.catalystSummary || 'Onderzoek afgerond / timeout hersteld';
       cleanedCount++;
@@ -596,7 +623,7 @@ export async function cleanupStaleResearchEvents(
          SET status = 'COOLED_DOWN',
              catalyst_summary = COALESCE(catalyst_summary, 'Onderzoek afgerond / timeout hersteld')
          WHERE status IN ('NEW', 'RESEARCHING') 
-           AND triggered_at < $1`,
+           AND COALESCE(last_checked_at, triggered_at) < $1`,
         [cutoffTime]
       );
       if (res.rowCount && res.rowCount > 0) {
@@ -839,8 +866,8 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
     return cachedDashboard.data;
   }
 
-  // Auto-clean stale events in the background
-  cleanupStaleResearchEvents(3, pool).catch(() => {});
+  // Reconcile before reading, so a completed session is not returned as live.
+  await cleanupStaleResearchEvents(60, pool);
 
   let events: ResearchEvent[] = [];
   let reports: ResearchReport[] = [];
@@ -888,7 +915,11 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
     reports = inMemoryStore.reports.slice(0, 20);
   }
 
-  const activeEvents = events.filter(e => ['NEW', 'RESEARCHING', 'ACTIVE'].includes(e.status));
+  events = events.map(ev => ({
+    ...ev,
+    sessionState: ev.sessionClosedAt ? 'CLOSED' : verifiedSessionStates.get(ev.id) || 'UNKNOWN'
+  }));
+  const activeEvents = events.filter(e => ['NEW', 'RESEARCHING', 'ACTIVE'].includes(e.status) && e.sessionState === 'LIVE');
   const monitoredAssets = Object.values(config.assets).filter(a => a.enabled);
 
   const data: ResearchDashboardData = {

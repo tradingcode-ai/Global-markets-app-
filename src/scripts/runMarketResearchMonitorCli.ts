@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import pg from 'pg';
 import { runMarketResearchMonitor, QuoteFetcher } from '../services/marketResearchMonitor';
 import { ensureResearchTables } from '../services/marketResearchStore';
+import { fetchVerifiedResearchQuote } from '../services/researchSessionQuotes';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -13,11 +14,12 @@ function getDatabaseConnectionString(): string {
   if (envUrl && (envUrl.startsWith('postgres://') || envUrl.startsWith('postgresql://'))) {
     return envUrl;
   }
-  return 'postgresql://thecreator:gqD02DGaFbThHMgJIsiIqrvTYP2zrp7G@dpg-daq83h97lnhs73c1f75g-a.frankfurt-postgres.render.com/markets_xp9o';
+  return '';
 }
 
 function getDbPool(): pg.Pool | null {
   const connStr = getDatabaseConnectionString();
+  if (!connStr) return null;
   try {
     return new Pool({
       connectionString: connStr,
@@ -33,54 +35,7 @@ function getDbPool(): pg.Pool | null {
 
 // Lightweight resilient Yahoo Finance quote fetcher for the CLI runner
 const cliQuoteFetcher: QuoteFetcher = async (symbol: string) => {
-  try {
-    let yahooSymbol = symbol;
-    if (symbol === 'BRENT') yahooSymbol = 'BZ=F';
-    else if (symbol === 'WTI') yahooSymbol = 'CL=F';
-    else if (symbol === 'GOLD') yahooSymbol = 'GC=F';
-    else if (symbol === 'SILVER') yahooSymbol = 'SI=F';
-    else if (symbol === 'COPPER') yahooSymbol = 'HG=F';
-    else if (symbol === 'NG') yahooSymbol = 'NG=F';
-    else if (symbol === 'US2Y') yahooSymbol = '^2YY';
-    else if (symbol === 'US10Y') yahooSymbol = '^TNX';
-    else if (symbol === 'US30Y') yahooSymbol = '^TYX';
-
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=2d`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    if (!res.ok) return null;
-    const data: any = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta || typeof meta.regularMarketPrice !== 'number') return null;
-
-    const price = Number(meta.regularMarketPrice.toFixed(2));
-    
-    // Explicitly use the session change percent from Yahoo Finance
-    const changePercent = typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)
-      ? Number(meta.regularMarketChangePercent.toFixed(2))
-      : (typeof meta.regularMarketPreviousClose === 'number' && meta.regularMarketPreviousClose !== 0
-          ? Number((((price - meta.regularMarketPreviousClose) / meta.regularMarketPreviousClose) * 100).toFixed(2))
-          : (typeof meta.previousClose === 'number' && meta.previousClose !== 0
-              ? Number((((price - meta.previousClose) / meta.previousClose) * 100).toFixed(2))
-              : 0));
-
-    const previousClose = meta.regularMarketPreviousClose || meta.previousClose || (
-      changePercent !== 0 && changePercent !== -100 ? Number((price / (1 + changePercent / 100)).toFixed(2)) : price
-    );
-
-    return {
-      symbol,
-      price,
-      changePercent,
-      previousClose
-    };
-  } catch {
-    return null;
-  }
+  return fetchVerifiedResearchQuote(symbol);
 };
 
 async function main() {
@@ -90,9 +45,8 @@ async function main() {
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
   const pool = getDbPool();
-  if (pool) {
-    await ensureResearchTables(pool).catch(() => {});
-  }
+  if (!pool) throw new Error('DATABASE_URL ontbreekt; monitor start niet zonder duurzame opslag.');
+  await ensureResearchTables(pool);
 
   console.log('[CLI] Running deterministic market monitor over enabled assets...');
   const result = await runMarketResearchMonitor(cliQuoteFetcher, pool, { autoRunAgent: true, waitForAgent: true });

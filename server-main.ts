@@ -20,13 +20,15 @@ import {
   getResearchReport,
   getResearchConfig as getStoredResearchConfig,
   saveResearchConfig,
-  ensureResearchTables
+  ensureResearchTables,
+  closePreviousSessionEvents
 } from './src/services/marketResearchStore';
 import {
   runMarketResearchMonitor,
   triggerManualResearch,
   QuoteFetcher
 } from './src/services/marketResearchMonitor';
+import { fetchVerifiedResearchQuote } from './src/services/researchSessionQuotes';
 const { Pool } = pg;
 
 dotenv.config({ path: '.env.local' });
@@ -5197,7 +5199,7 @@ function getDatabaseConnectionString(): string | null {
   if (envUrl && (envUrl.startsWith('postgres://') || envUrl.startsWith('postgresql://'))) {
     return envUrl;
   }
-  return 'postgresql://thecreator:gqD02DGaFbThHMgJIsiIqrvTYP2zrp7G@dpg-daq83h97lnhs73c1f75g-a.frankfurt-postgres.render.com/markets_xp9o';
+  return null;
 }
 
 let agentPgPool: pg.Pool | null = null;
@@ -6433,21 +6435,11 @@ app.get('/api/system/health', async (_req, res) => {
 // ============================================================================
 
 const researchQuoteFetcher: QuoteFetcher = async (symbol: string) => {
-  try {
-    const q = await fetchQuote(symbol);
-    if (!q || typeof q.price !== 'number') return null;
-    return {
-      symbol: q.symbol,
-      price: q.price,
-      changePercent: q.changePercent,
-      previousClose: q.previousClose
-    };
-  } catch {
-    return null;
-  }
+  return fetchVerifiedResearchQuote(symbol);
 };
 
 let researchSchedulerTimer: NodeJS.Timeout | null = null;
+let researchSchedulerRunning = false;
 
 function setupResearchScheduler(intervalMin = 5) {
   if (researchSchedulerTimer) {
@@ -6457,12 +6449,19 @@ function setupResearchScheduler(intervalMin = 5) {
   const ms = safeMin * 60 * 1000;
   console.log(`[Research Scheduler] Market Monitor scheduled to wake every ${safeMin} minutes.`);
   researchSchedulerTimer = setInterval(async () => {
+    if (researchSchedulerRunning) {
+      console.warn('[Research Scheduler] Previous scan still running; skipping overlapping cycle.');
+      return;
+    }
+    researchSchedulerRunning = true;
     try {
       console.log(`[Research Scheduler] Periodic wake: scanning enabled assets for threshold triggers...`);
       const pool = getAgentPgPool();
       await runMarketResearchMonitor(researchQuoteFetcher, pool, { autoRunAgent: true });
     } catch (err: any) {
       console.warn('[Research Scheduler] Error during periodic market monitor cycle:', err.message);
+    } finally {
+      researchSchedulerRunning = false;
     }
   }, ms);
 }
@@ -6484,6 +6483,7 @@ app.get('/api/research/events', async (req, res) => {
   try {
     const { status, ticker, limit } = req.query as Record<string, string>;
     const pool = getAgentPgPool();
+    await closePreviousSessionEvents(pool);
     const events = await getResearchEvents({
       status,
       ticker,
