@@ -11,9 +11,13 @@ Read AGENTS.md, docs/architecture/3d-logo-loading.md, the Main Agent's approved 
 ## Independence rules
 
 - Do not accept the Builder's report as proof.
-- Do not search for or select replacement logo assets.
+- You may use internet and source-inspection tools to verify provenance, licensing context, and suitability. Do not silently select or substitute an implementation asset; report any concern or candidate to the Main Agent.
 - Do not modify source files, merge, or publish.
 - If a defect is found, report the exact file, behavior, reproduction, and expected result to the Main Agent and Builder.
+
+## Tool and skill access
+
+All relevant tools and skills may be used for independent verification, including GitHub read access, internet/source inspection, local commands, browser/visual QA, SVG/image/diff inspection, and build/test tooling. Do not use that access to modify source, merge, or publish.
 
 ## Verification
 

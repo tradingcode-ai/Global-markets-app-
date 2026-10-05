@@ -108,13 +108,13 @@ The main agent must:
 
 The main agent must never infer the implementation from the old agents/ files. The code is authoritative.
 
-### Phase B — Main-only internet research and asset approval
+### Phase B — Main-led internet research and asset approval
 
-Only the main agent may search the internet and select replacement logo assets.
+The Main Agent leads asset research and approval. For each affected logo, prefer a reliable first-party or clearly licensed vector source. Inspect the exact asset, not only a search-result thumbnail. Reject assets with backgrounds, watermarks, rectangular frames, incorrect wordmarks, wrong variants, or contours that cannot become the actual logo geometry.
 
-For each affected logo, prefer a reliable first-party or clearly licensed vector source. Inspect the exact asset, not only a search-result thumbnail. Reject assets with backgrounds, watermarks, rectangular frames, incorrect wordmarks, wrong variants, or contours that cannot become the actual logo geometry.
+The Builder may search for alternatives when an approved asset is unusable, unavailable, malformed, or unsuitable for the rendering stack. The Builder must record the exact source URL, file type, version, shape suitability, licensing uncertainty, and reason the original asset failed. The Builder must submit the candidate for Main Agent audit and approval before integrating it.
 
-Record for each approved asset:
+Record for each approved or proposed asset:
 
 - ticker and brand;
 - exact source URL;
@@ -122,9 +122,10 @@ Record for each approved asset:
 - whether it is vector and suitable for SVGLoader or needs a documented conversion;
 - how holes and separate paths are represented;
 - color and proportion notes;
-- usage or licensing uncertainty.
+- usage or licensing uncertainty;
+- whether the source was selected by Main or proposed by Builder.
 
-Do not fabricate or redraw a brand logo. Do not present third-party or fallback sources as official without evidence. The Builder and Tester do not search for substitute assets.
+Do not fabricate or redraw a brand logo. Do not present third-party or fallback sources as official without evidence. The Tester may use all tools to inspect and verify sources, but does not silently substitute implementation assets.
 
 ### Phase C — Builder brief
 
@@ -141,6 +142,7 @@ The Builder must:
 - respect prefers-reduced-motion;
 - use a recognizable static fallback when real geometry fails;
 - avoid changing static StockLogo surfaces, financial logic, news logic, or dependencies unless explicitly approved;
+- if an approved asset is unusable, pause implementation, search for alternatives, record candidates and evidence, and submit them to the Main Agent for audit and approval before use;
 - report changed files, asset choices, tests, and limitations.
 
 ### Phase D — Tester brief
@@ -182,7 +184,7 @@ The main agent must:
 
 Before delegation, verify exact availability:
 
-- Builder: Opus 5.5, medium;
+- Builder: Flash 3.8, high;
 - Tester: Flash 3.8, high.
 
 If either exact model or setting is unavailable, stop before delegation and report the blocker. Do not silently substitute another model or claim that the requested model was used.
@@ -215,3 +217,8 @@ The repository stores the prompt templates used by the BTA workflow:
 - agents/prompts/tester.md
 
 The Main Agent must inject the main prompt and explicitly pass the Builder and Tester role prompts at delegation time. These files describe behavior and boundaries; they do not themselves grant tools, skills, repository permissions, or model access.
+
+
+## 6. Tool and skill access
+
+All three roles may use all relevant tools and skills available in the execution environment, including GitHub, internet research, local execution, browser/visual inspection, asset inspection, and build/test tooling. The prompts define responsibilities and approval boundaries, not an artificial tool restriction. Every agent must document tool use and remain within the protected repository scope.

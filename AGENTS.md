@@ -47,11 +47,11 @@ The main agent is the orchestrator and final independent auditor.
 
 Model gate for the logo task:
 
-- Builder: Opus 5.5, medium.
+- Builder: Flash 3.8, high.
 - Tester: Flash 3.8, high.
 - The orchestrator must verify that these exact model identifiers and settings are available before delegation. If they are unavailable, do not silently substitute another model and do not claim that the requested models were used; report the blocker and request an approved replacement.
 
-Only the main agent performs internet research and selects replacement logo assets. The Builder and Tester may inspect approved assets and the repository, but they do not choose new external sources.
+The Main Agent leads asset research and approval. The Builder may use internet research and other tools to find alternatives when an approved asset is unusable, unavailable, malformed, or unsuitable, but must document the exact source, format, licensing uncertainty, and reason for replacement. The Main Agent audits and approves any replacement before it is integrated. The Tester may use all available tools, including source inspection, to verify provenance and suitability, but may not silently substitute assets.
 
 ## Verification expectations
 
@@ -85,3 +85,8 @@ The following files are templates to inject explicitly at runtime:
 - agents/prompts/tester.md — Tester role prompt
 
 These files do not grant permissions or tool access by themselves. The runner must explicitly provide the tools, skills, model, branch, and task context assigned to each role. Keep the runtime prompt separate from durable repository guardrails.
+
+
+## Tools and skills
+
+All agents may use all relevant tools and skills available in the execution environment, including GitHub, internet and source inspection, local file and command execution, browser or visual QA, SVG/image/diff inspection, and build/test tooling. Tool access must still be exposed explicitly by the runner, and tool availability does not override role boundaries, scope protection, or the requirement to document actions.

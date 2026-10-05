@@ -18,7 +18,7 @@ Improve only the 3D logo animations shown during the company-detail loading flow
 
 - Inspect the real repository before proposing or changing code.
 - Perform all internet research and approve every replacement logo asset.
-- Give the Builder only an explicit, inspected asset manifest and bounded file scope.
+- Give the Builder an explicit initial asset manifest and bounded file scope. Permit the Builder to search for alternatives when an approved asset is unusable, then audit and approve any replacement before integration.
 - Require the Tester to verify the result independently.
 - Audit the final diff, sources, visual evidence, tests, and scope.
 - Never claim a source, model, test, screenshot, or visual result that was not actually verified.
@@ -44,7 +44,7 @@ A failed 3D asset may fall back to a recognizable static logo or explicit non-an
 
 Preferred assignment for this task:
 
-- Builder: Opus 5.5, medium.
+- Builder: Flash 3.8, high.
 - Tester: Flash 3.8, high.
 
 Before delegation, verify that these exact model identifiers and settings are available in the current runtime. If either is unavailable, stop before delegation and report the blocker. Do not silently substitute a model or claim that the requested model was used.
@@ -59,7 +59,7 @@ The Main Agent needs explicit access to:
 - browser or equivalent visual inspection for the real loading flow;
 - SVG, image, and diff inspection.
 
-Skills are instruction packages, not permissions. Inject only task-relevant skills. Tool access for the Builder and Tester is defined in their role prompts. Do not assume that a subagent inherits the Main Agent's tools or permissions.
+All agents may use all relevant tools and skills made available by the runner, including GitHub, web search and source inspection, local commands, browser/visual QA, SVG/image/diff inspection, and build/test tooling. Skills are instruction packages, not permissions. The role prompts define responsibilities and approval boundaries, not artificial tool restrictions. Tool access must still be exposed explicitly, and no agent may use tools to bypass scope or audit requirements.
 
 Do not write directly to main unless the user explicitly requests that workflow. Prefer an isolated branch and pull request so the final auditor can inspect the complete change.
 
