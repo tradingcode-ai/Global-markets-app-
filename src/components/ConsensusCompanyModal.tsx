@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { LiveQuote, QuarterlyResult } from '../types';
 import { formatMatrixNumber, getMatrixReportedFinancials, isFreshYahooSnapshot } from '../utils/consensusMatrix';
+import { AnimatePresence } from 'motion/react';
+import { StockLogoLoader } from './StockLogoLoader';
 
 export function ConsensusCompanyModal({ result, quote, onClose }: {
   result: QuarterlyResult; quote?: LiveQuote | null; onClose: () => void;
@@ -28,6 +30,10 @@ export function ConsensusCompanyModal({ result, quote, onClose }: {
     ['Last reported EPS', formatMatrixNumber(actual?.eps, actual?.currency), reportedPeriod],
     ['Last reported revenue', formatMatrixNumber(actual?.revenue, actual?.currency, true), reportedPeriod]
   ];
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    setIsLoading(true);
+  }, [result?.ticker]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="consensus-company-title" onClick={event => event.stopPropagation()} onKeyDown={event => {
@@ -39,7 +45,15 @@ export function ConsensusCompanyModal({ result, quote, onClose }: {
           if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
         }
-      }} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      }} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl relative">
+        <AnimatePresence>
+          {isLoading && result?.ticker && (
+            <StockLogoLoader
+              ticker={result.ticker}
+              onComplete={() => setIsLoading(false)}
+            />
+          )}
+        </AnimatePresence>
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4"><div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Yahoo Finance · Equity consensus</p>
           <h2 id="consensus-company-title" className="mt-1 text-lg font-bold text-slate-900">{result.ticker} · {result.companyName}</h2>

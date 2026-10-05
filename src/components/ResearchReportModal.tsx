@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { ResearchReport, ResearchSource } from '../types/marketResearch';
 import { StockLogo } from './StockLogo';
+import { StockLogoLoader } from './StockLogoLoader';
+import { AnimatePresence } from 'motion/react';
 import { ReportMacroChart } from './ReportMacroChart';
 import { 
   X, 
@@ -32,6 +34,11 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
   onClose
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+  }, [report?.ticker, report?.id]);
 
   // Close on ESC key
   useEffect(() => {
@@ -149,8 +156,16 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
       <div 
         id="research-report-modal"
-        className="bg-white border border-slate-300 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto"
+        className="bg-white border border-slate-300 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto relative"
       >
+        <AnimatePresence>
+          {isLoading && (report.ticker || report.asset) && (
+            <StockLogoLoader
+              ticker={report.ticker || report.asset || ''}
+              onComplete={() => setIsLoading(false)}
+            />
+          )}
+        </AnimatePresence>
         {/* Institutional Document Header */}
         <div
           className="relative shrink-0 overflow-hidden border-b border-slate-800 bg-[#051c2c] text-white"

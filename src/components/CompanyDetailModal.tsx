@@ -29,6 +29,8 @@ import { getStoredAnalystSnapshots } from '../services/marketDataService';
 import { getMarketSessionInfo } from '../utils/marketSession';
 import { StockLogo } from './StockLogo';
 import { FinancialHistoryChart } from './FinancialHistoryChart';
+import { AnimatePresence } from 'motion/react';
+import { StockLogoLoader } from './StockLogoLoader';
 
 interface CompanyDetailModalProps {
   result: QuarterlyResult | null;
@@ -50,6 +52,11 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [liveConsensus, setLiveConsensus] = useState<any | null>(null);
   const [liveOutlooks, setLiveOutlooks] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+  }, [result?.ticker]);
 
   useEffect(() => {
     let cancelled = false;
@@ -274,7 +281,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="company-detail-modal-title"
-        className={`bg-white flex flex-col shadow-2xl overflow-hidden transform transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+        className={`bg-white flex flex-col shadow-2xl overflow-hidden transform transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform relative ${
           isFullScreen
             ? 'w-full h-full max-w-none max-h-none rounded-none border-0'
             : 'border border-slate-200 rounded-2xl max-w-3xl w-full max-h-[92vh]'
@@ -284,6 +291,14 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             : 'opacity-0 translate-y-4 scale-[0.985]'
         }`}
       >
+        <AnimatePresence>
+          {isLoading && result?.ticker && (
+            <StockLogoLoader
+              ticker={result.ticker}
+              onComplete={() => setIsLoading(false)}
+            />
+          )}
+        </AnimatePresence>
         {/* Soft Header */}
         <div 
           className="border-b border-slate-100 bg-slate-50/70 select-none w-full"

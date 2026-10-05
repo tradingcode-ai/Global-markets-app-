@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 
 interface StockLogoProps {
   ticker: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl';
   className?: string;
 }
 
@@ -14,7 +14,7 @@ interface StockLogoProps {
  * Simple Icons provides the vector SVG brand marks; for companies that aren't in that
  * catalogue we fall back to the official high-resolution favicon of the company's own website.
  */
-const BRAND_ICONS: Record<string, string> = {
+export const BRAND_ICONS: Record<string, string> = {
   NVDA: 'nvidia',
   MSFT: 'microsoft',
   AAPL: 'apple',
@@ -85,7 +85,7 @@ const BRAND_ICONS: Record<string, string> = {
   '7974': 'nintendo',
 };
 
-const OFFICIAL_DOMAINS: Record<string, string> = {
+export const OFFICIAL_DOMAINS: Record<string, string> = {
   NVDA: 'nvidia.com',
   MSFT: 'microsoft.com',
   AAPL: 'apple.com',
@@ -218,7 +218,7 @@ const OFFICIAL_DOMAINS: Record<string, string> = {
 // brand icon is misleading, or where Simple Icons does not currently have the
 // corporate logo. The favicon is fetched from the official domain, not a
 // third-party logo directory.
-const OFFICIAL_FAVICON_FIRST = new Set([
+export const OFFICIAL_FAVICON_FIRST = new Set([
   // GOOGL intentionally uses the Google brand logo requested for the app.
   'JPM',     // J.P. Morgan / JPMorgan Chase corporate mark, not Chase retail
   'CRWV',    // CoreWeave is not in Simple Icons
@@ -418,9 +418,13 @@ const SIZE_MAP = {
   sm: 'w-5 h-5',
   md: 'w-6 h-6',
   lg: 'w-8 h-8',
+  xl: 'w-12 h-12',
+  '2xl': 'w-16 h-16',
+  '3xl': 'w-20 h-20',
+  '4xl': 'w-24 h-24',
 } as const;
 
-const SIMPLE_ICONS_VERSION = '16.32.0';
+export const SIMPLE_ICONS_VERSION = '16.32.0';
 
 export const StockLogo: React.FC<StockLogoProps> = ({
   ticker,
@@ -434,12 +438,12 @@ export const StockLogo: React.FC<StockLogoProps> = ({
   const customRenderer = CUSTOM_INLINE_LOGOS[cleanTicker] || CUSTOM_INLINE_LOGOS[baseTicker];
 
   const [iconFailed, setIconFailed] = useState(false);
-  const [faviconFailed, setFaviconFailed] = useState(false);
+  const [rasterAttempt, setRasterAttempt] = useState(0);
 
   // Reset failure state when ticker prop changes
   useEffect(() => {
     setIconFailed(false);
-    setFaviconFailed(false);
+    setRasterAttempt(0);
   }, [cleanTicker]);
 
   const iconUrl = useMemo(() => {
@@ -449,12 +453,15 @@ export const StockLogo: React.FC<StockLogoProps> = ({
       : null;
   }, [cleanTicker]);
 
+  const domain = OFFICIAL_DOMAINS[cleanTicker];
   const faviconUrl = useMemo(() => {
-    const domain = OFFICIAL_DOMAINS[cleanTicker];
-    return domain
-      ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
-      : null;
-  }, [cleanTicker]);
+    if (!domain) return null;
+    if (rasterAttempt === 0) return `https://logo.clearbit.com/${domain}`;
+    if (rasterAttempt === 1) return `https://icon.horse/icon/${domain}`;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  }, [domain, rasterAttempt]);
+  
+  const faviconFailed = rasterAttempt > 2;
 
   // If a custom vector logo is defined, render immediately without network dependencies
   if (customRenderer) {
@@ -484,18 +491,25 @@ export const StockLogo: React.FC<StockLogoProps> = ({
 
   const handleImageError = () => {
     if (preferOfficial) {
-      if (faviconUrl && !faviconFailed) setFaviconFailed(true);
+      if (faviconUrl && !faviconFailed) setRasterAttempt(prev => prev + 1);
       else setIconFailed(true);
     } else {
       if (iconUrl && !iconFailed) setIconFailed(true);
-      else setFaviconFailed(true);
+      else setRasterAttempt(prev => prev + 1);
     }
   };
 
   if (!currentSrc) {
+    const fallbackTextSize = 
+      size === '4xl' ? 'text-2xl' :
+      size === '3xl' ? 'text-xl' :
+      size === '2xl' ? 'text-base' :
+      size === 'xl' ? 'text-xs' :
+      'text-[9px]';
+
     return (
       <div
-        className={`${sizeClass} rounded-md bg-slate-800 text-slate-200 flex items-center justify-center shrink-0 font-bold text-[9px] ${className}`}
+        className={`${sizeClass} rounded-md bg-slate-800 text-slate-200 flex items-center justify-center shrink-0 font-bold ${fallbackTextSize} ${className}`}
         title={cleanTicker}
         aria-label={cleanTicker}
       >
