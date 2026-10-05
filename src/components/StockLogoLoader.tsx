@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState, useRef, Suspense } from 'react';
 import { motion } from 'motion/react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { Center, Environment, PerspectiveCamera, Float, ContactShadows, useTexture } from '@react-three/drei';
+import { Center, Environment, PerspectiveCamera, Float, ContactShadows, Image } from '@react-three/drei';
 import { SVGLoader } from 'three-stdlib';
-import { BRAND_ICONS, OFFICIAL_DOMAINS, OFFICIAL_FAVICON_FIRST, SIMPLE_ICONS_VERSION } from './StockLogo';
+import { getLoadingAsset } from './logoLoadingManifest';
 
 interface StockLogoLoaderProps {
   ticker: string;
@@ -38,19 +38,19 @@ class ErrorBoundary extends React.Component<{ fallback: React.ReactNode; onError
 function SvgLogo3D({ url }: { url: string }) {
   const svg = useLoader(SVGLoader, url);
   const groupRef = useRef<THREE.Group>(null);
-  const material = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: '#0f172a', // Deep slate for corporate feel
-    metalness: 0.8,
-    roughness: 0.15,
-    clearcoat: 1,
-    clearcoatRoughness: 0.1,
-  }), []);
 
-  const geometries = useMemo(() => {
+  const meshesData = useMemo(() => {
     return svg.paths.map((path) => {
-      // Type assertion needed due to slightly mismatched types in three-stdlib
+      const color = path.color || (path.userData?.style?.fill) || '#0f172a';
+      const material = new THREE.MeshPhysicalMaterial({
+        color: color,
+        metalness: 0.8,
+        roughness: 0.15,
+        clearcoat: 1,
+        clearcoatRoughness: 0.1,
+      });
       const shapes = SVGLoader.createShapes(path as any);
-      return shapes.map((shape) => {
+      const geometries = shapes.map((shape) => {
         return new THREE.ExtrudeGeometry(shape, {
           depth: 10,
           bevelEnabled: true,
@@ -59,8 +59,18 @@ function SvgLogo3D({ url }: { url: string }) {
           bevelSegments: 3,
         });
       });
+      return geometries.map(geom => ({ geometry: geom, material }));
     }).flat();
   }, [svg]);
+
+  useEffect(() => {
+    return () => {
+      meshesData.forEach(({ geometry, material }) => {
+        geometry.dispose();
+        material.dispose();
+      });
+    };
+  }, [meshesData]);
 
   // Assembly animation: pieces float in and assemble
   useFrame(({ clock }) => {
@@ -76,8 +86,8 @@ function SvgLogo3D({ url }: { url: string }) {
     <Float floatIntensity={1.5} rotationIntensity={0.5} speed={2}>
       <Center>
         <group ref={groupRef} scale={[0.1, -0.1, 0.1]}>
-          {geometries.map((geom, index) => (
-            <mesh key={index} geometry={geom} material={material} castShadow receiveShadow />
+          {meshesData.map(({ geometry, material }, index) => (
+            <mesh key={index} geometry={geometry} material={material} castShadow receiveShadow />
           ))}
         </group>
       </Center>
@@ -86,42 +96,13 @@ function SvgLogo3D({ url }: { url: string }) {
 }
 
 // --------------------------------------------------------
-// 3D Raster Texture Loader Component (Favicon Fallback)
+// Static Fallback Component
 // --------------------------------------------------------
-function RasterBox({ url }: { url: string }) {
-  const texture = useTexture(url);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const meshRef = useRef<THREE.Mesh>(null);
-  
-  const frontMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-    map: texture,
-    metalness: 0.1,
-    roughness: 0.2,
-    clearcoat: 0.8,
-  }), [texture]);
-  
-  const sideMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: '#e2e8f0',
-    metalness: 0.5,
-    roughness: 0.2,
-  }), []);
-
-  useFrame(({ clock }) => {
-    if (meshRef.current) {
-      const t = clock.elapsedTime;
-      // Elegant entrance spin then settle into slow rotation
-      const entrance = Math.min(t * 2, 1); // 0 to 1 over 0.5s
-      meshRef.current.rotation.y = (1 - entrance) * Math.PI * 4 + t * 0.5; 
-      meshRef.current.position.y = Math.sin(t * 2) * 0.1;
-    }
-  });
-
+function StaticFallback({ url }: { url: string }) {
   return (
-    <Float floatIntensity={1} rotationIntensity={0.2} speed={2}>
-      <mesh ref={meshRef} castShadow receiveShadow material={[sideMaterial, sideMaterial, sideMaterial, sideMaterial, frontMaterial, frontMaterial]}>
-        <boxGeometry args={[2.5, 2.5, 0.25]} />
-      </mesh>
-    </Float>
+    <Center>
+      <Image url={url} transparent opacity={1} scale={3} />
+    </Center>
   );
 }
 
@@ -148,34 +129,14 @@ export const StockLogoLoader: React.FC<StockLogoLoaderProps> = ({
     return () => clearTimeout(timer);
   }, [onComplete]);
 
-  // Determine Logo URLs
-  const iconUrl = useMemo(() => {
-    const slug = BRAND_ICONS[cleanTicker];
-    return slug
-      ? `https://cdn.jsdelivr.net/npm/simple-icons@${SIMPLE_ICONS_VERSION}/icons/${slug}.svg`
-      : null;
-  }, [cleanTicker]);
-
-  const domain = OFFICIAL_DOMAINS[cleanTicker];
-  const faviconUrl = useMemo(() => {
-    if (!domain) return null;
-    if (rasterAttempt === 0) return `https://logo.clearbit.com/${domain}`;
-    if (rasterAttempt === 1) return `https://icon.horse/icon/${domain}`;
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
-  }, [domain, rasterAttempt]);
-
-  const faviconFailed = rasterAttempt > 2;
-
-  const preferOfficial = OFFICIAL_FAVICON_FIRST.has(cleanTicker);
+  const asset = useMemo(() => getLoadingAsset(ticker), [ticker]);
+  
   let currentSrc: string | null = null;
   let srcType: 'svg' | 'raster' | null = null;
 
-  if (preferOfficial) {
-    if (faviconUrl && !faviconFailed) { currentSrc = faviconUrl; srcType = 'raster'; }
-    else if (iconUrl && !iconFailed) { currentSrc = iconUrl; srcType = 'svg'; }
-  } else {
-    if (iconUrl && !iconFailed) { currentSrc = iconUrl; srcType = 'svg'; }
-    else if (faviconUrl && !faviconFailed) { currentSrc = faviconUrl; srcType = 'raster'; }
+  if (asset && !iconFailed && rasterAttempt === 0) {
+    currentSrc = asset.src;
+    srcType = asset.type;
   }
 
   return (
@@ -199,7 +160,7 @@ export const StockLogoLoader: React.FC<StockLogoLoaderProps> = ({
           <ErrorBoundary fallback={null} onError={() => srcType === 'svg' ? setIconFailed(true) : setRasterAttempt(prev => prev + 1)}>
             <Suspense fallback={null}>
               {currentSrc && srcType === 'svg' && <SvgLogo3D url={currentSrc} />}
-              {currentSrc && srcType === 'raster' && <RasterBox url={currentSrc} />}
+              {currentSrc && srcType === 'raster' && <StaticFallback url={currentSrc} />}
             </Suspense>
           </ErrorBoundary>
 
