@@ -48,7 +48,7 @@ The main agent is the orchestrator and final independent auditor.
 Model gate for the logo task:
 
 - Builder: Opus 5.5, medium.
-- Tester: Flash 3.8, medium.
+- Tester: Flash 3.8, high.
 - The orchestrator must verify that these exact model identifiers and settings are available before delegation. If they are unavailable, do not silently substitute another model and do not claim that the requested models were used; report the blocker and request an approved replacement.
 
 Only the main agent performs internet research and selects replacement logo assets. The Builder and Tester may inspect approved assets and the repository, but they do not choose new external sources.
@@ -74,3 +74,14 @@ A task is complete only when:
 - remaining limitations are stated clearly.
 
 When blocked, stop at the concrete blocker, preserve the repository, and report the exact missing capability or decision.
+
+
+## Runtime prompt templates
+
+The following files are templates to inject explicitly at runtime:
+
+- agents/prompts/main-system.md — Main Agent system/developer prompt
+- agents/prompts/builder.md — Builder role prompt
+- agents/prompts/tester.md — Tester role prompt
+
+These files do not grant permissions or tool access by themselves. The runner must explicitly provide the tools, skills, model, branch, and task context assigned to each role. Keep the runtime prompt separate from durable repository guardrails.

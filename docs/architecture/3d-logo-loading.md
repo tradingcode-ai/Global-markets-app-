@@ -183,7 +183,7 @@ The main agent must:
 Before delegation, verify exact availability:
 
 - Builder: Opus 5.5, medium;
-- Tester: Flash 3.8, medium.
+- Tester: Flash 3.8, high.
 
 If either exact model or setting is unavailable, stop before delegation and report the blocker. Do not silently substitute another model or claim that the requested model was used.
 
@@ -204,3 +204,14 @@ The task passes only when:
 ## 4. Evidence and change log
 
 At the verified baseline, the confirmed implementation defect is the RasterBox boxGeometry path in StockLogoLoader.tsx. This document intentionally does not claim that replacement assets have already been researched or approved. Asset research and runtime visual verification are separate execution steps and must be recorded with exact evidence when performed.
+
+
+## 5. Runtime prompt templates
+
+The repository stores the prompt templates used by the BTA workflow:
+
+- agents/prompts/main-system.md
+- agents/prompts/builder.md
+- agents/prompts/tester.md
+
+The Main Agent must inject the main prompt and explicitly pass the Builder and Tester role prompts at delegation time. These files describe behavior and boundaries; they do not themselves grant tools, skills, repository permissions, or model access.
