@@ -5,120 +5,126 @@ import {
   ResearchReport,
   ResearchSource,
   ResearchConfidence,
-  VisualBrief
+  VisualBrief,
+  ResearchCertainty,
+  EventNoteSectionPurpose,
+  ResearchClaim,
+  Catalyst,
+  Risk
 } from '../types/marketResearch';
 import {
   saveResearchReport,
   updateResearchEvent
 } from './marketResearchStore';
-import { runVisualDesignerAgent } from './visualDesignerAgent';
+import { runAntiGravityVisualDataAgent } from './antiGravityVisualDataAgent';
 
-// System prompt directly from agents/05_EVENT_AND_SYSTEM_PROMPT.md
-export const DEEP_MARKET_RESEARCH_SYSTEM_PROMPT = `You are the Deep Market Research Agent for the Global Markets application.
+// System prompt incorporating Sell-Side Editorial & Writing Architecture
+// (agents/marketResearchSellSideEditorialSpecification.ts & agents/05_EVENT_AND_SYSTEM_PROMPT.md)
+export const DEEP_MARKET_RESEARCH_SYSTEM_PROMPT = `You are the Deep Market Research Agent for the Global Markets application, authoring institutional Sell-Side Event Notes.
+
 PURPOSE
-Investigate significant market movements and produce a complete, source-based research report explaining what happened, why the market may be reacting, and what relevant context surrounds the event.
-You are a research agent, not an investment adviser. Do not provide investment recommendations.
-DATA INTEGRITY
-Never invent or fabricate:
-prices, percentage moves or financial figures;
-earnings, revenue, production or analyst data;
-economic or geopolitical facts;
-sources, quotations or citations.
-The market movement supplied in the event prompt is the authoritative trigger data.
-Clearly distinguish:
-CONFIRMED FACT — supported by reliable evidence;
-REPORTED CLAIM — reported but not independently confirmed;
-ANALYSIS / INFERENCE — reasoned interpretation;
-UNKNOWN / UNCERTAIN — cannot be reliably established.
-Never present inference as fact.
-RESEARCH
-Every triggered event receives the full Deep Research standard.
-Research autonomously using available web tools.
-Use no more than 5 search queries and normally no more than 8–10 relevant source documents. Stop earlier when sufficient evidence is established.
-Do not rely only on search snippets or headlines. Read the most relevant accessible sources.
-Research should establish:
-what happened;
-whether it can be confirmed;
-how it affects the asset or sector;
-what broader context matters;
-what important uncertainty remains.
-SOURCE SELECTION
-Use the following registry as a source-selection aid.
-The registry is not a mandatory browsing order.
-Choose sources based on:
-relevance to the specific event;
-ability to establish or verify the specific claim;
-source authority and reliability;
-independence from other sources.
+Investigate significant market movements and produce a complete, source-based institutional Sell-Side Event Note explaining what happened, why the market may be reacting, and what relevant context surrounds the event.
+You are an institutional research agent, not an investment adviser. Do not provide retail investment recommendations, fake buy/hold/sell ratings, or simulated price targets.
 
-Primary / Official Sources
+SELL-SIDE EDITORIAL & WRITING ARCHITECTURE
+- Bottom-Line First: Lead with the event and its core investment meaning immediately. Do not bury the analytical conclusion behind scene-setting or chronological news recaps.
+- Analytical Default: Concise, institutional tone tailored for professional market readers. Avoid promotional language, generic market filler, or artificial drama.
+- Concise Paragraphs: One primary idea per paragraph. The lead sentence carries the analytical conclusion, evidence immediately supports it, and market/financial implication follows evidence.
+- Conclusion-Style Headlines: Report and section headlines must state the analytical conclusion rather than a generic topic (e.g. "China exposure remains material, but headline overstates near-term earnings sensitivity", NOT "China Exposure"). No clickbait, sensationalism, or unconfirmed claims presented as fact.
+- Quantify When Verified: Prefer exact verified numbers over qualitative adjectives. Preserve units, currency, period, and basis. Distinguish actual vs estimate vs guidance vs consensus. Never invent missing values, backsolve unstated figures, or use synthetic fallback data.
+- Epistemic Integrity: Distinguish confirmed facts, reported claims, analysis/inferences, and uncertainties. Developing-event writing may adopt restrained financial journalism with explicit attribution, stating clearly what remains unconfirmed.
+
+CERTAINTY LANGUAGE RULES (EPISTEMIC INTEGRITY)
+Every material statement must reflect its exact evidentiary certainty:
+1. CONFIRMED:
+   - Supported by authoritative primary sources (SEC filings, company IR, official government agencies/regulators, official exchange disclosures).
+   - May state as fact without qualification. Preferred language: "confirmed", "disclosed", "reported in official data".
+2. REPORTED:
+   - Reported by credible financial media (Reuters, Bloomberg, FT, WSJ) but not yet independently confirmed.
+   - Attribution required: "Reuters reported...", "According to Bloomberg...". Never state as established fact.
+3. CLAIMED:
+   - Statements or assertions by company officials, spokespersons, or stakeholders without independent verification.
+   - Preserve the claimant: "The company said...", "Officials claimed...".
+4. INFERRED:
+   - Reasoned analytical deductions, transmission channels, or valuation implications.
+   - Signal analysis: "This suggests...", "Our interpretation is...", "The move appears consistent with...".
+5. UNKNOWN:
+   - Facts or data that cannot be established.
+   - Explicitly state uncertainty: "has not been confirmed", "remains unclear", "cannot yet be established". Never resolve uncertainty prematurely.
+
+ANALYST VOICE GUARDRAILS
+- No fake buy/hold/sell ratings.
+- No fake price targets.
+- No fake earnings estimates or simulated model revisions.
+- Discuss market implications, valuation sensitivity, risk/reward asymmetry, and base-case interpretations.
+- Never invent citations, data points, or source links.
+
+CORE EDITORIAL SEQUENCE
+Every section should progress through:
+CLAIM -> EVIDENCE -> INTERPRETATION -> MARKET / FINANCIAL IMPLICATION -> WHAT TO WATCH
+
+SOURCE SELECTION
+Use the following registry as a source-selection aid. The registry is not a mandatory browsing order.
+Choose sources based on:
+- relevance to the specific event;
+- ability to establish or verify the specific claim;
+- source authority and reliability;
+- independence from other sources.
+
+Primary / Official Sources:
 Prefer relevant primary sources when they directly document the event.
 Examples include:
-company Investor Relations websites;
-official company press releases;
-SEC / EDGAR filings;
-Federal Reserve;
-U.S. Treasury;
-SEC;
-CFTC;
-ECB;
-Bank of England;
-Bank of Japan;
-European Commission;
-relevant government agencies;
-relevant financial-market regulators;
-official exchange announcements;
-CME Group;
-ICE;
-Nasdaq;
-NYSE;
-OPEC;
-IEA;
-EIA;
-official producer or government energy agencies.
+- company Investor Relations websites and official press releases;
+- SEC / EDGAR filings;
+- Federal Reserve, U.S. Treasury, SEC, CFTC, ECB, Bank of England, Bank of Japan, European Commission;
+- relevant government agencies and financial-market regulators;
+- official exchange announcements (CME Group, ICE, Nasdaq, NYSE);
+- OPEC, IEA, EIA, official producer or government energy agencies.
 Use the appropriate primary source for the event rather than mechanically searching all primary sources.
 
-Preferred Financial News
+Preferred Financial News:
 When relevant, use high-quality financial news for reporting, independent confirmation, market reaction and context.
 Preferred examples:
-Reuters;
-Bloomberg;
-CNBC;
-Financial Times;
-The Wall Street Journal.
+- Reuters;
+- Bloomberg;
+- CNBC;
+- Financial Times;
+- The Wall Street Journal.
 These sources are preferred financial-news sources, but they are not automatically authoritative for every claim.
 
-Preferred Real-Time Signals
+Preferred Real-Time Signals:
 Use these sources when relevant for breaking developments and early market signals:
-Walter Bloomberg — X: @DeItaone
-First Squawk — X: @FirstSquawk
-LiveSquawk — X: @LiveSquawk
-FinancialJuice — X: @financialjuice
-Nick Timiraos — X: @NickTimiraos
-The Kobeissi Letter — X: @KobeissiLetter
+- Walter Bloomberg — X: @DeItaone
+- First Squawk — X: @FirstSquawk
+- LiveSquawk — X: @LiveSquawk
+- FinancialJuice — X: @financialjuice
+- Nick Timiraos — X: @NickTimiraos
+- The Kobeissi Letter — X: @KobeissiLetter
 Real-time signal sources are early-warning sources, not automatic confirmation sources.
 Do not treat a post from a real-time signal account as a confirmed fact solely because it is published quickly or widely repeated.
-Where practical, corroborate material claims with:
-a primary or official source;
-an independent high-quality financial-news source; or
-another genuinely independent reliable source.
-Multiple sources repeating the same underlying report do not constitute multiple independent confirmations.
+Where practical, corroborate material claims with a primary or official source, an independent high-quality financial-news source, or another genuinely independent reliable source. Multiple sources repeating the same underlying report do not constitute multiple independent confirmations.
 
-Specialist Sources
+Specialist Sources:
 Use specialist publications and services when they provide materially relevant information that broader financial media may not yet contain.
 Examples include:
-aerospace and defense publications;
-semiconductor publications;
-energy and commodity specialists;
-shipping and supply-chain publications;
-specialist geopolitical publications;
-specialist market-data/news services.
+- aerospace and defense publications;
+- semiconductor publications;
+- energy and commodity specialists;
+- shipping and supply-chain publications;
+- specialist geopolitical publications;
+- specialist market-data/news services.
 Treat specialist and real-time sources as evidence whose reliability must be evaluated in context.
+Every source included in the final report must have materially contributed to the research.
 
 SOURCE SELECTION PRINCIPLE
 Do not browse the Preferred-Source Registry from top to bottom.
 Do not automatically search every preferred source.
 Autonomously determine which sources are most relevant to the event.
+For example:
+- a company announcement → company IR / filing first;
+- a central-bank event → relevant central bank and high-quality financial news;
+- a geopolitical breaking event → relevant official sources plus independent financial reporting;
+- an unexpected commodity move → relevant real-time signals, commodity sources, official agencies and independent financial reporting.
 If a primary source directly establishes the catalyst, prefer it for that factual claim.
 If a real-time signal identifies a breaking development, use it as an early signal and seek appropriate confirmation.
 Every source included in the final report must have materially contributed to the research.
@@ -127,72 +133,94 @@ Do not use a source merely because it appears in the Preferred-Source Registry.
 CAUSALITY
 Do not assume the cause before researching it.
 Consider relevant simultaneous catalysts such as:
-company developments;
-earnings or guidance;
-macroeconomic data;
-central-bank policy;
-geopolitics;
-commodities;
-sector developments;
-regulation;
-supply chains or infrastructure;
-broader market conditions.
+- company developments;
+- earnings or guidance;
+- macroeconomic data;
+- central-bank policy;
+- geopolitics;
+- commodities;
+- sector developments;
+- regulation;
+- supply chains or infrastructure;
+- broader market conditions.
 Only describe causation as established when the evidence supports it.
-
-REQUIRED CONTEXT
-Every report must cover:
-1. Immediate Event
-What happened, when, who/what was involved, the documented catalyst, supporting evidence and remaining uncertainty.
-2. Direct Market / Sector Impact
-Explain how the event affects the asset or sector through economic, operational, supply, demand, pricing, earnings or risk channels where relevant.
-3. Broader Context
-Explain materially relevant geopolitical, macroeconomic, infrastructure, supply-chain, commodity, policy or other wider context.
-Do not add unrelated background merely to increase length.
-
-REPORT OUTPUT
-The final response MUST be a complete research report, not a two-line answer, short summary or unsupported conclusion.
-Use this structure:
-Market Move
-Asset, ticker, asset class, movement, period and timestamp.
-Executive Summary
-Substantive explanation of what happened, the principal documented catalysts and why it matters.
-1. Immediate Catalyst
-Evidence surrounding the event, clearly separating fact, reported claims and inference.
-2. Direct Market / Sector Impact
-The transmission mechanism and relevant market or economic effects.
-3. Broader Context
-The wider context materially relevant to the event.
-4. What the Market Is Reacting To
-What information, expectation or risk appears to be driving the reaction. Separate evidence from inference.
-5. What to Watch Next
-Concrete developments that could materially change the situation.
-6. Confidence
-High, Medium or Low, with a brief evidence-based explanation.
-7. Sources
-List the sources actually used. Format each source on a new line with Title, URL, and Publisher where available. Never fabricate sources.
-The report must be substantive enough to qualify as genuine market research. Length should reflect event complexity, not an arbitrary word count.
-If reliable information is genuinely insufficient, explain what was researched, what was confirmed, what could not be confirmed and why.
-
-EVENT DEDUPLICATION
-A new market-movement trigger does not automatically mean a new research report.
-Treat multiple triggers as the same event when evidence indicates the market is still reacting primarily to the same underlying catalyst.
-Do not define event identity solely by ticker, price movement or timestamp.
-A materially new development, escalation, policy action, confirmation, reversal or separate catalyst can constitute a new event and justify new research.
 
 CONFLICTING INFORMATION
 When credible sources disagree, identify the disagreement, attribute the claims and explain what remains unresolved.
 
+REQUIRED REPORT OUTPUT STRUCTURE
+The final response MUST be a complete Sell-Side Event Note formatted in Markdown with the following exact section headers:
+
+# [Conclusion-Style Report Headline]
+
+Market Move
+Asset: [Asset Name], Ticker: [Ticker], Asset Class: [Asset Class], Movement: [Move%], Period: [Period], Timestamp: [Timestamp]
+
+The Bottom Line
+A compact institutional synthesis answering:
+1. What happened?
+2. What is confirmed vs reported/claimed?
+3. Why did the market care?
+4. What is the investment implication?
+5. What matters next?
+
+The Key Debate
+The core investment question or tension framing the move (bull vs bear tension, expectations vs reality, valuation vs growth). Connect to earnings, multiples, or positioning.
+
+Key Takeaways
+Strictly maximum 3 concise bullet points summarizing the highest-conviction conclusions:
+- [Takeaway 1]
+- [Takeaway 2]
+- [Takeaway 3]
+
+1. What Drove the Move
+The immediate catalyst and evidence surrounding the event. Explicitly organize into:
+- Confirmed Facts: Authoritatively verified data, filings, or announcements.
+- Reported Claims: Unconfirmed media reports or stakeholder claims with direct attribution.
+- Analysis / Inference: Reasoned interpretation of the catalyst mechanism.
+
+2. Direct Market / Sector Impact
+Why it matters: Explain the transmission mechanism into company financials (earnings, margins, cash flows, valuation multiples) and sector peers.
+
+3. Broader Context
+Macroeconomic, geopolitical, supply chain, policy, or industry context materially relevant to the event.
+
+4. What the Market Is Reacting To
+Identify the underlying expectations, positioning, or sentiment shift driving price discovery. Separate evidence from inference.
+
+5. Forward View & What to Watch Next
+Next observable catalysts, upcoming earnings dates, regulatory milestones, or key economic data points.
+
+6. Catalysts & Risks
+Provide specific catalysts and risks formatted with subheadings:
+**Catalysts:**
+- [Catalyst with timing if known, e.g. Q3 Earnings (Oct 24, 2026)]: [Description]
+**Risks:**
+- [Key downside or volatility risk]: [Description]
+
+7. What Would Change Our View
+View invalidators: 2-4 concrete, observable developments or data points that would invalidate our baseline interpretation.
+- [Invalidator 1]
+- [Invalidator 2]
+
+8. Confidence
+High, Medium, or Low, followed by an evidence-based explanation of data quality and verification completeness.
+
+9. Sources
+Numbered or bulleted list of verified sources actually consulted during research. Format each source with Title, URL, and Publisher:
+- [Source Title](URL) - Publisher
+
 FINAL CHECK
 Before returning the report, verify:
-The event was actually researched.
-Sources are relevant and reliable.
-Facts, claims, inference and uncertainty are clearly separated.
-All three context layers are covered.
-Causality is not overstated.
-The complete report structure is present.
-No financial data or sources were fabricated.
-No investment recommendation was given.
-The result is a genuine research report, not a short answer.`;
+- The event was actually researched autonomously with fresh grounding data.
+- Sources are relevant, reliable, and properly attributed; every source materially contributed.
+- Certainty language strictly distinguishes CONFIRMED facts, REPORTED media accounts, CLAIMED statements, INFERRED analysis, and UNKNOWN uncertainties.
+- Causality is not assumed or overstated; simultaneous catalysts were considered.
+- The complete Sell-Side Event Note structure is present (Headline, Market Move, The Bottom Line, The Key Debate, Key Takeaways max 3, Sections 1–9).
+- Headlines state analytical conclusions rather than generic topics.
+- Quantified numbers are verified; no missing figures, percentages, quotes, or citations were fabricated.
+- No retail investment recommendations, fake buy/hold/sell ratings, or fake price targets were provided.
+- The result is an institutional, rigorous Sell-Side Event Note, not generic filler or a short answer.`;
 
 // Build event prompt directly from 05_EVENT_AND_SYSTEM_PROMPT.md template
 export function buildEventPrompt(event: ResearchEvent): string {
@@ -222,15 +250,153 @@ function getGenAIClient(): GoogleGenAI | null {
 }
 
 interface ParsedReportSections {
+  headline?: string;
+  bottomLine?: string;
+  keyDebate?: string;
+  keyTakeaways?: string[];
   executiveSummary: string;
   immediateCatalyst: string;
   directMarketImpact: string;
   broaderContext: string;
   whatMarketIsReactingTo: string;
   whatToWatchNext: string;
+  catalysts?: Catalyst[];
+  risks?: Risk[];
+  whatWouldChangeOurView?: string[];
+  claims?: ResearchClaim[];
   confidence: ResearchConfidence;
   confidenceExplanation: string;
   sources: ResearchSource[];
+}
+
+function extractStructuredClaims(
+  bottomLine: string | undefined,
+  keyDebate: string | undefined,
+  immediateCatalyst: string,
+  directMarketImpact: string,
+  broaderContext: string,
+  whatToWatchNext: string,
+  sources: ResearchSource[]
+): ResearchClaim[] {
+  const claims: ResearchClaim[] = [];
+  let claimIndex = 1;
+
+  const determineCertainty = (text: string): ResearchCertainty => {
+    if (/\b(?:confirmed|official|sec filing|filing shows|disclosed|registered)\b/i.test(text)) {
+      return 'CONFIRMED';
+    }
+    if (/\b(?:reported|according to|reuters|bloomberg|wsj|ft|sources said)\b/i.test(text)) {
+      return 'REPORTED';
+    }
+    if (/\b(?:said|stated|claimed|company said|spokesperson)\b/i.test(text)) {
+      return 'CLAIMED';
+    }
+    if (/\b(?:unclear|unconfirmed|unknown|cannot be established|remains to be seen)\b/i.test(text)) {
+      return 'UNKNOWN';
+    }
+    return 'INFERRED';
+  };
+
+  const findSourceIds = (text: string): string[] => {
+    const ids: string[] = [];
+    for (let i = 0; i < sources.length; i++) {
+      const src = sources[i];
+      if (src.publisher && text.toLowerCase().includes(src.publisher.toLowerCase())) {
+        ids.push(`src_${i + 1}`);
+      } else if (src.title && text.toLowerCase().includes(src.title.toLowerCase().slice(0, 15))) {
+        ids.push(`src_${i + 1}`);
+      }
+    }
+    return ids;
+  };
+
+  // 1. Bottom Line Claim
+  if (bottomLine && bottomLine.length > 10) {
+    claims.push({
+      id: `claim_${claimIndex++}`,
+      text: bottomLine.slice(0, 300).trim(),
+      certainty: determineCertainty(bottomLine),
+      sourceIds: findSourceIds(bottomLine),
+      sectionPurpose: 'bottom_line',
+      implication: 'Primary institutional bottom-line takeaway for the event.'
+    });
+  }
+
+  // 2. Key Debate Claim
+  if (keyDebate && keyDebate.length > 10) {
+    claims.push({
+      id: `claim_${claimIndex++}`,
+      text: keyDebate.slice(0, 300).trim(),
+      certainty: 'INFERRED',
+      sourceIds: findSourceIds(keyDebate),
+      sectionPurpose: 'key_debate',
+      interpretation: 'Core market debate framing price discovery.'
+    });
+  }
+
+  // 3. What Drove the Move Claims
+  if (immediateCatalyst && immediateCatalyst.length > 10) {
+    const bulletLines = immediateCatalyst.split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 20 && (/^[-*•\d.]/.test(l) || /^(?:Confirmed|Reported|Analysis|Inference)/i.test(l)));
+
+    if (bulletLines.length > 0) {
+      for (const line of bulletLines.slice(0, 4)) {
+        const cleanLine = line.replace(/^[-*•\d.)\s]+/, '').trim();
+        claims.push({
+          id: `claim_${claimIndex++}`,
+          text: cleanLine,
+          certainty: determineCertainty(cleanLine),
+          sourceIds: findSourceIds(cleanLine),
+          sectionPurpose: 'what_drove_the_move'
+        });
+      }
+    } else {
+      claims.push({
+        id: `claim_${claimIndex++}`,
+        text: immediateCatalyst.slice(0, 300).trim(),
+        certainty: determineCertainty(immediateCatalyst),
+        sourceIds: findSourceIds(immediateCatalyst),
+        sectionPurpose: 'what_drove_the_move'
+      });
+    }
+  }
+
+  // 4. Direct Market Impact / Why It Matters Claim
+  if (directMarketImpact && directMarketImpact.length > 10) {
+    claims.push({
+      id: `claim_${claimIndex++}`,
+      text: directMarketImpact.slice(0, 300).trim(),
+      certainty: determineCertainty(directMarketImpact),
+      sourceIds: findSourceIds(directMarketImpact),
+      sectionPurpose: 'why_it_matters',
+      implication: 'Fundamental transmission into earnings, margins, or valuation.'
+    });
+  }
+
+  // 5. Broader Context / Financial Impact Claim
+  if (broaderContext && broaderContext.length > 10) {
+    claims.push({
+      id: `claim_${claimIndex++}`,
+      text: broaderContext.slice(0, 300).trim(),
+      certainty: determineCertainty(broaderContext),
+      sourceIds: findSourceIds(broaderContext),
+      sectionPurpose: 'financial_impact'
+    });
+  }
+
+  // 6. Forward View Claim
+  if (whatToWatchNext && whatToWatchNext.length > 10) {
+    claims.push({
+      id: `claim_${claimIndex++}`,
+      text: whatToWatchNext.slice(0, 300).trim(),
+      certainty: determineCertainty(whatToWatchNext),
+      sourceIds: findSourceIds(whatToWatchNext),
+      sectionPurpose: 'forward_view'
+    });
+  }
+
+  return claims;
 }
 
 function parseMarkdownReport(rawMarkdown: string): ParsedReportSections {
@@ -246,38 +412,156 @@ function parseMarkdownReport(rawMarkdown: string): ParsedReportSections {
     return '';
   };
 
-  const executiveSummary = extractSection([
-    /(?:###?\s*Executive Summary|Executive Summary:?)\s*([\s\S]*?)(?=(?:###?\s*1\.|\n1\.\s*Immediate|###?\s*Immediate Catalyst))/i,
-    /(?:Executive Summary)\s*([\s\S]*?)(?=(?:###?\s*1|\n1\.))/i
-  ]) || 'Executive summary unavailable in raw output.';
+  // 1. Headline
+  let headline: string | undefined = undefined;
+  const headlineExplicit = rawMarkdown.match(/(?:^|\n)(?:#+\s*Headline:?|Headline:)\s*([^\n]+)/i);
+  if (headlineExplicit && headlineExplicit[1]) {
+    headline = clean(headlineExplicit[1]).replace(/^[#*_\s]+|[#*_\s]+$/g, '');
+  } else {
+    const topH1 = rawMarkdown.match(/(?:^|\n)#\s+([^\n]+)/);
+    if (topH1 && topH1[1]) {
+      const candidate = clean(topH1[1]).replace(/^[#*_\s]+|[#*_\s]+$/g, '');
+      if (!/^(?:Market Move|Deep Market Research|Research Report|Global Markets)/i.test(candidate)) {
+        headline = candidate;
+      }
+    }
+  }
 
+  // 2. The Bottom Line
+  const bottomLine = extractSection([
+    /(?:###?\s*The Bottom Line|The Bottom Line:?|###?\s*Bottom Line|Bottom Line:?)\s*([\s\S]*?)(?=(?:###?\s*(?:The Key Debate|Key Debate|Key Takeaways|Executive Summary|1\.)|\n(?:The Key Debate|Key Debate|Key Takeaways|1\.)))/i
+  ]);
+
+  // 3. The Key Debate
+  const keyDebate = extractSection([
+    /(?:###?\s*The Key Debate|The Key Debate:?|###?\s*Key Debate|Key Debate:?)\s*([\s\S]*?)(?=(?:###?\s*(?:Key Takeaways|1\.|Executive Summary)|\n(?:Key Takeaways|1\.)))/i
+  ]);
+
+  // 4. Key Takeaways (strictly max 3)
+  const rawTakeaways = extractSection([
+    /(?:###?\s*Key Takeaways|Key Takeaways:?)\s*([\s\S]*?)(?=(?:###?\s*1\.|\n1\.\s*(?:What Drove|Immediate)|###?\s*(?:What Drove|Immediate)))/i
+  ]);
+  const keyTakeaways: string[] = [];
+  if (rawTakeaways) {
+    const lines = rawTakeaways.split('\n')
+      .map(l => l.replace(/^[-*•\d.)\s]+/, '').trim())
+      .filter(l => l.length > 5);
+    keyTakeaways.push(...lines.slice(0, 3));
+  }
+
+  // 5. Executive Summary (backward-compatibility mapping)
+  let executiveSummary = extractSection([
+    /(?:###?\s*Executive Summary|Executive Summary:?)\s*([\s\S]*?)(?=(?:###?\s*(?:The Bottom Line|Bottom Line|1\.)|\n1\.\s*Immediate|###?\s*Immediate Catalyst))/i,
+    /(?:Executive Summary)\s*([\s\S]*?)(?=(?:###?\s*1|\n1\.))/i
+  ]);
+
+  if (!executiveSummary && bottomLine) {
+    executiveSummary = bottomLine;
+  } else if (!executiveSummary) {
+    executiveSummary = 'Executive summary unavailable in raw output.';
+  }
+
+  const resolvedBottomLine = bottomLine || (executiveSummary !== 'Executive summary unavailable in raw output.' ? executiveSummary : undefined);
+
+  // 6. Section 1: What Drove the Move / Immediate Catalyst
   const immediateCatalyst = extractSection([
-    /(?:###?\s*1\.\s*Immediate Catalyst|1\.\s*Immediate Catalyst:?)\s*([\s\S]*?)(?=(?:###?\s*2\.|\n2\.\s*Direct))/i,
-    /(?:Immediate Catalyst:?)\s*([\s\S]*?)(?=(?:Direct Market|\n2\.))/i
+    /(?:###?\s*1\.\s*(?:What Drove the Move|Immediate Catalyst)|1\.\s*(?:What Drove the Move|Immediate Catalyst):?)\s*([\s\S]*?)(?=(?:###?\s*2\.|\n2\.\s*Direct))/i,
+    /(?:(?:What Drove the Move|Immediate Catalyst):?)\s*([\s\S]*?)(?=(?:Direct Market|\n2\.))/i
   ]) || 'Documented immediate catalyst under ongoing verification.';
 
+  // 7. Section 2: Direct Market / Sector Impact
   const directMarketImpact = extractSection([
     /(?:###?\s*2\.\s*Direct Market \/ Sector Impact|2\.\s*Direct Market \/ Sector Impact:?)\s*([\s\S]*?)(?=(?:###?\s*3\.|\n3\.\s*Broader))/i,
     /(?:Direct Market \/ Sector Impact:?)\s*([\s\S]*?)(?=(?:Broader Context|\n3\.))/i
   ]) || 'Direct market and sector transmission mechanisms identified.';
 
+  // 8. Section 3: Broader Context
   const broaderContext = extractSection([
     /(?:###?\s*3\.\s*Broader Context|3\.\s*Broader Context:?)\s*([\s\S]*?)(?=(?:###?\s*4\.|\n4\.\s*What))/i,
     /(?:Broader Context:?)\s*([\s\S]*?)(?=(?:What the Market|\n4\.))/i
   ]) || 'Macroeconomic, geopolitical and industry context captured.';
 
+  // 9. Section 4: What the Market Is Reacting To
   const whatMarketIsReactingTo = extractSection([
-    /(?:###?\s*4\.\s*What the Market Is Reacting To|4\.\s*What the Market Is Reacting To:?)\s*([\s\S]*?)(?=(?:###?\s*5\.|\n5\.\s*What to Watch))/i,
-    /(?:What the Market Is Reacting To:?)\s*([\s\S]*?)(?=(?:What to Watch Next|\n5\.))/i
+    /(?:###?\s*4\.\s*What the Market Is Reacting To|4\.\s*What the Market Is Reacting To:?)\s*([\s\S]*?)(?=(?:###?\s*5\.|\n5\.\s*(?:Forward View|What to Watch)))/i,
+    /(?:What the Market Is Reacting To:?)\s*([\s\S]*?)(?=(?:Forward View|What to Watch Next|\n5\.))/i
   ]) || 'Market sentiment driving price discovery.';
 
+  // 10. Section 5: Forward View & What to Watch Next
   const whatToWatchNext = extractSection([
-    /(?:###?\s*5\.\s*What to Watch Next|5\.\s*What to Watch Next:?)\s*([\s\S]*?)(?=(?:###?\s*6\.|\n6\.\s*Confidence))/i,
-    /(?:What to Watch Next:?)\s*([\s\S]*?)(?=(?:Confidence|\n6\.))/i
+    /(?:###?\s*5\.\s*(?:Forward View & What to Watch Next|Forward View|What to Watch Next)|5\.\s*(?:Forward View & What to Watch Next|Forward View|What to Watch Next):?)\s*([\s\S]*?)(?=(?:###?\s*6\.|\n6\.\s*(?:Catalysts|Confidence)|###?\s*(?:Catalysts & Risks|Confidence)))/i,
+    /(?:(?:Forward View & What to Watch Next|What to Watch Next):?)\s*([\s\S]*?)(?=(?:Catalysts|Confidence|\n6\.))/i
   ]) || 'Key forthcoming macro and corporate data points.';
 
-  // Extract Confidence
-  const rawConfidenceMatch = rawMarkdown.match(/(?:###?\s*6\.\s*Confidence|6\.\s*Confidence:?)\s*([\s\S]*?)(?=(?:###?\s*7\.|\n7\.\s*Sources|$))/i);
+  // 11. Section 6: Catalysts & Risks
+  const rawCatalystsRisks = extractSection([
+    /(?:###?\s*6\.\s*(?:Catalysts & Risks|Catalysts and Risks)|6\.\s*(?:Catalysts & Risks|Catalysts and Risks):?|(?:Catalysts & Risks|Catalysts and Risks):?)\s*([\s\S]*?)(?=(?:###?\s*7\.|\n7\.\s*(?:What Would Change|View Invalidators)|###?\s*(?:What Would Change|View Invalidators)|###?\s*(?:6\.|8\.)\s*Confidence))/i
+  ]);
+
+  const catalysts: Catalyst[] = [];
+  const risks: Risk[] = [];
+
+  if (rawCatalystsRisks) {
+    const catalystsPartMatch = rawCatalystsRisks.match(/(?:(?:\*\*|\b)Catalysts:?(?:\*\*|:)?)\s*([\s\S]*?)(?=(?:(?:\*\*|\b)Risks:?(?:\*\*|:)?|$))/i);
+    const risksPartMatch = rawCatalystsRisks.match(/(?:(?:\*\*|\b)Risks:?(?:\*\*|:)?)\s*([\s\S]*?)$/i);
+
+    if (catalystsPartMatch && catalystsPartMatch[1]) {
+      const lines = catalystsPartMatch[1].split('\n')
+        .map(l => l.replace(/^[-*•\d.)\s]+/, '').trim())
+        .filter(l => l.length > 3);
+      for (const line of lines) {
+        const timingMatch = line.match(/\(([^)]*(?:Q[1-4]|\d{4}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|20\d\d|days|weeks|months|H[1-2])[^)]*)\)/i) ||
+                            line.match(/\[([^\]]*(?:Q[1-4]|\d{4}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|20\d\d|days|weeks|months|H[1-2])[^\]]*)\]/i);
+        const timing = timingMatch ? timingMatch[1].trim() : undefined;
+        catalysts.push({
+          text: line,
+          timing,
+          sourceIds: []
+        });
+      }
+    }
+
+    if (risksPartMatch && risksPartMatch[1]) {
+      const lines = risksPartMatch[1].split('\n')
+        .map(l => l.replace(/^[-*•\d.)\s]+/, '').trim())
+        .filter(l => l.length > 3);
+      for (const line of lines) {
+        risks.push({
+          text: line,
+          sourceIds: []
+        });
+      }
+    }
+
+    if (catalysts.length === 0 && risks.length === 0) {
+      const lines = rawCatalystsRisks.split('\n')
+        .map(l => l.replace(/^[-*•\d.)\s]+/, '').trim())
+        .filter(l => l.length > 3);
+      for (const line of lines) {
+        if (/\b(?:risk|threat|downside|headwind|vulnerability)\b/i.test(line)) {
+          risks.push({ text: line, sourceIds: [] });
+        } else {
+          catalysts.push({ text: line, sourceIds: [] });
+        }
+      }
+    }
+  }
+
+  // 12. Section 7: What Would Change Our View
+  const rawChangeView = extractSection([
+    /(?:###?\s*7\.\s*(?:What Would Change Our View|View Invalidators)|7\.\s*(?:What Would Change Our View|View Invalidators):?|(?:What Would Change Our View|View Invalidators):?)\s*([\s\S]*?)(?=(?:###?\s*(?:8\.|6\.)\s*Confidence|(?:8\.|6\.)\s*Confidence:?|###?\s*Confidence|\nConfidence))/i
+  ]);
+
+  const whatWouldChangeOurView: string[] = [];
+  if (rawChangeView) {
+    const lines = rawChangeView.split('\n')
+      .map(l => l.replace(/^[-*•\d.)\s]+/, '').trim())
+      .filter(l => l.length > 5);
+    whatWouldChangeOurView.push(...lines);
+  }
+
+  // 13. Section 8 / 6: Confidence
+  const rawConfidenceMatch = rawMarkdown.match(/(?:###?\s*(?:8\.|6\.)\s*Confidence|(?:8\.|6\.)\s*Confidence:?|###?\s*Confidence)\s*([\s\S]*?)(?=(?:###?\s*(?:9\.|7\.)\s*Sources|(?:9\.|7\.)\s*Sources:?|###?\s*Sources|$))/i);
   let confidence: ResearchConfidence = 'MEDIUM';
   let confidenceExplanation = '';
   if (rawConfidenceMatch && rawConfidenceMatch[1]) {
@@ -288,8 +572,8 @@ function parseMarkdownReport(rawMarkdown: string): ParsedReportSections {
     confidenceExplanation = text;
   }
 
-  // Extract Sources
-  const rawSourcesMatch = rawMarkdown.match(/(?:###?\s*7\.\s*Sources|7\.\s*Sources:?)\s*([\s\S]*?)$/i);
+  // 14. Section 9 / 7: Sources
+  const rawSourcesMatch = rawMarkdown.match(/(?:###?\s*(?:9\.|7\.)\s*Sources|(?:9\.|7\.)\s*Sources:?|###?\s*Sources)\s*([\s\S]*?)$/i);
   const sources: ResearchSource[] = [];
 
   if (rawSourcesMatch && rawSourcesMatch[1]) {
@@ -343,13 +627,32 @@ function parseMarkdownReport(rawMarkdown: string): ParsedReportSections {
     }
   }
 
+  // 15. Structured Claims Extraction
+  const claims = extractStructuredClaims(
+    resolvedBottomLine,
+    keyDebate,
+    immediateCatalyst,
+    directMarketImpact,
+    broaderContext,
+    whatToWatchNext,
+    sources
+  );
+
   return {
+    headline,
+    bottomLine: resolvedBottomLine,
+    keyDebate: keyDebate || undefined,
+    keyTakeaways: keyTakeaways.length > 0 ? keyTakeaways : undefined,
     executiveSummary,
     immediateCatalyst,
     directMarketImpact,
     broaderContext,
     whatMarketIsReactingTo,
     whatToWatchNext,
+    catalysts: catalysts.length > 0 ? catalysts : undefined,
+    risks: risks.length > 0 ? risks : undefined,
+    whatWouldChangeOurView: whatWouldChangeOurView.length > 0 ? whatWouldChangeOurView : undefined,
+    claims: claims.length > 0 ? claims : undefined,
     confidence,
     confidenceExplanation,
     sources
@@ -683,9 +986,9 @@ async function executeResearchForEventInternal(
     }
   }
 
-  // 3. Strict Deterministic Application Validation (Section 19 of prompt)
+  // 3. Strict Deterministic Application Validation
   const isValidReport =
-    parsed.executiveSummary.length > 20 &&
+    (parsed.executiveSummary.length > 20 || (parsed.bottomLine && parsed.bottomLine.length > 20)) &&
     parsed.immediateCatalyst.length > 20 &&
     parsed.directMarketImpact.length > 15;
 
@@ -702,6 +1005,17 @@ async function executeResearchForEventInternal(
     marketCapUsdBillions: event.marketCapUsdBillions ?? event.market_cap_usd_billions,
     period: event.period,
     triggerTimestamp: event.triggeredAt,
+    headline: parsed.headline,
+    bottomLine: parsed.bottomLine,
+    bottom_line: parsed.bottomLine,
+    keyDebate: parsed.keyDebate,
+    key_debate: parsed.keyDebate,
+    keyTakeaways: parsed.keyTakeaways,
+    key_takeaways: parsed.keyTakeaways,
+    catalysts: parsed.catalysts,
+    risks: parsed.risks,
+    whatWouldChangeOurView: parsed.whatWouldChangeOurView,
+    claims: parsed.claims,
     executiveSummary: parsed.executiveSummary,
     immediateCatalyst: parsed.immediateCatalyst,
     directMarketImpact: parsed.directMarketImpact,
@@ -720,7 +1034,7 @@ async function executeResearchForEventInternal(
   // available even when the macro search is offline or returns no evidence.
   try {
     const visualBrief = deriveVisualBrief(report);
-    const visualPayload = await runVisualDesignerAgent(report, visualBrief, pool);
+    const visualPayload = await runAntiGravityVisualDataAgent(report, visualBrief, pool);
     report.visualPayload = visualPayload;
     report.visual_payload = visualPayload;
     console.log(`[Research Agent] Visual enrichment attached for ${event.ticker}.`);
@@ -736,9 +1050,11 @@ async function executeResearchForEventInternal(
     {
       status: 'ACTIVE',
       reportId: report.id,
-      catalystSummary: typeof report.immediateCatalyst === 'string' 
-        ? report.immediateCatalyst.slice(0, 240) 
-        : (report.immediateCatalyst?.summary || '').slice(0, 240),
+      catalystSummary: parsed.bottomLine 
+        ? parsed.bottomLine.slice(0, 240)
+        : (typeof report.immediateCatalyst === 'string' 
+            ? report.immediateCatalyst.slice(0, 240) 
+            : (report.immediateCatalyst?.summary || '').slice(0, 240)),
       lastCheckedAt: new Date().toISOString()
     },
     pool
