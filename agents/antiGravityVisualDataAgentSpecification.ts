@@ -804,3 +804,339 @@ export const CHART_WORKFLOW_EXAMPLE_HYPERSCALER_CAPEX = {
     'Stop immediately after the first satisfactory visual because maxCount is 1.',
   ],
 } as const;
+
+
+// ============================================================================
+// IMAGE FLOW / ARCHITECTURE
+// ============================================================================
+
+export type ImageWorkflowStage =
+  | 'ANALYZE_REPORT_CONTEXT'
+  | 'RESOLVE_IMAGE_SLOT'
+  | 'SELECT_IMAGE_ELEMENT'
+  | 'BUILD_IMAGE_QUERY'
+  | 'DISCOVER_IMAGES'
+  | 'TECHNICAL_FILTER'
+  | 'RELEVANCE_FILTER'
+  | 'SOURCE_AND_ATTRIBUTION'
+  | 'RANK_CANDIDATES'
+  | 'SELECT_IMAGE'
+  | 'REGISTER_ASSET'
+  | 'COMPLETE';
+
+export interface ImageContext {
+  section: string;
+  subject: string;
+  entities: string[];
+  keywords?: string[];
+  themes?: string[];
+  claims?: string[];
+}
+
+export interface ImageIntent {
+  section: string;
+  subject: string;
+  entities: string[];
+  imageIntent: ImageElement;
+  preferredElements: string[];
+  maxImages: number;
+  requirements: ImageRequirements;
+}
+
+export interface ImageCandidate {
+  id: string;
+  element: ImageElement;
+  type: 'photo' | 'illustration' | 'screenshot' | 'product' | 'factory' | 'logo';
+  url: string;
+  sourceUrl: string;
+  publisher?: string;
+  title?: string;
+  publishedAt?: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: string;
+  sourceIdentified: boolean;
+  attributionAvailable: boolean;
+  relevant: boolean;
+  technicallyUsable: boolean;
+  quality: number;
+  relevanceScore: number;
+  freshnessScore?: number;
+}
+
+export interface ImageSelectionDecision {
+  selectedElements: ImageElement[];
+  reason: string;
+}
+
+export interface ImageWorkflowDecision {
+  stage: ImageWorkflowStage;
+  continueRetrieval: boolean;
+  selectedCandidate?: ImageCandidate;
+  reason: string;
+}
+
+/**
+ * The four image elements are a reusable taxonomy, NOT four mandatory images.
+ *
+ * company            -> factory, headquarters, campus, corporate environment
+ * product_technology -> product, machine, chip, system or technology
+ * operations         -> cleanroom, manufacturing, people, production process
+ * industry_context   -> broader sector/supply-chain/industry context
+ *
+ * The module defines the playground through allowedElements.
+ * selectionMode defines HOW to choose.
+ * ResearchReport context determines WHAT is most relevant.
+ */
+export const IMAGE_ELEMENT_TAXONOMY: Record<ImageElement, readonly string[]> = {
+  company: ['factory', 'headquarters', 'campus', 'company_facility'],
+  product_technology: ['product', 'machine', 'chip', 'system', 'technology'],
+  operations: ['cleanroom', 'manufacturing', 'production', 'people', 'operations'],
+  industry_context: ['industry', 'supply_chain', 'sector', 'infrastructure', 'market_context'],
+} as const;
+
+export const IMAGE_REQUIREMENT_PRESETS = {
+  equityCompanyPhoto: {
+    minWidth: 1200,
+    minHeight: 675,
+    sourceRequirement: 'identify',
+    attributionRequirement: 'required',
+    freshnessRequirement: 'recent',
+    allowedTypes: ['photo', 'factory'],
+  },
+  equityProductTechnology: {
+    minWidth: 1200,
+    minHeight: 675,
+    sourceRequirement: 'identify',
+    attributionRequirement: 'required',
+    freshnessRequirement: 'recent',
+    allowedTypes: ['photo', 'product'],
+  },
+  sectorHero: {
+    minWidth: 1200,
+    minHeight: 675,
+    sourceRequirement: 'identify',
+    attributionRequirement: 'required',
+    freshnessRequirement: 'recent',
+    allowedTypes: ['photo', 'factory', 'product'],
+  },
+} satisfies Record<string, ImageRequirements>;
+
+/**
+ * Selection modes:
+ *
+ * best_match:
+ *   Score only the allowed elements against structured ResearchReport signals.
+ *   Choose the element with strongest entity/theme/keyword/claim linkage.
+ *   Do NOT blindly search all four concepts first.
+ *
+ * priority:
+ *   Try allowedElements in their configured order. Stop when an element yields
+ *   enough satisfactory candidates.
+ *
+ * all:
+ *   Search every allowed element, still respecting maxImages.
+ */
+export function selectImageElements(
+  policy: ImageSlotPolicy,
+  contextScores: Partial<Record<ImageElement, number>>,
+): ImageSelectionDecision {
+  const allowed = policy.allowedElements;
+
+  if (policy.selectionMode === 'all') {
+    return {
+      selectedElements: allowed,
+      reason: 'selectionMode=all: all allowed image elements may be searched.',
+    };
+  }
+
+  if (policy.selectionMode === 'priority') {
+    return {
+      selectedElements: allowed,
+      reason: 'selectionMode=priority: search allowed elements sequentially in configured priority order and stop when satisfied.',
+    };
+  }
+
+  const ranked = allowed
+    .map((element) => ({ element, score: contextScores[element] ?? 0 }))
+    .sort((a, b) => b.score - a.score);
+
+  return {
+    selectedElements: ranked.length > 0 ? [ranked[0].element] : [],
+    reason: 'selectionMode=best_match: search only the allowed element with the strongest structured ResearchReport relevance.',
+  };
+}
+
+export function buildImageIntent(
+  context: ImageContext,
+  policy: ImageSlotPolicy,
+  contextScores: Partial<Record<ImageElement, number>>,
+): ImageIntent | null {
+  const selection = selectImageElements(policy, contextScores);
+  const imageIntent = selection.selectedElements[0];
+
+  if (!imageIntent) return null;
+
+  return {
+    section: context.section,
+    subject: context.subject,
+    entities: context.entities,
+    imageIntent,
+    preferredElements: IMAGE_ELEMENT_TAXONOMY[imageIntent].slice(),
+    maxImages: policy.maxImages,
+    requirements: policy.requirements,
+  };
+}
+
+export const IMAGE_WORKFLOW: readonly ImageWorkflowStage[] = [
+  'ANALYZE_REPORT_CONTEXT',
+  'RESOLVE_IMAGE_SLOT',
+  'SELECT_IMAGE_ELEMENT',
+  'BUILD_IMAGE_QUERY',
+  'DISCOVER_IMAGES',
+  'TECHNICAL_FILTER',
+  'RELEVANCE_FILTER',
+  'SOURCE_AND_ATTRIBUTION',
+  'RANK_CANDIDATES',
+  'SELECT_IMAGE',
+  'REGISTER_ASSET',
+  'COMPLETE',
+] as const;
+
+export const IMAGE_ARCHITECTURE_RULES = {
+  reportContextDrivesSelection: true,
+  moduleControlsAllowedElements: true,
+  selectionModeControlsSelectionMethod: true,
+  fourElementsAreNotFourRequiredImages: true,
+  bestMatchSearchesSelectedElementOnly: true,
+  prefilterBeforeLLMReview: true,
+  doNotSendHundredsOfRawCandidatesToLLM: true,
+  imageDoesNotProveFinancialClaims: true,
+  preserveOriginalImageSource: true,
+  stopWhenMaxImagesSatisfied: true,
+} as const;
+
+/**
+ * Candidate filtering should happen before expensive semantic/LLM review.
+ * Image search providers should apply native date/size/type filters whenever
+ * supported. This function is a final technical sanity check, not a reason to
+ * download and inspect hundreds of candidates.
+ */
+export function imageMeetsTechnicalRequirements(
+  candidate: ImageCandidate,
+  requirements: ImageRequirements,
+): boolean {
+  if (!candidate.technicallyUsable) return false;
+  if (requirements.minWidth && (!candidate.width || candidate.width < requirements.minWidth)) return false;
+  if (requirements.minHeight && (!candidate.height || candidate.height < requirements.minHeight)) return false;
+  if (requirements.allowedTypes && !requirements.allowedTypes.includes(candidate.type)) return false;
+  if (requirements.sourceRequirement !== 'none' && !candidate.sourceIdentified) return false;
+  if (requirements.attributionRequirement === 'required' && !candidate.attributionAvailable) return false;
+  return true;
+}
+
+export function rankImageCandidates(
+  candidates: ImageCandidate[],
+  requirements: ImageRequirements,
+): ImageCandidate[] {
+  return candidates
+    .filter((candidate) => imageMeetsTechnicalRequirements(candidate, requirements))
+    .filter((candidate) => candidate.relevant)
+    .sort((a, b) => {
+      const aScore = a.relevanceScore * 0.6 + a.quality * 0.3 + (a.freshnessScore ?? 0) * 0.1;
+      const bScore = b.relevanceScore * 0.6 + b.quality * 0.3 + (b.freshnessScore ?? 0) * 0.1;
+      return bScore - aScore;
+    });
+}
+
+export function selectImagesForSlot(
+  candidates: ImageCandidate[],
+  policy: ImageSlotPolicy,
+): ImageCandidate[] {
+  return rankImageCandidates(candidates, policy.requirements).slice(0, policy.maxImages);
+}
+
+/**
+ * Search flow:
+ *
+ * ResearchReport
+ *   -> Image Planner
+ *   -> resolve slot policy
+ *   -> select allowed element(s) using selectionMode
+ *   -> query builder
+ *   -> image discovery provider / company site / news source
+ *   -> provider-side size/date/type filters
+ *   -> technical validation
+ *   -> semantic relevance validation
+ *   -> source + attribution validation
+ *   -> ranking
+ *   -> selected image(s)
+ *   -> Asset Registry
+ *   -> Report Composer
+ */
+export const IMAGE_DISCOVERY_PIPELINE = [
+  'ResearchReport',
+  'Image Planner',
+  'Slot Policy',
+  'Selection Mode',
+  'Image Query Builder',
+  'Image Discovery',
+  'Provider-side Filters',
+  'Technical Validation',
+  'Relevance Validation',
+  'Source/Attribution Validation',
+  'Ranking',
+  'Selected Image',
+  'Asset Registry',
+  'Report Composer',
+] as const;
+
+export const IMAGE_TOOL_RESPONSIBILITIES = {
+  discovery:
+    'Use structured image search for candidate discovery. Apply native dimensions, freshness and type filters before returning candidates when supported.',
+  browser:
+    'Use browser/Playwright-style retrieval when the original page, exact image asset, dynamic page, SVG/canvas or element screenshot is needed.',
+  llm:
+    'Use the LLM as a decision layer over a small prefiltered candidate set, not as a bulk image crawler.',
+  provenance:
+    'Persist the actual image publisher/source URL, discovery source and attribution metadata in the Asset Registry.',
+} as const;
+
+export const IMAGE_WORKFLOW_EXAMPLE_ASML = {
+  context: {
+    section: 'Semiconductor outlook',
+    subject: 'semiconductor industry',
+    entities: ['ASML', 'TSMC', 'NVIDIA'],
+    keywords: ['EUV', 'High-NA', 'wafer', 'fab', 'AI chips'],
+    themes: ['semiconductor manufacturing', 'capacity', 'advanced lithography'],
+  } satisfies ImageContext,
+  slot: {
+    slot: 'hero',
+    allowedElements: [
+      'company',
+      'product_technology',
+      'operations',
+      'industry_context',
+    ],
+    maxImages: 1,
+    selectionMode: 'best_match',
+    requirements: {
+      minWidth: 1200,
+      minHeight: 675,
+      sourceRequirement: 'identify',
+      attributionRequirement: 'required',
+      freshnessRequirement: 'recent',
+      allowedTypes: ['photo', 'factory', 'product'],
+    },
+  } satisfies ImageSlotPolicy,
+  behavior: [
+    'Score the four allowed concepts against the ResearchReport context.',
+    'Choose the strongest concept before image search.',
+    'Do not automatically retrieve one image for every concept.',
+    'Search only the selected best_match concept unless it fails to produce a satisfactory candidate.',
+    'Apply technical filters before semantic review.',
+    'Prefer a recent, high-resolution and contextually relevant image with identifiable source.',
+    'Register the selected image with provenance and attribution.',
+    'Stop as soon as maxImages=1 is satisfied.',
+  ],
+} as const;
