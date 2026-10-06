@@ -1140,3 +1140,319 @@ export const IMAGE_WORKFLOW_EXAMPLE_ASML = {
     'Stop as soon as maxImages=1 is satisfied.',
   ],
 } as const;
+
+
+// ============================================================================
+// REPORT COMPOSITION ARCHITECTURE — SELL-SIDE EVENT NOTE
+// ============================================================================
+
+export type ReportType = 'SELL_SIDE_EVENT_NOTE';
+
+export type ReportSectionPurpose =
+  | 'bottom_line'
+  | 'key_debate'
+  | 'what_drove_the_move'
+  | 'why_it_matters'
+  | 'evidence'
+  | 'transmission'
+  | 'financial_impact'
+  | 'forward_view'
+  | 'catalysts_and_risks'
+  | 'view_invalidators'
+  | 'sources_and_methodology';
+
+export type ReportBlockType =
+  | 'narrative'
+  | 'key_takeaway'
+  | 'chart'
+  | 'research_exhibit'
+  | 'image'
+  | 'kpi'
+  | 'table'
+  | 'transmission'
+  | 'scenario'
+  | 'risk';
+
+export type ReportLayoutPattern =
+  | 'FIRST_PAGE_SELL_SIDE'
+  | 'TEXT_CHART_SPLIT'
+  | 'FULL_WIDTH_EVIDENCE'
+  | 'KPI_TABLE'
+  | 'CAUSAL_FLOW'
+  | 'CATALYST_RISK_SPLIT'
+  | 'TEXT_ONLY';
+
+export interface ReportCompositionInput {
+  reportId: string;
+  ticker?: string;
+  assetName: string;
+  eventDate: string;
+  headline: string;
+  bottomLine: string;
+  keyDebate: string;
+  keyTakeaways: string[];
+  claims: Array<{
+    id: string;
+    text: string;
+    sectionPurpose: ReportSectionPurpose;
+  }>;
+  assets: ReportAsset[];
+}
+
+export interface ReportLayoutBlock {
+  type: ReportBlockType;
+  claimId?: string;
+  assetId?: string;
+  message?: string;
+  placement?: 'inline' | 'full_width' | 'side_by_side';
+}
+
+export interface ReportLayoutSection {
+  id: string;
+  purpose: ReportSectionPurpose;
+  headline: string;
+  keyMessage: string;
+  pattern: ReportLayoutPattern;
+  blocks: ReportLayoutBlock[];
+}
+
+export interface ReportLayoutPlan {
+  reportType: ReportType;
+  firstPage: {
+    headline: string;
+    bottomLine: string;
+    keyDebate: string;
+    keyTakeaways: string[];
+    leadImageAssetId?: string;
+    primaryEvidenceAssetId?: string;
+  };
+  sections: ReportLayoutSection[];
+}
+
+/**
+ * This is a deterministic composition layer inside the Visual & Data Agent,
+ * NOT a separate research/LLM agent.
+ *
+ * Research Agent -> factual narrative, claims, thesis, catalysts and risks.
+ * Visual & Data Agent -> verified charts, exhibits, tables and images.
+ * Report Composer -> decides hierarchy, placement and sell-side layout.
+ * Renderer -> turns ReportLayoutPlan into app/PDF presentation.
+ */
+export const REPORT_COMPOSITION_PIPELINE = [
+  'ResearchReport',
+  'Asset Registry',
+  'Narrative Analysis',
+  'Investment Story Ordering',
+  'Section Purpose Resolution',
+  'Evidence Mapping',
+  'Layout Pattern Selection',
+  'Density and Hierarchy Rules',
+  'ReportLayoutPlan',
+  'Report Renderer',
+] as const;
+
+export const SELL_SIDE_EVENT_NOTE_COMPOSITION = {
+  reportType: 'SELL_SIDE_EVENT_NOTE',
+
+  firstPage: {
+    researchHeader: true,
+    conclusionStyleHeadline: true,
+    marketMetrics: true,
+    bottomLineRequired: true,
+    keyDebateRequired: true,
+    maxKeyTakeaways: 3,
+
+    leadImage: {
+      required: true,
+      role: 'editorial_support',
+      size: 'compact',
+      placement: 'adjacent_to_bottom_line',
+      useAsFullBleedBackground: false,
+      approximatePageShare: '25-35%',
+    },
+
+    primaryEvidence: {
+      max: 1,
+      preferredOnFirstPageWhenMaterial: true,
+    },
+  },
+
+  body: {
+    conclusionStyleHeadlines: true,
+    onePrimaryConclusionPerSection: true,
+    evidenceInlineWithArgument: true,
+    figureNumbering: true,
+    sourceDirectlyUnderEveryFigure: true,
+    maxDominantVisualsPerSection: 1,
+
+    supportingImages: {
+      min: 0,
+      max: 2,
+      onlyWhenAdditive: true,
+    },
+  },
+
+  evidencePriority: [
+    'research_exhibit',
+    'verified_chart',
+    'financial_table',
+    'analytical_diagram',
+    'editorial_image',
+  ],
+
+  visualStyle: {
+    documentFirst: true,
+    dashboardFirst: false,
+    lightOrOffWhiteCanvas: true,
+    restrainedInstitutionalAccent: true,
+    semanticRedGreenOnly: true,
+    thinRulesAndBorders: true,
+    minimalShadows: true,
+    useWhitespaceForHierarchy: true,
+    avoidDecorativeCardOveruse: true,
+    tabularFinancialNumerals: true,
+  },
+} as const;
+
+/**
+ * Every section answers one investment question and leads with the conclusion.
+ * Headings must state the analytical conclusion, not merely name the topic.
+ *
+ * Good:
+ * "China remains material, but headline exposure overstates near-term earnings sensitivity"
+ *
+ * Weak:
+ * "China Exposure"
+ */
+export const SELL_SIDE_SECTION_RULES = {
+  oneInvestmentQuestionPerSection: true,
+  onePrimaryConclusionPerSection: true,
+  headlineMustStateConclusion: true,
+  everyVisualMustSupportAClaim: true,
+  noDecorativeChartQuota: true,
+  noOrphanCharts: true,
+  noOrphanHeadings: true,
+  noVisualWithoutAnalyticalReason: true,
+  executiveFirstPageMustStandAlone: true,
+  methodologyBelongsAtEnd: true,
+} as const;
+
+export const SELL_SIDE_EVENT_NOTE_SECTION_ORDER: readonly ReportSectionPurpose[] = [
+  'bottom_line',
+  'key_debate',
+  'what_drove_the_move',
+  'why_it_matters',
+  'evidence',
+  'transmission',
+  'financial_impact',
+  'forward_view',
+  'catalysts_and_risks',
+  'view_invalidators',
+  'sources_and_methodology',
+] as const;
+
+/**
+ * Photos provide context and editorial quality; they do not outrank evidence.
+ * The lead image is standard and compact. Body images are optional.
+ */
+export const EVENT_NOTE_IMAGE_COMPOSITION_POLICY = {
+  leadImage: {
+    required: true,
+    maxCount: 1,
+    size: 'compact',
+    placement: 'adjacent_to_bottom_line',
+    role: 'editorial_support',
+  },
+  supportingImages: {
+    minCount: 0,
+    maxCount: 2,
+    onlyWhenAdditive: true,
+  },
+  evidenceAlwaysWinsLayoutConflict: true,
+  totalImageMaximum: 3,
+} as const;
+
+export function selectLayoutPattern(
+  purpose: ReportSectionPurpose,
+  hasEvidence: boolean,
+): ReportLayoutPattern {
+  switch (purpose) {
+    case 'bottom_line':
+    case 'key_debate':
+      return 'FIRST_PAGE_SELL_SIDE';
+    case 'evidence':
+      return hasEvidence ? 'FULL_WIDTH_EVIDENCE' : 'TEXT_ONLY';
+    case 'what_drove_the_move':
+    case 'why_it_matters':
+    case 'financial_impact':
+      return hasEvidence ? 'TEXT_CHART_SPLIT' : 'TEXT_ONLY';
+    case 'transmission':
+      return 'CAUSAL_FLOW';
+    case 'catalysts_and_risks':
+    case 'view_invalidators':
+    case 'forward_view':
+      return 'CATALYST_RISK_SPLIT';
+    default:
+      return 'TEXT_ONLY';
+  }
+}
+
+export function assetEvidencePriority(asset: ReportAsset): number {
+  switch (asset.type) {
+    case 'research_exhibit':
+      return 5;
+    case 'chart':
+      return 4;
+    case 'table':
+      return 3;
+    case 'diagram':
+      return 2;
+    case 'image':
+      return 1;
+  }
+}
+
+export function preferEvidenceOverEditorialImage(
+  evidence: ReportAsset | undefined,
+  image: ReportAsset | undefined,
+): ReportAsset | undefined {
+  if (!evidence) return image;
+  if (!image) return evidence;
+  return assetEvidencePriority(evidence) >= assetEvidencePriority(image)
+    ? evidence
+    : image;
+}
+
+export const SELL_SIDE_EVENT_NOTE_FIRST_PAGE = [
+  'Research header / date / coverage classification',
+  'Asset or company name',
+  'Conclusion-style event headline',
+  'Price / move / market-cap or relevant market metrics',
+  'Bottom Line',
+  'Compact authentic lead image adjacent to Bottom Line',
+  'The Key Debate',
+  'Maximum three Key Takeaways',
+  'Maximum one primary evidence exhibit when material',
+] as const;
+
+export const SELL_SIDE_EVENT_NOTE_BODY_RHYTHM = [
+  'What Drove the Move',
+  'Why It Matters',
+  'Inline verified evidence / research exhibit',
+  'Transmission and Financial Impact',
+  'Forward View',
+  'Catalysts and Risks',
+  'What Would Change the View',
+  'Sources and Methodology',
+] as const;
+
+export const REPORT_COMPOSER_INTEGRITY_RULES = {
+  neverRewriteResearchFactsToFitLayout: true,
+  neverCreateMetricsForEmptyLayoutSlots: true,
+  neverCreateDecorativeFinancialCharts: true,
+  neverUsePhotographyAsFinancialEvidence: true,
+  neverHideSourceLines: true,
+  neverPreferAestheticBalanceOverEvidenceIntegrity: true,
+  preserveClaimAssetLinkage: true,
+  preserveSourceProvenance: true,
+} as const;
