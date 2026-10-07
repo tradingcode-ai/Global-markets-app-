@@ -56,7 +56,7 @@ function fetchSvgText(url: string): Promise<string> {
 // Logo model: real SVG contours → extruded, bevelled geometry + particle targets
 // --------------------------------------------------------
 interface LogoPart {
-  geometry: THREE.ExtrudeGeometry;
+  geometry: THREE.BufferGeometry;
   color: THREE.Color;
 }
 
@@ -110,29 +110,110 @@ function legibleColor(color: THREE.Color) {
   return color;
 }
 
+/** Turn a filled 2D SVG stroke mesh into a closed, shallow 3D solid. */
+function extrudeStrokeGeometries(strokes: THREE.BufferGeometry[], depth: number) {
+  const positions: number[] = [];
+  const halfDepth = depth / 2;
+
+  for (const stroke of strokes) {
+    const attribute = stroke.getAttribute('position');
+    const edgeCounts = new Map<string, { count: number; a: THREE.Vector2; b: THREE.Vector2 }>();
+    const pointAt = (index: number) => new THREE.Vector2(attribute.getX(index), attribute.getY(index));
+    const addTriangle = (a: THREE.Vector2, b: THREE.Vector2, c: THREE.Vector2, z: number) => {
+      positions.push(a.x, a.y, z, b.x, b.y, z, c.x, c.y, z);
+    };
+    const edgeKey = (a: THREE.Vector2, b: THREE.Vector2) => {
+      const key = (point: THREE.Vector2) => `${point.x.toFixed(4)},${point.y.toFixed(4)}`;
+      const ka = key(a);
+      const kb = key(b);
+      return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    };
+
+    for (let i = 0; i + 2 < attribute.count; i += 3) {
+      const triangle = [pointAt(i), pointAt(i + 1), pointAt(i + 2)];
+      addTriangle(triangle[0], triangle[1], triangle[2], halfDepth);
+      addTriangle(triangle[2], triangle[1], triangle[0], -halfDepth);
+      for (let edge = 0; edge < 3; edge++) {
+        const a = triangle[edge];
+        const b = triangle[(edge + 1) % 3];
+        const key = edgeKey(a, b);
+        const record = edgeCounts.get(key);
+        if (record) record.count++;
+        else edgeCounts.set(key, { count: 1, a, b });
+      }
+    }
+
+    for (const { count, a, b } of edgeCounts.values()) {
+      if (count !== 1) continue;
+      const af = new THREE.Vector3(a.x, a.y, halfDepth);
+      const bf = new THREE.Vector3(b.x, b.y, halfDepth);
+      const ab = new THREE.Vector3(a.x, a.y, -halfDepth);
+      const bb = new THREE.Vector3(b.x, b.y, -halfDepth);
+      positions.push(
+        af.x, af.y, af.z, ab.x, ab.y, ab.z, bb.x, bb.y, bb.z,
+        af.x, af.y, af.z, bb.x, bb.y, bb.z, bf.x, bf.y, bf.z,
+      );
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function buildLogoModel(svgText: string, brandColor: string | undefined, seedKey: string): LogoModel {
   const data = new SVGLoader().parse(svgText);
   const brand = brandColor ? new THREE.Color(brandColor) : null;
 
-  const rawParts: { shapes: THREE.Shape[]; color: THREE.Color }[] = [];
+  const rawParts: {
+    shapes: THREE.Shape[];
+    strokes: { geometry: THREE.BufferGeometry; path: THREE.Path }[];
+    color: THREE.Color;
+  }[] = [];
+  const nativeColors = new Set(data.paths.map((item) => item.color.getHexString()));
   for (const path of data.paths) {
     const style = (path.userData?.style ?? {}) as Record<string, unknown>;
-    if (style.fill === 'none' || style.fillOpacity === 0 || style.visibility === 'hidden') continue;
-    const shapes = SVGLoader.createShapes(path as unknown as Parameters<typeof SVGLoader.createShapes>[0]);
-    if (!shapes.length) continue;
+    if (style.visibility === 'hidden' || style.fillOpacity === 0) continue;
+    const hasFill = style.fill !== 'none';
+    const shapes = hasFill
+      ? SVGLoader.createShapes(path as unknown as Parameters<typeof SVGLoader.createShapes>[0])
+      : [];
+    const strokes: { geometry: THREE.BufferGeometry; path: THREE.Path }[] = [];
+    const strokeColor = typeof style.stroke === 'string' && style.stroke !== 'none'
+      ? legibleColor(new THREE.Color(style.stroke))
+      : null;
+    const strokeWidth = Number(style.strokeWidth);
+    if (strokeColor && strokeWidth > 0) {
+      for (const subPath of path.subPaths) {
+        const points = subPath.getPoints(12);
+        const geometry = SVGLoader.pointsToStroke(points, SVGLoader.getStrokeStyle(
+          strokeWidth,
+          style.stroke as string,
+          style.strokeLineJoin as string | undefined,
+          style.strokeLineCap as string | undefined,
+        ));
+        if (geometry) strokes.push({ geometry, path: subPath });
+      }
+    }
+    if (!shapes.length && !strokes.length) continue;
     // Apply the manifest brand color to monochrome marks, but keep every native
     // fill when a source logo contains multiple colors (for example Microsoft).
-    const nativeColors = new Set(data.paths.map((item) => item.color.getHexString()));
-    const color = legibleColor(brand && nativeColors.size <= 1 ? brand.clone() : path.color.clone());
-    rawParts.push({ shapes, color });
+    const fillColor = legibleColor(brand && nativeColors.size <= 1 ? brand.clone() : path.color.clone());
+    if (shapes.length) rawParts.push({ shapes, strokes: [], color: fillColor });
+    if (strokes.length) rawParts.push({ shapes: [], strokes, color: strokeColor ?? fillColor });
   }
-  if (!rawParts.length) throw new Error('SVG contains no fillable shapes');
+  if (!rawParts.length) throw new Error('SVG contains no fillable shapes or supported strokes');
 
   // Measured bounds of the actual contours
   const bounds = new THREE.Box2();
   for (const part of rawParts) {
     for (const shape of part.shapes) {
       for (const p of shape.getPoints(6)) bounds.expandByPoint(p);
+    }
+    for (const stroke of part.strokes) {
+      const attribute = stroke.geometry.getAttribute('position');
+      for (let i = 0; i < attribute.count; i++) bounds.expandByPoint(new THREE.Vector2(attribute.getX(i), attribute.getY(i)));
     }
   }
   const size = bounds.getSize(new THREE.Vector2());
@@ -144,16 +225,18 @@ export function buildLogoModel(svgText: string, brandColor: string | undefined, 
   const baseScale = Math.min(FIT_WIDTH / size.x, FIT_HEIGHT / size.y);
   const depth = EXTRUDE_DEPTH / baseScale;
 
-  const parts: LogoPart[] = rawParts.map(({ shapes, color }) => {
-    const geometry = new THREE.ExtrudeGeometry(shapes, {
-      depth,
-      curveSegments: 12,
-      bevelEnabled: true,
-      bevelThickness: BEVEL_THICKNESS / baseScale,
-      bevelSize: BEVEL_SIZE / baseScale,
-      bevelSegments: 3,
-    });
-    geometry.translate(-center.x, -center.y, -depth / 2);
+  const parts: LogoPart[] = rawParts.map(({ shapes, strokes, color }) => {
+    const geometry = shapes.length
+      ? new THREE.ExtrudeGeometry(shapes, {
+          depth,
+          curveSegments: 12,
+          bevelEnabled: true,
+          bevelThickness: BEVEL_THICKNESS / baseScale,
+          bevelSize: BEVEL_SIZE / baseScale,
+          bevelSegments: 3,
+        })
+      : extrudeStrokeGeometries(strokes.map((stroke) => stroke.geometry), depth);
+    geometry.translate(-center.x, -center.y, shapes.length ? -depth / 2 : 0);
     geometry.computeVertexNormals();
     return { geometry, color };
   });
@@ -166,7 +249,7 @@ export function buildLogoModel(svgText: string, brandColor: string | undefined, 
 
   const contours: { path: THREE.Path; length: number; color: THREE.Color }[] = [];
   const triangles: { a: THREE.Vector2; b: THREE.Vector2; c: THREE.Vector2; area: number; color: THREE.Color }[] = [];
-  for (const { shapes, color } of rawParts) {
+  for (const { shapes, strokes, color } of rawParts) {
     for (const shape of shapes) {
       contours.push({ path: shape, length: shape.getLength(), color });
       for (const hole of shape.holes) contours.push({ path: hole, length: hole.getLength(), color });
@@ -177,6 +260,17 @@ export function buildLogoModel(svgText: string, brandColor: string | undefined, 
         const a = verts[i0];
         const b = verts[i1];
         const c = verts[i2];
+        const area = Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2;
+        if (area > 0) triangles.push({ a, b, c, area, color });
+      }
+    }
+    for (const stroke of strokes) {
+      const attribute = stroke.geometry.getAttribute('position');
+      contours.push({ path: stroke.path, length: stroke.path.getLength(), color });
+      for (let i = 0; i + 2 < attribute.count; i += 3) {
+        const a = new THREE.Vector2(attribute.getX(i), attribute.getY(i));
+        const b = new THREE.Vector2(attribute.getX(i + 1), attribute.getY(i + 1));
+        const c = new THREE.Vector2(attribute.getX(i + 2), attribute.getY(i + 2));
         const area = Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2;
         if (area > 0) triangles.push({ a, b, c, area, color });
       }
