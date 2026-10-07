@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SVGLoader } from 'three-stdlib';
-import { getLoadingAsset } from './logoLoadingManifest';
+import { ALIAS_MAP, getLoadingAsset } from './logoLoadingManifest';
 import { OFFICIAL_DOMAINS } from './StockLogo';
 
 interface StockLogoLoaderProps {
@@ -120,8 +120,10 @@ export function buildLogoModel(svgText: string, brandColor: string | undefined, 
     if (style.fill === 'none' || style.fillOpacity === 0 || style.visibility === 'hidden') continue;
     const shapes = SVGLoader.createShapes(path as unknown as Parameters<typeof SVGLoader.createShapes>[0]);
     if (!shapes.length) continue;
-    // Single-colour sources (Simple Icons) carry no fill: apply the recorded brand hex.
-    const color = legibleColor(brand ? brand.clone() : path.color.clone());
+    // Apply the manifest brand color to monochrome marks, but keep every native
+    // fill when a source logo contains multiple colors (for example Microsoft).
+    const nativeColors = new Set(data.paths.map((item) => item.color.getHexString()));
+    const color = legibleColor(brand && nativeColors.size <= 1 ? brand.clone() : path.color.clone());
     rawParts.push({ shapes, color });
   }
   if (!rawParts.length) throw new Error('SVG contains no fillable shapes');
@@ -622,14 +624,15 @@ export const StockLogoLoader: React.FC<StockLogoLoaderProps> = ({
 
   // Asset resolution from loading manifest
   const asset = useMemo(() => getLoadingAsset(cleanTicker), [cleanTicker]);
-  const domain = OFFICIAL_DOMAINS[cleanTicker];
+  const canonicalTicker = ALIAS_MAP[cleanTicker] || cleanTicker;
+  const domain = OFFICIAL_DOMAINS[cleanTicker] || OFFICIAL_DOMAINS[canonicalTicker];
 
   // Raster fallback URLs sequence
   const fallbackRasterUrl = useMemo(() => {
     if (!domain) return null;
-    if (rasterAttempt === 0) return `https://icon.horse/icon/${domain}`;
-    if (rasterAttempt === 1) return `https://logo.clearbit.com/${domain}`;
-    if (rasterAttempt === 2) return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    if (rasterAttempt === 0) return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    if (rasterAttempt === 1) return `https://icon.horse/icon/${domain}`;
+    if (rasterAttempt === 2) return `https://logo.clearbit.com/${domain}`;
     return null;
   }, [domain, rasterAttempt]);
 
