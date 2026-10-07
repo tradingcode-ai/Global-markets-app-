@@ -1,9 +1,6 @@
 /**
- * High-Precision Institutional 3D Logo Asset Manifest
- *
- * Zero-network dependency: All official brand SVGs are stored locally in /logos/
- * Guaranteeing 0ms latency, zero 404s, zero 429 rate limits, and infinite vector resolution.
- * Every logo is extruded into authentic 3D geometry in StockLogoLoader.tsx.
+ * Curated local vector assets for the animated stock logos.
+ * StockLogoLoader extrudes each SVG into 3D geometry.
  */
 
 export interface LoadingAsset {
@@ -142,15 +139,12 @@ export const ALIAS_MAP: Record<string, string> = {
   "RHM": "RNMBY"
 };
 
-// All audited stock marks now load from a curated local SVG and remain extruded in 3D.
-const RASTER_ONLY_LOADING_TICKERS = new Set<string>();
-
 export const getLoadingAsset = (ticker: string): LoadingAsset => {
   const clean = ticker ? ticker.toUpperCase().trim() : '';
   const canonical = ALIAS_MAP[clean] || clean;
   return {
     src: `/logos/${canonical}.svg`,
-    type: RASTER_ONLY_LOADING_TICKERS.has(canonical) || RASTER_ONLY_LOADING_TICKERS.has(clean) ? 'raster' : 'svg',
+    type: 'svg',
     color: BRAND_COLORS[canonical] || '#0F172A',
   };
 };
