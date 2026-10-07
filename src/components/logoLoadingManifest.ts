@@ -1,9 +1,6 @@
 /**
- * High-Precision Institutional 3D Logo Asset Manifest
- *
- * Zero-network dependency: All official brand SVGs are stored locally in /logos/
- * Guaranteeing 0ms latency, zero 404s, zero 429 rate limits, and infinite vector resolution.
- * Every logo is extruded into authentic 3D geometry in StockLogoLoader.tsx.
+ * Curated local vector assets for the animated stock logos.
+ * StockLogoLoader extrudes each SVG into 3D geometry.
  */
 
 export interface LoadingAsset {
