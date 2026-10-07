@@ -142,15 +142,8 @@ export const ALIAS_MAP: Record<string, string> = {
   "RHM": "RNMBY"
 };
 
-// These local SVGs are inaccurate abstractions or broken wordmark stand-ins.
-// They must not be extruded as if they were the companies' actual marks. Use the
-// first-party site favicon fallback until a verified, geometry-ready vector is curated.
-const RASTER_ONLY_LOADING_TICKERS = new Set([
-  '0981', '0981.HK', 'SMIC', 'SMICY',
-  'ATEYY', 'TOELY',
-  'ASTS', 'AVAV', 'COHR', 'DRO', 'DRS', 'RCAT', 'RDW',
-  'RKGRY', 'RNMBY', 'RTX', 'SX7P', 'TXN', 'UMAC'
-]);
+// All audited stock marks now load from a curated local SVG and remain extruded in 3D.
+const RASTER_ONLY_LOADING_TICKERS = new Set<string>();
 
 export const getLoadingAsset = (ticker: string): LoadingAsset => {
   const clean = ticker ? ticker.toUpperCase().trim() : '';
