@@ -31,6 +31,7 @@ import { StockLogo } from './StockLogo';
 import { FinancialHistoryChart } from './FinancialHistoryChart';
 import { AnimatePresence } from 'motion/react';
 import { StockLogoLoader } from './StockLogoLoader';
+import { TradingViewChartWidget } from './TradingViewChartWidget';
 
 interface CompanyDetailModalProps {
   result: QuarterlyResult | null;
@@ -53,9 +54,14 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [liveConsensus, setLiveConsensus] = useState<any | null>(null);
   const [liveOutlooks, setLiveOutlooks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [showLiveGraph, setShowLiveGraph] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
+  }, [result?.ticker]);
+
+  useEffect(() => {
+    setShowLiveGraph(false);
   }, [result?.ticker]);
 
   useEffect(() => {
@@ -420,6 +426,19 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                       LIVE TICK
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setShowLiveGraph(prev => !prev)}
+                    className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold font-mono-code transition cursor-pointer flex items-center gap-1 ${
+                      showLiveGraph
+                        ? 'bg-blue-600 text-white border border-blue-700 shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                    }`}
+                    title={showLiveGraph ? "Hide TradingView Live Graph" : "Show TradingView Live Graph"}
+                  >
+                    <Activity className="w-2.5 h-2.5" />
+                    LIVE GRAPH
+                  </button>
                 </div>
                 <div className="flex items-baseline gap-3 flex-wrap">
                   {isEuropeanCompany ? (
@@ -511,6 +530,12 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </div>
             </div>
           </div>
+
+          {showLiveGraph && (
+            <div className="w-full bg-[#0A192F] border border-slate-700/60 rounded-xl overflow-hidden shadow-2xs">
+              <TradingViewChartWidget ticker={result.ticker} />
+            </div>
+          )}
 
           {/* Core Scorecard: EPS & Revenue */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

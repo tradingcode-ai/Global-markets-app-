@@ -647,7 +647,7 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'US30Y': '^TYX',
   // European Financials
   'BARC': 'BARC.L',
-  'BCS': 'BCS',
+  'BCS': 'BARC.L',
   'HSBC': 'HSBA.L',
   'ABN': 'ABN.AS',
   'ING': 'INGA.AS',
@@ -659,12 +659,15 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'SX7P': 'EXV1.DE',
   // Hyperscalers & Neo Clouds — primary public listings
   'SPCX': 'SPCX',
-  'RKGRY': 'RNKGF',
+  'RKGRY': 'R3NK.DE',
   'DRO': 'DRO.AX',
   'CRWV': 'CRWV',
   'NBIS': 'NBIS',
   'IREN': 'IREN',
-  // European Aerospace & Defense primary exchange symbols
+  // European Aerospace & Defense primary exchange symbols & ADR mappings
+  'RNMBY': 'RHM.DE',
+  'RYCEY': 'RR.L',
+  'EADSY': 'AIR.PA',
   'RHM': 'RHM.DE',
   'THALES': 'HO.PA',
   'SAFRAN': 'SAF.PA',
