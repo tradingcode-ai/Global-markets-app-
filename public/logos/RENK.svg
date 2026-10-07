@@ -1,4 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">
-  <rect x="5" y="5" width="110" height="50" rx="6" fill="#E1001A" />
-  <text x="60" y="38" font-family="system-ui, -apple-system, sans-serif" font-size="26" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="3">RENK</text>
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1551 237" width="1551" height="237">
+	<title>Logo (50)-svg</title>
+	<style>
+		.s0 { fill: #1f3044 } 
+	</style>
+	<g id="Logo">
+		<g id="Layer">
+			<path id="Fill-1" class="s0" d="m407.6 0v236.2h317.8v-48.9h-264.3v-46.4h195.5v-49h-195.5v-42.9h255.5v-49z"/>
+			<path id="Fill-2" class="s0" d="m1079.9 0v170.8l-213.6-170.8h-52.2v236.2h53.5v-170l212.3 170h53.5v-236.2z"/>
+			<path id="Fill-3" fill-rule="evenodd" class="s0" d="m251.8 151.1l74.4 85.1h-67.9l-68.4-79.3h-136.4v79.3h-53.5v-236.2h212.8c59.1 0 97.2 30.7 97.2 78.1 0 35.6-21.5 62.1-58.2 73zm4.7-72.6c0-12.7-4.6-29.5-44.9-29.5h-158.1v58.9h158.1c40.3 0 44.9-16.8 44.9-29.4z"/>
+			<path id="Fill-5" class="s0" d="m1550.4 0h-74.4l-191.6 165.5v-165.5h-53.5v236.2h45.1l100.2-86.2 99.8 86.2h74.4l-137.2-118.1z"/>
+		</g>
+	</g>
 </svg>
