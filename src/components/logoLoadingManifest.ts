@@ -142,12 +142,23 @@ export const ALIAS_MAP: Record<string, string> = {
   "RHM": "RNMBY"
 };
 
+// These local SVGs are inaccurate abstractions or broken wordmark stand-ins.
+// They must not be extruded as if they were the companies' actual marks. Use the
+// first-party site favicon fallback until a verified, geometry-ready vector is curated.
+const RASTER_ONLY_LOADING_TICKERS = new Set([
+  'GOOGL', 'UBS', 'JPM', 'BAC',
+  '0981', '0981.HK', 'SMIC', 'SMICY',
+  'KIOXIA', 'ATEYY', 'TOELY',
+  'ASTS', 'AVAV', 'COHR', 'DRO', 'DRS', 'IREN', 'LITE', 'RCAT', 'RDW',
+  'RKGRY', 'RNMBY', 'RTX', 'SX7P', 'TXN', 'UMAC'
+]);
+
 export const getLoadingAsset = (ticker: string): LoadingAsset => {
   const clean = ticker ? ticker.toUpperCase().trim() : '';
   const canonical = ALIAS_MAP[clean] || clean;
   return {
     src: `/logos/${canonical}.svg`,
-    type: 'svg',
+    type: RASTER_ONLY_LOADING_TICKERS.has(canonical) || RASTER_ONLY_LOADING_TICKERS.has(clean) ? 'raster' : 'svg',
     color: BRAND_COLORS[canonical] || '#0F172A',
   };
 };
