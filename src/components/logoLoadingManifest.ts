@@ -146,10 +146,9 @@ export const ALIAS_MAP: Record<string, string> = {
 // They must not be extruded as if they were the companies' actual marks. Use the
 // first-party site favicon fallback until a verified, geometry-ready vector is curated.
 const RASTER_ONLY_LOADING_TICKERS = new Set([
-  'GOOGL', 'UBS', 'JPM', 'BAC',
   '0981', '0981.HK', 'SMIC', 'SMICY',
-  'KIOXIA', 'ATEYY', 'TOELY',
-  'ASTS', 'AVAV', 'COHR', 'DRO', 'DRS', 'IREN', 'LITE', 'RCAT', 'RDW',
+  'ATEYY', 'TOELY',
+  'ASTS', 'AVAV', 'COHR', 'DRO', 'DRS', 'RCAT', 'RDW',
   'RKGRY', 'RNMBY', 'RTX', 'SX7P', 'TXN', 'UMAC'
 ]);
 
