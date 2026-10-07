@@ -21,8 +21,6 @@ const LOADER_DURATION_MS = 2000;
 const EXIT_DURATION_S = 0.18;
 /** Length of the assembly timeline (s); leaves headroom before onComplete. */
 const TIMELINE_S = 1.8;
-/** If the SVG arrives later than this (s after mount), skip to the settled pose. */
-const MAX_LATE_START_S = 0.9;
 
 // --------------------------------------------------------
 // Geometry tuning (world units; camera fov 35 at z ≈ 8)
@@ -108,11 +106,11 @@ function hashString(value: string) {
 function legibleColor(color: THREE.Color) {
   const hsl = { h: 0, s: 0, l: 0 };
   color.getHSL(hsl);
-  if (hsl.l > 0.9) color.setHSL(hsl.h, hsl.s, 0.82);
+  if (hsl.l > 0.85) color.setHSL(hsl.h, hsl.s, 0.38);
   return color;
 }
 
-function buildLogoModel(svgText: string, brandColor: string | undefined, seedKey: string): LogoModel {
+export function buildLogoModel(svgText: string, brandColor: string | undefined, seedKey: string): LogoModel {
   const data = new SVGLoader().parse(svgText);
   const brand = brandColor ? new THREE.Color(brandColor) : null;
 
@@ -252,8 +250,9 @@ function AssemblyScene({
   const solidRef = useRef<THREE.Group>(null);
   const sheenRef = useRef<THREE.PointLight>(null);
 
-  const skipAnimation = reducedMotion || startAt > MAX_LATE_START_S;
-  const speed = skipAnimation ? 1 : TIMELINE_S / Math.max(TIMELINE_S - startAt, TIMELINE_S - MAX_LATE_START_S);
+  const skipAnimation = reducedMotion;
+  const remainingS = Math.max(0.8, 2.0 - startAt);
+  const speed = skipAnimation ? 1 : Math.max(1, TIMELINE_S / remainingS);
   const timeRef = useRef(skipAnimation ? TIMELINE_S : 0);
 
   const count = model.targets.length / 3;
@@ -268,14 +267,16 @@ function AssemblyScene({
           roughness: 0.34,
           transparent: !skipAnimation,
           opacity: skipAnimation ? 1 : 0,
+          side: THREE.DoubleSide,
         }),
     );
 
     const particleGeometry = new THREE.TetrahedronGeometry(PARTICLE_RADIUS / model.baseScale, 0);
     const particleMaterial = new THREE.MeshStandardMaterial({
-      metalness: 0.3,
-      roughness: 0.25,
+      metalness: 0.25,
+      roughness: 0.28,
       flatShading: true,
+      side: THREE.DoubleSide,
     });
     const particles = new THREE.InstancedMesh(particleGeometry, particleMaterial, Math.max(1, count));
     particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -287,6 +288,7 @@ function AssemblyScene({
     const delays = new Float32Array(count);
     const spins = new Float32Array(count * 3);
     const color = new THREE.Color();
+    const hsl = { h: 0, s: 0, l: 0 };
     const unit = 1 / model.baseScale; // SVG units per world unit
     for (let i = 0; i < count; i++) {
       const tx = model.targets[i * 3];
@@ -301,7 +303,17 @@ function AssemblyScene({
       spins[i * 3 + 1] = (rand() - 0.5) * 9;
       spins[i * 3 + 2] = (rand() - 0.5) * 9;
       color.setRGB(model.colors[i * 3], model.colors[i * 3 + 1], model.colors[i * 3 + 2]);
-      color.lerp(new THREE.Color(1, 1, 1), 0.15);
+      // Stop bleaching particles! Maintain rich, saturated colors that contrast sharply with bg-white
+      color.getHSL(hsl);
+      if (hsl.l > 0.62) {
+        // High luminance colors (e.g. bright greens/cyans/yellows): deepen slightly for contrast against white
+        color.setHSL(hsl.h, Math.min(1, hsl.s * 1.1), hsl.l * 0.8);
+      } else if (hsl.l < 0.08) {
+        // Near-black kept crisp
+        color.setHSL(hsl.h, hsl.s, 0.12);
+      } else {
+        color.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), hsl.l);
+      }
       particles.setColorAt(i, color);
     }
     if (particles.instanceColor) particles.instanceColor.needsUpdate = true;
@@ -368,19 +380,19 @@ function AssemblyScene({
     }
 
     // ---- Damped-spring settle (rotation + subtle scale) ----
-    const damp = Math.exp(-2.4 * u);
-    group.rotation.y = -0.62 * damp * Math.cos(3.3 * u);
-    group.rotation.x = 0.22 * damp * Math.cos(3.3 * u + 0.3);
-    const landing = u > 1.3 ? 0.035 * Math.exp(-7 * (u - 1.3)) * Math.sin(9 * (u - 1.3)) : 0;
+    const damp = Math.exp(-2.2 * u);
+    group.rotation.y = -0.58 * damp * Math.cos(3.2 * u);
+    group.rotation.x = 0.20 * damp * Math.cos(3.2 * u + 0.3);
+    const landing = u > 1.25 ? 0.03 * Math.exp(-6 * (u - 1.25)) * Math.sin(8 * (u - 1.25)) : 0;
     const s = worldScale * (1 + landing);
     // Negative Y flips SVG (y-down) into world (y-up); three.js corrects face winding.
     group.scale.set(s, -s, s);
 
     // ---- Light sheen sweep once the logo is solid ----
     if (sheenRef.current) {
-      const sweep = clamp01((u - 1.15) / 0.6);
+      const sweep = clamp01((u - 1.05) / 0.55);
       sheenRef.current.position.x = -5 + 10 * smoothstep(0, 1, sweep);
-      sheenRef.current.intensity = skipAnimation ? 0 : 22 * Math.sin(Math.PI * sweep);
+      sheenRef.current.intensity = skipAnimation ? 0 : 24 * Math.sin(Math.PI * sweep);
     }
 
     // ---- Gentle camera dolly ----
@@ -419,7 +431,8 @@ class WebGLErrorBoundary extends Component<{ onError: () => void; children: Reac
   static getDerivedStateFromError() {
     return { failed: true };
   }
-  componentDidCatch() {
+  componentDidCatch(error: any, info: any) {
+    console.error(`[WebGLErrorBoundary ERROR]:`, error, info);
     this.props.onError();
   }
   render() {
@@ -466,7 +479,8 @@ function LogoAssembly3D({
         if (cancelled) return;
         try {
           built = buildLogoModel(text, color, `${ticker}:${url}`);
-        } catch {
+        } catch (err) {
+          console.error(`[LogoAssembly3D ERROR for ${ticker}]:`, err);
           onRenderError();
           return;
         }
@@ -498,7 +512,7 @@ function LogoAssembly3D({
               <Canvas
                 flat
                 dpr={[1, 2]}
-                frameloop={reducedMotion || ready.startAt > MAX_LATE_START_S ? 'demand' : 'always'}
+                frameloop={reducedMotion ? 'demand' : 'always'}
                 camera={{ position: [0, 0, 8.6], fov: 35, near: 0.1, far: 50 }}
                 gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
                 style={{ pointerEvents: 'none' }}

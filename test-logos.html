@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Logo Diagnostics - All 50 Tickers</title>
+</head>
+<body>
+  <h1>Logo Diagnostics - All 50 Tickers</h1>
+  <pre id="output">Running diagnostics...</pre>
+  <script type="module">
+    import { buildLogoModel } from '/src/components/StockLogoLoader.tsx';
+    import { BRAND_COLORS, ALIAS_MAP } from '/src/components/logoLoadingManifest.ts';
+
+    async function run() {
+      const tickers = [
+        'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'META', 'AVGO', 'AMD',
+        'JPM', 'BAC', 'C', 'WFC', 'MS', 'GS', 'BX', 'KKR', 'APO', 'ARES',
+        'BCS', 'BARC', 'HSBC', 'ABN', 'ING', 'RABO', 'BNP', 'GLE', 'UBS',
+        'SAN', 'BBVA', 'SX7P', 'SPCX', 'GE', 'RTX', 'BA', 'LMT', 'RKLB',
+        'DRS', 'RKGRY', 'RCAT', 'RYCEY', 'EADSY', 'RNMBY', 'BDRBF', 'KTOS',
+        'AVAV', 'ESLT', 'UMAC', 'DRO', 'ASTS', 'RDW'
+      ];
+      const results = {};
+      const failures = [];
+      
+      for (const ticker of tickers) {
+        const canonical = ALIAS_MAP[ticker] || ticker;
+        const url = `/logos/${canonical}.svg`;
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const text = await res.text();
+          const color = BRAND_COLORS[canonical];
+          const model = buildLogoModel(text, color, `${ticker}:${url}`);
+          results[ticker] = {
+            status: 'OK',
+            parts: model.parts.length,
+            targets: model.targets.length / 3,
+            colors: model.colors.length / 3,
+            width: model.width,
+            height: model.height
+          };
+          model.dispose();
+        } catch (err) {
+          results[ticker] = {
+            status: 'FAIL',
+            error: err.message,
+            stack: err.stack
+          };
+          failures.push({ ticker, error: err.message });
+        }
+      }
+      
+      document.getElementById('output').textContent = JSON.stringify({ summary: { total: tickers.length, failures: failures.length, failedTickers: failures }, results }, null, 2);
+    }
+    run();
+  </script>
+</body>
+</html>

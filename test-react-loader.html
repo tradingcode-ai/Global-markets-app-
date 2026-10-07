@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>React Loader Test</title>
+</head>
+<body>
+  <div id="root"></div>
+  <pre id="logs" style="background:#f1f5f9;padding:10px;font-family:monospace;"></pre>
+  <script>
+    window.allLogs = [];
+    function appendLog(type, ...args) {
+      const line = `[${type}] ` + args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      window.allLogs.push(line);
+      const el = document.getElementById('logs');
+      if (el) el.textContent = window.allLogs.join('\n');
+    }
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const origErr = console.error;
+    console.log = (...args) => { origLog(...args); appendLog('LOG', ...args); };
+    console.warn = (...args) => { origWarn(...args); appendLog('WARN', ...args); };
+    console.error = (...args) => { origErr(...args); appendLog('ERROR', ...args); };
+    window.addEventListener('error', (e) => appendLog('WINDOW_ERROR', e.message, e.filename, e.lineno));
+    window.addEventListener('unhandledrejection', (e) => appendLog('UNHANDLED', e.reason?.message || e.reason));
+  </script>
+  <script type="module">
+    import React, { useState, useEffect } from 'react';
+    import ReactDOM from 'react-dom/client';
+    import { StockLogoLoader } from '/src/components/StockLogoLoader.tsx';
+
+    const tickers = ['NVDA', 'AAPL', 'MSFT', 'META', 'GOOGL', 'AMZN', 'TSM'];
+
+    function App() {
+      const [currentIdx, setCurrentIdx] = useState(0);
+      const [results, setResults] = useState({});
+
+      const ticker = tickers[currentIdx];
+
+      useEffect(() => {
+        // Inspect DOM after 500ms to see if canvas or img was rendered
+        const t = setTimeout(() => {
+          const container = document.getElementById('loader-container');
+          const hasCanvas = !!container?.querySelector('canvas');
+          const hasImg = !!container?.querySelector('img');
+          console.log(`CHECK_${ticker}: hasCanvas=${hasCanvas}, hasImg=${hasImg}`);
+          setResults(prev => ({
+            ...prev,
+            [ticker]: { hasCanvas, hasImg }
+          }));
+        }, 600);
+        return () => clearTimeout(t);
+      }, [ticker]);
+
+      return React.createElement('div', { style: { padding: 20 } },
+        React.createElement('h1', null, `Testing ${ticker} (${currentIdx + 1}/${tickers.length})`),
+        React.createElement('div', {
+          id: 'loader-container',
+          style: { position: 'relative', width: 400, height: 300, border: '1px solid #ccc', margin: '20px 0' }
+        },
+          React.createElement(StockLogoLoader, {
+            key: ticker,
+            ticker: ticker,
+            onComplete: () => {
+              console.log(`COMPLETE_${ticker}`);
+              if (currentIdx + 1 < tickers.length) {
+                setTimeout(() => setCurrentIdx(currentIdx + 1), 200);
+              } else {
+                console.log('ALL_TESTS_DONE');
+              }
+            }
+          })
+        ),
+        React.createElement('pre', { id: 'summary' }, JSON.stringify(results, null, 2))
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>

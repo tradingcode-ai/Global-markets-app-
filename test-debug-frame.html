@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Debug Frame</title>
+</head>
+<body>
+  <div id="root"></div>
+  <pre id="output"></pre>
+  <script type="module">
+    import React from 'react';
+    import ReactDOM from 'react-dom/client';
+    import * as THREE from 'three';
+    import { SVGLoader } from 'three-stdlib';
+    import { buildLogoModel } from '/src/components/StockLogoLoader.tsx';
+    import { BRAND_COLORS, ALIAS_MAP } from '/src/components/logoLoadingManifest.ts';
+
+    async function inspectTicker(ticker) {
+      const canonical = ALIAS_MAP[ticker] || ticker;
+      const url = `/logos/${canonical}.svg`;
+      const res = await fetch(url);
+      const text = await res.text();
+      const color = BRAND_COLORS[canonical];
+      const data = new SVGLoader().parse(text);
+      const model = buildLogoModel(text, color, `${ticker}:${url}`);
+
+      const partsInfo = model.parts.map((p, i) => {
+        p.geometry.computeBoundingBox();
+        const bb = p.geometry.boundingBox;
+        const rawPath = data.paths[i];
+        return {
+          index: i,
+          rawStyle: rawPath?.userData?.style,
+          hasFillAttr: rawPath?.userData?.node?.hasAttribute ? rawPath.userData.node.hasAttribute('fill') : null,
+          fillAttr: rawPath?.userData?.node?.getAttribute ? rawPath.userData.node.getAttribute('fill') : null,
+          pathColorHex: '#' + rawPath?.color?.getHexString(),
+          partColorHex: '#' + p.color.getHexString()
+        };
+      });
+
+      return {
+        ticker,
+        partsCount: model.parts.length,
+        baseScale: model.baseScale,
+        targetsCount: model.targets.length / 3,
+        partsInfo
+      };
+    }
+
+    async function run() {
+      const tickers = ['META', 'NVDA', 'AAPL', 'MSFT'];
+      const report = {};
+      for (const t of tickers) {
+        report[t] = await inspectTicker(t);
+      }
+      document.getElementById('output').textContent = JSON.stringify(report, null, 2);
+    }
+    run();
+  </script>
+</body>
+</html>
