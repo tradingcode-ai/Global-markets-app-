@@ -215,7 +215,7 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
             </button>
 
             <button
-              onClick={loadDashboard}
+              onClick={() => { void loadDashboard(); }}
               title="Vernieuw overzicht"
               className="p-3 bg-white/10 hover:bg-white/15 text-white rounded-xl transition border border-white/10 flex items-center justify-center cursor-pointer"
             >

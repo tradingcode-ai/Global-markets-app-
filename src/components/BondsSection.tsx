@@ -21,14 +21,16 @@ import { SovereignYieldHistoryChart } from './SovereignYieldHistoryChart';
 
 interface BondsSectionProps {
   quotes: Record<string, LiveQuote>;
-  onRefreshQuotes: () => void;
+  onRefreshQuotes: () => void | Promise<void>;
   isLoadingQuotes: boolean;
   selectedBondId?: string;
   onSelectBondId?: (id: string) => void;
+  recentTicks?: Record<string, 'up' | 'down'>;
 }
 
 export const BondsSection: React.FC<BondsSectionProps> = ({
   quotes,
+  recentTicks: propRecentTicks,
   onRefreshQuotes,
   isLoadingQuotes,
   selectedBondId: externalBondId,
@@ -124,7 +126,8 @@ export const BondsSection: React.FC<BondsSectionProps> = ({
   const mortgageProvider = mortgageQuote?.provider || 'US30YFRM:Exchange (Live Feed)';
 
   // Track recent price ticks for visual cues
-  const [recentTicks, setRecentTicks] = useState<Record<string, 'up' | 'down'>>({});
+  const [internalRecentTicks, setRecentTicks] = useState<Record<string, 'up' | 'down'>>({});
+  const recentTicks = propRecentTicks || internalRecentTicks;
   const prevYieldsRef = React.useRef<Record<string, number>>({});
 
   React.useEffect(() => {

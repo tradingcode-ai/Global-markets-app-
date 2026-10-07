@@ -222,7 +222,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-900 text-xs">Minimale Surprise Drempelwaarde</span>
                   <span className="font-mono-code font-bold text-blue-600 text-xs">
-                    {preferences.minSurprisePercentage}%
+                    {preferences.minSurprisePercentage ?? 2.0}%
                   </span>
                 </div>
                 <input
@@ -230,7 +230,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   min="0"
                   max="15"
                   step="0.5"
-                  value={preferences.minSurprisePercentage}
+                  value={preferences.minSurprisePercentage ?? 2.0}
                   onChange={(e) => onUpdatePreferences({
                     ...preferences,
                     minSurprisePercentage: parseFloat(e.target.value)
@@ -252,10 +252,11 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition">
                     <input
                       type="checkbox"
-                      checked={preferences.alertOnBeat}
+                      checked={preferences.alertOnEarningsBeat ?? preferences.alertOnBeat ?? true}
                       onChange={(e) => onUpdatePreferences({
                         ...preferences,
-                        alertOnBeat: e.target.checked
+                        alertOnBeat: e.target.checked,
+                        alertOnEarningsBeat: e.target.checked
                       })}
                       className="rounded border-slate-300 text-emerald-600 focus:ring-0 w-4 h-4"
                     />
@@ -268,10 +269,11 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition">
                     <input
                       type="checkbox"
-                      checked={preferences.alertOnMiss}
+                      checked={preferences.alertOnEarningsMiss ?? preferences.alertOnMiss ?? true}
                       onChange={(e) => onUpdatePreferences({
                         ...preferences,
-                        alertOnMiss: e.target.checked
+                        alertOnMiss: e.target.checked,
+                        alertOnEarningsMiss: e.target.checked
                       })}
                       className="rounded border-slate-300 text-rose-600 focus:ring-0 w-4 h-4"
                     />

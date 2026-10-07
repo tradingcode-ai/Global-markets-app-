@@ -324,6 +324,9 @@ export interface AlertPreferences {
   alertOnMomentumDown: boolean; // < -5.0%
   alertOnFiftyTwoWeekHighLow?: boolean;
   // Legacy backwards compatibility fields
+  minSurprisePercentage?: number;
+  alertOnBeat?: boolean;
+  alertOnMiss?: boolean;
   alertOnRelease?: boolean;
   alertOnMajorSurprise?: boolean;
   alertOnGuidanceChange?: boolean;

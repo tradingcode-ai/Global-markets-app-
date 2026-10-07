@@ -34,6 +34,12 @@ const { Pool } = pg;
 dotenv.config({ path: '.env.local' });
 dotenv.config();
 
+// If DATABASE_URL is missing or does not start with postgresql:// or postgres://, override from .env
+if (!process.env.DATABASE_URL || (!process.env.DATABASE_URL.startsWith('postgres://') && !process.env.DATABASE_URL.startsWith('postgresql://'))) {
+  dotenv.config({ path: '.env.local', override: true });
+  dotenv.config({ override: true });
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -5957,7 +5963,7 @@ app.get('/api/v1/news/status', async (_req, res) => {
     timezone: 'Europe/Amsterdam',
     configured: Boolean(process.env.GEMINI_API_KEY),
     provider: 'Gemini 3.8 Flash (Free Keyless RSS Ingestion)',
-    postgresConnected: Boolean(process.env.DATABASE_URL),
+    postgresConnected: Boolean(getAgentPgPool()),
     activeAlertTickers: ['ASML', 'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'TSM', 'MU'],
     sources: ['CNBC Markets RSS', 'CNBC Top News RSS', 'Yahoo Finance RSS', 'SEC EDGAR 8-K']
   });
@@ -6186,7 +6192,12 @@ app.get('/api/system/health', async (_req, res) => {
       dbStatus.error = err.message;
     }
   } else {
-    dbStatus.error = 'Geen PostgreSQL verbinding geconfigureerd';
+    const rawUrl = process.env.DATABASE_URL;
+    if (rawUrl && !rawUrl.startsWith('postgres://') && !rawUrl.startsWith('postgresql://')) {
+      dbStatus.error = 'DATABASE_URL is niet correct geconfigureerd: de waarde begint niet met postgresql:// of postgres://. Er staat momenteel een access token/key ingevuld in plaats van een Render PostgreSQL Connection String.';
+    } else {
+      dbStatus.error = 'Geen PostgreSQL verbinding geconfigureerd (DATABASE_URL ontbreekt)';
+    }
   }
 
   // 2. Gemini AI Key & Engine Diagnostics with Usage Quotas (3.8 Flash & Antigravity)
