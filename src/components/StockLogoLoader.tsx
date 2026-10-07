@@ -31,7 +31,7 @@ const EXTRUDE_DEPTH = 0.24;
 const BEVEL_THICKNESS = 0.03;
 const BEVEL_SIZE = 0.012;
 const PARTICLE_COUNT = 720;
-const PARTICLE_RADIUS = 0.034;
+const PARTICLE_RADIUS = 0.040;
 
 // --------------------------------------------------------
 // SVG source cache: text only (no GPU resources), so it is safe to share
@@ -273,8 +273,8 @@ function AssemblyScene({
 
     const particleGeometry = new THREE.TetrahedronGeometry(PARTICLE_RADIUS / model.baseScale, 0);
     const particleMaterial = new THREE.MeshStandardMaterial({
-      metalness: 0.25,
-      roughness: 0.28,
+      metalness: 0.05,
+      roughness: 0.75,
       flatShading: true,
       side: THREE.DoubleSide,
     });
@@ -303,16 +303,17 @@ function AssemblyScene({
       spins[i * 3 + 1] = (rand() - 0.5) * 9;
       spins[i * 3 + 2] = (rand() - 0.5) * 9;
       color.setRGB(model.colors[i * 3], model.colors[i * 3 + 1], model.colors[i * 3 + 2]);
-      // Stop bleaching particles! Maintain rich, saturated colors that contrast sharply with bg-white
+      // Rich, saturated particle colors with high contrast against bg-white:
+      // Prevent directional lighting from bleaching particles to white, ensuring
+      // vivid contrast for NVDA green, MSFT cyan, AMZN orange, etc.
       color.getHSL(hsl);
-      if (hsl.l > 0.62) {
-        // High luminance colors (e.g. bright greens/cyans/yellows): deepen slightly for contrast against white
-        color.setHSL(hsl.h, Math.min(1, hsl.s * 1.1), hsl.l * 0.8);
-      } else if (hsl.l < 0.08) {
-        // Near-black kept crisp
-        color.setHSL(hsl.h, hsl.s, 0.12);
+      if (hsl.l < 0.05 || hsl.s < 0.05) {
+        // Near-black/monochrome logos (AAPL, BX, SPCX): keep dark and crisp against white
+        color.setHSL(0, 0, 0.04);
       } else {
-        color.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), hsl.l);
+        const sat = Math.min(1, hsl.s * 1.2);
+        const light = Math.max(0.08, Math.min(0.22, hsl.l * 0.55));
+        color.setHSL(hsl.h, sat, light);
       }
       particles.setColorAt(i, color);
     }
@@ -360,7 +361,8 @@ function AssemblyScene({
           starts[i * 3 + 2] + (model.targets[i * 3 + 2] - starts[i * 3 + 2]) * e,
         );
         dummy.rotation.set(spins[i * 3] * k, spins[i * 3 + 1] * k, spins[i * 3 + 2] * k);
-        dummy.scale.setScalar(Math.max(0.0001, clamp01(p * 4) * dissolve));
+        // Swarm of particles is clearly visible from depth at t=0, scaling to full size as they assemble
+        dummy.scale.setScalar(Math.max(0.0001, (0.75 + 0.25 * p) * dissolve));
         dummy.updateMatrix();
         particles.setMatrixAt(i, dummy.matrix);
       }
