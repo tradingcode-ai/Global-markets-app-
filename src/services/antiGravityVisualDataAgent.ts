@@ -1000,15 +1000,41 @@ export function analyzeReportContext(
     )
   );
 
+  const immediateCatText = (() => {
+    const ic: any = report.immediateCatalyst ?? report.immediate_catalyst;
+    if (!ic) return '';
+    if (typeof ic === 'string') return ic;
+    if (typeof ic === 'object') {
+      const parts: string[] = [];
+      if (typeof ic.summary === 'string') parts.push(ic.summary);
+      if (Array.isArray(ic.facts)) {
+        parts.push(ic.facts.filter((f: any) => typeof f === 'string').join(' '));
+      }
+      if (Array.isArray(ic.claims)) {
+        parts.push(ic.claims.filter((c: any) => typeof c === 'string').join(' '));
+      }
+      return parts.join(' ');
+    }
+    return '';
+  })();
+
   const rawText = [
     report.executiveSummary,
-    typeof report.immediateCatalyst === 'string'
-      ? report.immediateCatalyst
-      : report.immediateCatalyst?.summary,
+    report.executive_summary,
+    immediateCatText,
     report.directMarketImpact,
+    report.direct_market_impact,
     report.broaderContext,
+    report.broader_context,
     report.whatMarketIsReactingTo,
+    report.what_market_is_reacting_to,
     report.whatToWatchNext,
+    report.what_to_watch_next,
+    report.headline,
+    report.bottomLine,
+    report.bottom_line,
+    report.keyDebate,
+    report.key_debate,
   ]
     .filter(Boolean)
     .join(' ');
@@ -1187,7 +1213,7 @@ export function inspectDocumentSources(
 // ============================================================================
 
 const PRIMARY_AGENT = 'antigravity-preview-09-2026';
-const FALLBACK_AGENT = 'antigravity-preview-05-2026';
+const FALLBACK_AGENT = 'antigravity-preview-09-2026';
 const PRIMARY_MODEL = 'gemini-3.8-flash';
 
 const VISUAL_DATA_AGENT_SYSTEM_PROMPT = `You are the AntiGravity Visual & Data Agent (v1.0) for institutional equity research.
@@ -1443,7 +1469,10 @@ async function executeVisualRetrievalWithRouter(
         agent_config: {
           type: 'antigravity',
           model: PRIMARY_MODEL,
-        },
+          thinking_config: {
+            thinking_level: 'high',
+          },
+        } as any,
         environment: {
           type: 'remote',
           sources: [
@@ -1456,7 +1485,7 @@ async function executeVisualRetrievalWithRouter(
         },
         system_instruction: VISUAL_DATA_AGENT_SYSTEM_PROMPT,
         input: prompt,
-        tools: [{ type: 'google_search' }],
+        tools: [{ type: 'google_search' }, { type: 'url_context' }],
       });
 
       const rawText = extractInteractionText(response);
@@ -1472,7 +1501,7 @@ async function executeVisualRetrievalWithRouter(
       console.warn(`[Visual & Data Agent] Primary agent ${PRIMARY_AGENT} failed:`, err?.message || err);
     }
 
-    // STAGE 2: Try Fallback Agent (antigravity-preview-05-2026) via Interactions API
+    // STAGE 2: Try Fallback Agent (antigravity-preview-09-2026) via Interactions API
     try {
       console.log(`[Visual & Data Agent] Router Stage 2: Calling fallback agent ${FALLBACK_AGENT}...`);
       const response: any = await ai.interactions.create({
@@ -1480,7 +1509,10 @@ async function executeVisualRetrievalWithRouter(
         agent_config: {
           type: 'antigravity',
           model: PRIMARY_MODEL,
-        },
+          thinking_config: {
+            thinking_level: 'high',
+          },
+        } as any,
         environment: {
           type: 'remote',
           sources: [
@@ -1493,7 +1525,7 @@ async function executeVisualRetrievalWithRouter(
         },
         system_instruction: VISUAL_DATA_AGENT_SYSTEM_PROMPT,
         input: prompt,
-        tools: [{ type: 'google_search' }],
+        tools: [{ type: 'google_search' }, { type: 'url_context' }],
       });
 
       const rawText = extractInteractionText(response);
@@ -1519,6 +1551,8 @@ async function executeVisualRetrievalWithRouter(
       config: {
         systemInstruction: VISUAL_DATA_AGENT_SYSTEM_PROMPT,
         tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingLevel: 'high' as any },
+        responseMimeType: 'application/json',
       },
     });
 
@@ -1977,11 +2011,12 @@ export async function runAntiGravityVisualDataAgent(
 
   // 5. Online Retrieval with Early Stopping Policy (if not satisfied via local docs)
   if (!satisfiedCandidate) {
-    const query =
-      brief?.dataSearchQuery ||
-      `${report.ticker} ${contextAnalysis.primarySubject} ${brief?.suggestedChartTitle || 'revenue capex breakdown'} official research exhibit Goldman Sachs J.P. Morgan`;
+    try {
+      const query =
+        brief?.dataSearchQuery ||
+        `${report.ticker} ${contextAnalysis.primarySubject} ${brief?.suggestedChartTitle || 'revenue capex breakdown'} official research exhibit Goldman Sachs J.P. Morgan`;
 
-    const prompt = `You are the AntiGravity Visual & Data Agent conducting visual research.
+      const prompt = `You are the AntiGravity Visual & Data Agent conducting visual research.
 Asset: ${report.ticker} (${contextAnalysis.primarySubject})
 Movement: ${changePercent ?? 'unknown'}%
 Theme: ${brief?.primaryTheme || contextAnalysis.themes[0]}
@@ -1996,51 +2031,54 @@ Follow the integrity rules:
 - If only a screenshot/exhibit exists, set extractionStatus to "VISUAL_ONLY" and do not fake datapoints.
 - Distinguish discoverySource from visualSource.`;
 
-    const retrievalResult = await executeVisualRetrievalWithRouter(prompt, report, pool);
+      const retrievalResult = await executeVisualRetrievalWithRouter(prompt, report, pool);
 
-    if (retrievalResult) {
-      const parsedJson = parseJsonResponse(retrievalResult.rawText);
-      const candidateObj =
-        parsedJson && typeof parsedJson === 'object' && 'candidate' in parsedJson
-          ? (parsedJson as any).candidate
-          : parsedJson;
+      if (retrievalResult) {
+        const parsedJson = parseJsonResponse(retrievalResult.rawText);
+        const candidateObj =
+          parsedJson && typeof parsedJson === 'object' && 'candidate' in parsedJson
+            ? (parsedJson as any).candidate
+            : parsedJson;
 
-      const onlineCandidate = normalizeExtractedCandidate(
-        candidateObj,
-        retrievalResult.groundedUrls
-      );
-
-      if (onlineCandidate) {
-        const decision = evaluateChartCandidate(
-          onlineCandidate,
-          0,
-          1,
-          chartSearchPlan.requestedTypes,
-          chartSearchPlan.retrievalPolicy
+        const onlineCandidate = normalizeExtractedCandidate(
+          candidateObj,
+          retrievalResult.groundedUrls
         );
 
-        if (decision.selectedCandidate) {
-          satisfiedCandidate = decision.selectedCandidate;
-          researchVisuals.push(satisfiedCandidate);
-          assetRegistry.push(
-            createResearchVisualAsset(
-              satisfiedCandidate,
-              'primary_evidence_exhibit',
-              new Date().toISOString()
-            )
+        if (onlineCandidate) {
+          const decision = evaluateChartCandidate(
+            onlineCandidate,
+            0,
+            1,
+            chartSearchPlan.requestedTypes,
+            chartSearchPlan.retrievalPolicy
           );
 
-          if (decision.renderMode === 'DERIVED_CHART') {
-            macroChart = deriveMacroChartPayload(satisfiedCandidate, brief);
+          if (decision.selectedCandidate) {
+            satisfiedCandidate = decision.selectedCandidate;
+            researchVisuals.push(satisfiedCandidate);
+            assetRegistry.push(
+              createResearchVisualAsset(
+                satisfiedCandidate,
+                'primary_evidence_exhibit',
+                new Date().toISOString()
+              )
+            );
+
+            if (decision.renderMode === 'DERIVED_CHART') {
+              macroChart = deriveMacroChartPayload(satisfiedCandidate, brief);
+            }
+
+            console.log(
+              `[Visual & Data Agent] Online candidate satisfied (renderMode: ${decision.renderMode}): ${satisfiedCandidate.title}`
+            );
+          } else {
+            console.log(`[Visual & Data Agent] Online candidate rejected: ${decision.reason}`);
           }
-
-          console.log(
-            `[Visual & Data Agent] Online candidate satisfied (renderMode: ${decision.renderMode}): ${satisfiedCandidate.title}`
-          );
-        } else {
-          console.log(`[Visual & Data Agent] Online candidate rejected: ${decision.reason}`);
         }
       }
+    } catch (searchErr: any) {
+      console.warn('[Visual & Data Agent] Online search/retrieval error (falling back to editorial hero):', searchErr?.message || searchErr);
     }
   }
 

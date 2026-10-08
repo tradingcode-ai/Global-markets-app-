@@ -17,6 +17,14 @@ import {
   updateResearchEvent
 } from './marketResearchStore';
 import { runAntiGravityVisualDataAgent } from './antiGravityVisualDataAgent';
+import {
+  canAdvanceWorkflow,
+  StructuredResearchReport,
+  ReportWorkflowState
+} from '../../agents/marketResearchReportWorkflowSpecification';
+
+const AGENT_ID = 'antigravity-preview-09-2026';
+const MODEL_ID = 'gemini-3.8-flash';
 
 // System prompt incorporating Sell-Side Editorial & Writing Architecture
 // (agents/marketResearchSellSideEditorialSpecification.ts & agents/05_EVENT_AND_SYSTEM_PROMPT.md)
@@ -792,13 +800,16 @@ async function executeResearchForEventInternal(
   // 1. First attempt: Official Interactions API Antigravity Agent
   if (aiClient.interactions && typeof aiClient.interactions.create === 'function') {
     try {
-      console.log(`[Research Agent] Initializing official Antigravity Agent via Interactions API (agent: antigravity-preview-05-2026, model: gemini-3.8-flash)...`);
+      console.log(`[Research Agent] Initializing official Antigravity Agent via Interactions API (agent: ${AGENT_ID}, model: ${MODEL_ID})...`);
       const interactionResponse: any = await aiClient.interactions.create({
-        agent: 'antigravity-preview-05-2026',
+        agent: AGENT_ID,
         agent_config: {
           type: 'antigravity',
-          model: 'gemini-3.8-flash'
-        },
+          model: MODEL_ID,
+          thinking_config: {
+            thinking_level: 'high'
+          }
+        } as any,
         environment: {
           type: 'remote',
           sources: [
@@ -811,7 +822,7 @@ async function executeResearchForEventInternal(
         },
         input: prompt,
         system_instruction: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
-        tools: [{ type: 'google_search' }]
+        tools: [{ type: 'google_search' }, { type: 'url_context' }]
       });
 
       if (interactionResponse) {
@@ -824,7 +835,7 @@ async function executeResearchForEventInternal(
 
         if (outputText && outputText.length > 50) {
           rawMarkdown = outputText;
-          modelUsed = 'antigravity-preview-05-2026 (gemini-3.8-flash)';
+          modelUsed = `${AGENT_ID} (${MODEL_ID})`;
           console.log(`[Research Agent] Successfully completed research via official Antigravity Agent interaction.`);
 
           // Extract and record exact Google Interactions API token usage
@@ -896,7 +907,8 @@ async function executeResearchForEventInternal(
           contents: prompt,
           config: {
             systemInstruction: DEEP_MARKET_RESEARCH_SYSTEM_PROMPT,
-            tools: [{ googleSearch: {} }]
+            tools: [{ googleSearch: {} }],
+            thinkingConfig: { thinkingLevel: 'high' as any }
           }
         });
 
@@ -1030,19 +1042,63 @@ async function executeResearchForEventInternal(
     createdAt: new Date().toISOString()
   };
 
-  // Visual enrichment is deliberately non-fatal: textual research remains
-  // available even when the macro search is offline or returns no evidence.
-  try {
-    const visualBrief = deriveVisualBrief(report);
-    const visualPayload = await runAntiGravityVisualDataAgent(report, visualBrief, pool);
-    report.visualPayload = visualPayload;
-    report.visual_payload = visualPayload;
-    console.log(`[Research Agent] Visual enrichment attached for ${event.ticker}.`);
-  } catch (visualError: any) {
-    console.warn(`[Research Agent] Visual enrichment failed non-fatally for ${event.ticker}:`, visualError?.message || visualError);
-  }
+  // Phase 1: RESEARCH (MARKET_RESEARCH_AGENT)
+  const structuredReport: StructuredResearchReport = {
+    reportType: 'SELL_SIDE_EVENT_NOTE',
+    headline: parsed.headline || `${event.ticker}: Fundamental Market Movement Analysis`,
+    bottomLine: parsed.bottomLine || parsed.executiveSummary || 'Core catalyst and transmission analysis.',
+    keyDebate: parsed.keyDebate || 'Valuation sustainability vs forward fundamentals.',
+    keyTakeaways: parsed.keyTakeaways && parsed.keyTakeaways.length > 0
+      ? parsed.keyTakeaways
+      : [parsed.directMarketImpact || 'Market reassessing forward multiple.'],
+    claims: (parsed.claims || []).map((c, idx) => ({
+      id: c.id || `claim_${idx + 1}`,
+      text: c.text,
+      certainty: (c.certainty as any) || 'REPORTED',
+      sourceIds: c.sourceIds || []
+    })),
+    sectionIds: ['executive_summary', 'what_drove_the_move', 'transmission', 'why_it_matters', 'risks']
+  };
 
-  // 4. Persist Report & Update Event
+  const gate1Passed = canAdvanceWorkflow({
+    stage: 'RESEARCH',
+    researchReport: structuredReport,
+    rendered: false
+  });
+  console.log(`[Research Workflow] Phase 1 (RESEARCH) validated: Gate beforeVisualData passed=${gate1Passed}`);
+
+  // Phase 2: VISUAL_DATA (VISUAL_DATA_AGENT)
+  const visualBrief = deriveVisualBrief(report);
+  const visualPayload = await runAntiGravityVisualDataAgent(report, visualBrief, pool);
+
+  const gate2Passed = canAdvanceWorkflow({
+    stage: 'VISUAL_DATA',
+    researchReport: structuredReport,
+    assetRegistry: { assets: (visualPayload.assetRegistry as any) || [] },
+    rendered: false
+  });
+  console.log(`[Research Workflow] Phase 2 (VISUAL_DATA) validated: Gate beforeComposition passed=${gate2Passed}`);
+
+  // Phase 3: COMPOSITION (REPORT_COMPOSER)
+  const layoutPlan = visualPayload.layoutPlan as any;
+
+  const gate3Passed = canAdvanceWorkflow({
+    stage: 'COMPOSITION',
+    researchReport: structuredReport,
+    assetRegistry: { assets: (visualPayload.assetRegistry as any) || [] },
+    layoutPlan: layoutPlan,
+    rendered: false
+  });
+  console.log(`[Research Workflow] Phase 3 (COMPOSITION) validated: Gate beforeRender passed=${gate3Passed}`);
+
+  // Phase 4: PERSISTENCE & RENDER PREPARATION
+  report.visualPayload = visualPayload;
+  report.visual_payload = visualPayload;
+  report.layoutPlan = visualPayload.layoutPlan;
+  report.layout_plan = visualPayload.layoutPlan;
+  report.visualStatus = visualPayload.macroChart ? 'COMPLETE' : 'HERO_FALLBACK';
+  report.visual_status = report.visualStatus;
+
   await saveResearchReport(report, pool);
 
   await updateResearchEvent(

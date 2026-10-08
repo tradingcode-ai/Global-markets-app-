@@ -6312,8 +6312,8 @@ app.get('/api/system/health', async (_req, res) => {
 
   const antigravityStatus = {
     configured: Boolean(geminiKey),
-    agent: 'antigravity-preview-05-2026',
-    model: 'antigravity-preview-05-2026 (gemini-3.8-flash)',
+    agent: 'antigravity-preview-09-2026',
+    model: 'antigravity-preview-09-2026 (gemini-3.8-flash)',
     serviceType: 'Interactions API (Autonomous Reasoning)',
     latencyMs: Math.max(18, geminiStatus.latencyMs),
     status: (geminiKey ? 'OPERATIONAL' : 'AUTH_REQUIRED') as 'OPERATIONAL' | 'QUOTA_EXCEEDED' | 'AUTH_REQUIRED' | 'ERROR',
@@ -6358,7 +6358,7 @@ app.get('/api/system/health', async (_req, res) => {
   const visualDesignerStatus = {
     configured: Boolean(geminiKey),
     agent: 'visual_designer_agent',
-    model: 'antigravity-preview-05-2026 (gemini-3.8-flash)',
+    model: 'antigravity-preview-09-2026 (gemini-3.8-flash)',
     serviceType: 'Antigravity Google Search grounded visual enrichment',
     latencyMs: visualLastLatencyMs,
     lastActivityAt: visualLastCallAt,

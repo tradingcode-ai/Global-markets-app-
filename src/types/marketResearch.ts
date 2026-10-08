@@ -620,6 +620,10 @@ export interface ResearchReport {
   status: ResearchStatus;
   visualPayload?: VisualEnrichmentPayload;
   visual_payload?: VisualEnrichmentPayload;
+  visualStatus?: 'COMPLETE' | 'HERO_FALLBACK' | 'FAILED';
+  visual_status?: 'COMPLETE' | 'HERO_FALLBACK' | 'FAILED';
+  layoutPlan?: ReportLayoutPlan;
+  layout_plan?: ReportLayoutPlan;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;
