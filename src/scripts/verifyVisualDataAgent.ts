@@ -55,6 +55,10 @@ import type {
 } from '../types/marketResearch';
 
 async function runAllTests() {
+  // This suite verifies credential-free behavior; never incur live model calls.
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.GEMINI_KEY;
   console.log('===============================================================');
   console.log('RUNNING AntiGravity Visual & Data Agent Verification Test Suite');
   console.log('===============================================================');
@@ -470,11 +474,11 @@ async function runAllTests() {
     // Check evidence placement in what_drove_the_move
     const whatDrove = layout.sections.find((s) => s.purpose === 'what_drove_the_move')!;
     assert.strictEqual(whatDrove.pattern, 'TEXT_CHART_SPLIT');
-    assert(whatDrove.blocks.some((b) => b.type === 'chart' && b.assetId === evidenceAsset.id));
+    assert(whatDrove.blocks.some((b) => b.type === 'research_exhibit' && b.assetId === evidenceAsset.id));
   });
 
   // TEST 11: Document Inspection for Attached Research
-  await test('inspectDocumentSources extracts exhibit from report sources if bank or signal present', () => {
+  await test('inspectDocumentSources never treats publisher/title metadata as inspected pixels', () => {
     const reportWithBankSource: ResearchReport = {
       id: 'rep_doc_inspect',
       ticker: 'TSMC',
@@ -491,12 +495,7 @@ async function runAllTests() {
     };
 
     const candidate = inspectDocumentSources(reportWithBankSource);
-    assert(candidate !== undefined);
-    assert.strictEqual(candidate.publisher, 'Morgan Stanley');
-    assert.strictEqual(candidate.type, 'exhibit');
-    assert.strictEqual(candidate.extractionStatus, 'VISUAL_ONLY');
-    assert.strictEqual(candidate.provenanceStatus, 'EXPLICIT_SOURCE');
-    assert.strictEqual(candidate.technicallyUsable, true);
+    assert.strictEqual(candidate, undefined);
   });
 
   // TEST 12: End-to-end execution without API key (Graceful Fallback Mode)
@@ -530,15 +529,16 @@ async function runAllTests() {
 
     const payload = await runAntiGravityVisualDataAgent(report, brief, null);
 
-    assert(payload.hero !== undefined);
-    assert(payload.hero.imageUrl.startsWith('https://images.unsplash.com/'));
+    assert.strictEqual(payload.hero, undefined);
+    assert.strictEqual(payload.version, 2);
+    assert.match(payload.availability!.evidence, /credentials unavailable/);
     assert.strictEqual(payload.marketCapImpactUsdBillions, -5.1); // 220 * -2.3% = -5.06 -> -5.1
     assert(Array.isArray(payload.transmissionSteps));
     assert.strictEqual(payload.transmissionSteps!.length, 4);
     assert(payload.layoutPlan !== undefined);
     assert.strictEqual(payload.layoutPlan!.reportType, 'SELL_SIDE_EVENT_NOTE');
     assert(Array.isArray(payload.assetRegistry));
-    assert(payload.assetRegistry!.length >= 1);
+    assert.strictEqual(payload.assetRegistry!.length, 0);
   });
 
   // TEST 13: Direct Agent Execution and Payload Verification
@@ -567,20 +567,20 @@ async function runAllTests() {
 
     const payload = await runAntiGravityVisualDataAgent(report, brief, null);
 
-    // Verify all canonical and snake_case properties
-    assert(payload.hero !== undefined);
+    // Canonical payload avoids duplicate embedded assets and supplies explicit availability.
+    assert.strictEqual(payload.hero, undefined);
     assert(payload.transmissionSteps !== undefined);
-    assert(payload.transmission_steps !== undefined);
+    assert(payload.availability !== undefined);
     assert(payload.marketCapImpactUsdBillions !== undefined);
-    assert(payload.market_cap_impact_usd_billions !== undefined);
+    assert.strictEqual(payload.market_cap_impact_usd_billions, undefined);
     assert(payload.enrichedAt !== undefined);
-    assert(payload.enriched_at !== undefined);
+    assert.strictEqual(payload.enriched_at, undefined);
     assert(payload.layoutPlan !== undefined);
     assert(payload.assetRegistry !== undefined);
   });
 
   // TEST 14: Token Usage Logger Robustness with Null and Error-Throwing Pool
-  await test('Token usage logger does not crash when pool is null or query throws', async () => {
+  await test('Credential-free fallback does not attempt model usage writes', async () => {
     const report: ResearchReport = {
       id: 'rep_pool_test',
       ticker: 'INTC',
@@ -591,8 +591,10 @@ async function runAllTests() {
     };
 
     // A mock pool whose query throws an error (e.g. table does not exist or connection down)
+    let usageWrites = 0;
     const errorPool: any = {
       query: async () => {
+        usageWrites += 1;
         throw new Error('relation "gemini_token_usage" does not exist');
       },
     };
@@ -601,11 +603,12 @@ async function runAllTests() {
     // It should complete gracefully without throwing an uncaught exception.
     const payload = await runAntiGravityVisualDataAgent(report, undefined, errorPool);
     assert(payload !== undefined);
-    assert(payload.hero !== undefined);
+    assert.strictEqual(payload.hero, undefined);
+    assert.strictEqual(usageWrites, 0);
   });
 
   // TEST 15: Document Inspection Candidate Attached to Report
-  await test('End-to-end with document inspection candidate wires exhibit into layout and asset registry', async () => {
+  await test('End-to-end rejects metadata-only sources when pixel inspection is unavailable', async () => {
     const report: ResearchReport = {
       id: 'rep_doc_e2e',
       ticker: 'TSMC',
@@ -627,21 +630,10 @@ async function runAllTests() {
 
     const payload = await runAntiGravityVisualDataAgent(report, undefined, null);
 
-    assert(payload.researchVisuals !== undefined && payload.researchVisuals.length === 1);
-    const visual = payload.researchVisuals[0];
-    assert.strictEqual(visual.publisher, 'Goldman Sachs');
-    assert.strictEqual(visual.extractionStatus, 'VISUAL_ONLY');
-    assert.strictEqual(visual.provenanceStatus, 'EXPLICIT_SOURCE');
-
-    // Layout plan should have primaryEvidenceAssetId matching the candidate ID
-    assert(payload.layoutPlan !== undefined);
-    assert.strictEqual(payload.layoutPlan.firstPage.primaryEvidenceAssetId, visual.id);
-
-    // Asset registry should contain both lead hero and primary evidence exhibit
-    assert(payload.assetRegistry !== undefined && payload.assetRegistry.length === 2);
-    const exhibitAsset = payload.assetRegistry.find((a) => a.id === visual.id);
-    assert(exhibitAsset !== undefined);
-    assert.strictEqual(exhibitAsset.type, 'research_exhibit');
+    assert.deepStrictEqual(payload.researchVisuals, []);
+    assert.strictEqual(payload.layoutPlan!.firstPage.primaryEvidenceAssetId, undefined);
+    assert.deepStrictEqual(payload.assetRegistry, []);
+    assert.match(payload.availability!.evidence, /credentials unavailable/);
   });
 
   console.log('===============================================================');

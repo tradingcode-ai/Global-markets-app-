@@ -21,6 +21,7 @@ import {
   getResearchConfig as getStoredResearchConfig,
   saveResearchConfig,
   ensureResearchTables,
+  startResearchReportRetention,
   closePreviousSessionEvents
 } from './src/services/marketResearchStore';
 import {
@@ -29,6 +30,7 @@ import {
   QuoteFetcher
 } from './src/services/marketResearchMonitor';
 import { fetchVerifiedResearchQuote } from './src/services/researchSessionQuotes';
+import { withoutReportVisualBytes } from './src/utils/researchReportPolicy';
 const { Pool } = pg;
 
 dotenv.config({ path: '.env.local' });
@@ -6515,10 +6517,11 @@ app.get('/api/research/reports', async (req, res) => {
   try {
     const { ticker, limit } = req.query as Record<string, string>;
     const pool = getAgentPgPool();
-    const reports = await getResearchReports({
+    const storedReports = await getResearchReports({
       ticker,
       limit: limit ? parseInt(limit, 10) : undefined
     }, pool);
+    const reports = storedReports.map(withoutReportVisualBytes);
     return res.json({ success: true, count: reports.length, reports, data: reports });
   } catch (err: any) {
     console.error('Error fetching research reports:', err);
@@ -6617,7 +6620,7 @@ app.post('/api/research/trigger', async (req, res) => {
 // Serve frontend in production or proxy in dev
 async function startServer() {
   const pool = getAgentPgPool();
-  ensureResearchTables(pool).catch(() => {});
+  startResearchReportRetention(pool);
   // Keep the review-only local app responsive without firing metered research
   // agent runs. Normal app startup remains unchanged.
   if (process.env.MATRIX_REVIEW_MODE === '1') {

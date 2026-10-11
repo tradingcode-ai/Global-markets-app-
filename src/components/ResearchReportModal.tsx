@@ -9,6 +9,7 @@ import { StockLogo } from './StockLogo';
 import { StockLogoLoader } from './StockLogoLoader';
 import { AnimatePresence } from 'motion/react';
 import { ReportMacroChart } from './ReportMacroChart';
+import { StoredReportFigure } from './StoredReportFigure';
 import { 
   X, 
   ExternalLink, 
@@ -151,7 +152,6 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
   const confidence = report.confidence || 'MEDIUM';
   const confidenceExplanation = report.confidenceExplanation || report.confidence_explanation || '';
   const sources: ResearchSource[] = report.sources || [];
-  const hero = visualPayload?.hero;
   const macroChart = visualPayload?.macroChart || visualPayload?.macro_chart;
   const marketCapImpact = visualPayload?.marketCapImpactUsdBillions ?? visualPayload?.market_cap_impact_usd_billions;
   const transmissionSteps = visualPayload?.transmissionSteps || visualPayload?.transmission_steps || [];
@@ -214,27 +214,11 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
     return [];
   }, [layoutPlan, report, catalystSections.facts, executiveSummary]);
 
-  // Lead image resolution (strictly framed compact photography, NOT full-bleed)
-  const leadImageInfo = useMemo(() => {
-    const assetId = layoutPlan?.firstPage?.leadImageAssetId;
-    const registry = visualPayload?.assetRegistry || (visualPayload as any)?.asset_registry;
-    let matchingAsset: any = null;
-    if (assetId && Array.isArray(registry)) {
-      matchingAsset = registry.find((a: any) => a.id === assetId);
-    }
-
-    const url = matchingAsset?.url || matchingAsset?.imageUrl || hero?.imageUrl || hero?.image_url;
-    const credit = matchingAsset?.attribution || hero?.photographerCredit || hero?.photographer_credit;
-    const location = hero?.locationLabel || hero?.location_label || matchingAsset?.title;
-    const sourceUrl = matchingAsset?.sourceUrl || hero?.sourceUrl || hero?.source_url;
-
-    return {
-      url,
-      credit: credit || 'Attribution retained in payload',
-      location: location || 'Field Photography / Research Exhibit',
-      sourceUrl
-    };
-  }, [layoutPlan, visualPayload, hero]);
+  // Resolve only persisted assets named by the composer. Remote URLs remain citations.
+  const registry = visualPayload?.assetRegistry || [];
+  const leadImageAsset = registry.find(a => a.id === layoutPlan?.firstPage?.leadImageAssetId && a.type === 'image');
+  const evidenceId = layoutPlan?.firstPage?.primaryEvidenceAssetId || layoutPlan?.sections.flatMap(s => s.blocks).find(b => b.assetId && b.type !== 'image')?.assetId;
+  const primaryEvidence = registry.find(a => a.id === evidenceId && a.type !== 'image');
 
   // Section headlines from layout plan (if composer specified them)
   const sectionByPurpose = useMemo(() => {
@@ -449,54 +433,7 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
 
             {/* Right side (30–35%): Compact Lead Image (Strictly NOT full-bleed) */}
             <div className="w-full lg:w-[34%] shrink-0 flex flex-col">
-              {leadImageInfo.url ? (
-                <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs flex flex-col">
-                  <div className="relative aspect-[16/10] sm:aspect-[4/3] w-full overflow-hidden bg-slate-900">
-                    <img
-                      src={leadImageInfo.url}
-                      alt={leadImageInfo.location || assetName}
-                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-950/70 backdrop-blur-xs text-[10px] font-mono uppercase tracking-wider text-slate-200 border border-slate-700/60">
-                      Lead Exhibit
-                    </div>
-                  </div>
-                  <div className="p-3 bg-white border-t border-slate-100 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] text-slate-700 font-medium">
-                      <span className="truncate">{leadImageInfo.location}</span>
-                      {leadImageInfo.sourceUrl && (
-                        <a
-                          href={leadImageInfo.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-mono text-[#002d62] hover:underline flex items-center gap-0.5 shrink-0 ml-1 font-semibold"
-                        >
-                          Verify <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-400 truncate">
-                      Credit: {leadImageInfo.credit}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-200 bg-white p-4.5 flex flex-col justify-between h-full space-y-3 shadow-2xs">
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold">
-                      Coverage Profile
-                    </div>
-                    <div className="text-base font-serif font-bold text-slate-900">{assetName}</div>
-                    <div className="text-xs text-slate-500 font-mono">{ticker} • {assetClass}</div>
-                  </div>
-                  <div className="text-[11px] text-slate-500 leading-relaxed font-sans border-t border-slate-100 pt-3">
-                    Visual evidence catalogued under verified institutional workflow. No synthetic assets generated.
-                  </div>
-                </div>
-              )}
+              <StoredReportFigure key={leadImageAsset?.id || report.id + '_photo'} asset={leadImageAsset} editorial unavailable={visualPayload?.availability?.photo === 'AVAILABLE' ? undefined : visualPayload?.availability?.photo} />
             </div>
           </div>
 
@@ -583,7 +520,7 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
             )}
           </div>
 
-          {/* 2. Verified Macro Driver & Primary Evidence */}
+          {/* 2. Original Research Evidence */}
           <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <h2 className="text-base font-serif font-bold text-slate-900 flex items-center gap-2">
@@ -593,11 +530,14 @@ export const ResearchReportModal: React.FC<ResearchReportModalProps> = ({
               <span className="text-[11px] text-slate-500 font-mono">Exhibit • Figure 1</span>
             </div>
             <div>
-              <ReportMacroChart payload={macroChart} />
-              <div className="mt-1 flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-500 px-1">
-                <span>Figure 1: {macroChart?.title || 'Verified Macro Driver & Underlying Series'}</span>
-                <span>Source: {macroChart?.source || 'EIA / FRED / Primary Regulatory Record'}</span>
-              </div>
+              {primaryEvidence || visualPayload?.version === 2 || !macroChart ? (
+                <StoredReportFigure key={primaryEvidence?.id || report.id + '_evidence'} asset={primaryEvidence} unavailable={visualPayload?.availability?.evidence === 'AVAILABLE' ? undefined : visualPayload?.availability?.evidence} />
+              ) : (
+                <>
+                  <ReportMacroChart payload={macroChart} />
+                  <div className="mt-1 text-xs text-slate-500">Legacy figure: {macroChart.title} · Source: {macroChart.source || 'Source unavailable'}</div>
+                </>
+              )}
             </div>
           </div>
 

@@ -293,17 +293,30 @@ export const REPORT_WORKFLOW_GATES = {
 export function canAdvanceWorkflow(
   state: ReportWorkflowState,
 ): boolean {
+  const assets = state.assetRegistry?.assets || [];
+  const validatedAssets = assets.every((item) => {
+    const asset = item as any;
+    return asset.stored && /^data:image\/(png|jpeg|webp);base64,/.test(asset.stored.dataUrl || '') &&
+      asset.stored.byteLength > 0 && asset.stored.byteLength <= 1024 * 1024 &&
+      asset.provenance?.visualSource && asset.provenance?.status !== 'UNKNOWN_SOURCE' &&
+      (asset.type === 'image' || asset.claimIds?.length > 0);
+  });
+  const plan = state.layoutPlan as any;
+  const referencedIds = [plan?.firstPage?.leadImageAssetId, plan?.firstPage?.primaryEvidenceAssetId,
+    ...(plan?.sections || []).flatMap((section: any) => (section.blocks || []).map((block: any) => block.assetId))].filter(Boolean);
+  const validLayout = referencedIds.every(id => assets.some(asset => asset.id === id));
   switch (state.stage) {
     case 'RESEARCH':
       return Boolean(state.researchReport);
 
     case 'VISUAL_DATA':
-      return Boolean(state.researchReport && state.assetRegistry);
+      return Boolean(state.researchReport && state.assetRegistry && validatedAssets);
 
     case 'COMPOSITION':
       return Boolean(
         state.researchReport &&
         state.assetRegistry &&
+        validatedAssets && validLayout &&
         state.layoutPlan,
       );
 

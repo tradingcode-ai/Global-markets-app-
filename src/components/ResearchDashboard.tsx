@@ -13,6 +13,7 @@ import {
   fetchResearchReportById
 } from '../services/marketResearchService';
 import { ResearchReportModal } from './ResearchReportModal';
+import { isResearchReportRetained } from '../utils/researchReportPolicy';
 import { ResearchConfigModal } from './ResearchConfigModal';
 import { StockLogo } from './StockLogo';
 import { 
@@ -66,6 +67,7 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
     try {
       const res = await fetchResearchDashboard();
       setData(res);
+      setSelectedReport(current => current && !isResearchReportRetained(current) ? null : current);
     } catch (err) {
       console.error('[ResearchDashboard] Fout bij laden dashboard:', err);
     } finally {
@@ -115,12 +117,9 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
 
   // Open report modal by report ID or report object
   const handleOpenReport = async (reportOrId: ResearchReport | string) => {
-    if (typeof reportOrId === 'string') {
-      const found = await fetchResearchReportById(reportOrId);
-      if (found) setSelectedReport(found);
-    } else {
-      setSelectedReport(reportOrId);
-    }
+    const id = typeof reportOrId === 'string' ? reportOrId : reportOrId.id;
+    const found = await fetchResearchReportById(id);
+    if (found) setSelectedReport(found);
   };
 
   // Derived KPI metrics

@@ -1067,6 +1067,8 @@ async function executeResearchForEventInternal(
   });
   console.log(`[Research Workflow] Phase 1 (RESEARCH) validated: Gate beforeVisualData passed=${gate1Passed}`);
 
+  if (!gate1Passed) throw new Error('Research workflow gate rejected missing research report.');
+
   // Phase 2: VISUAL_DATA (VISUAL_DATA_AGENT)
   const visualBrief = deriveVisualBrief(report);
   const visualPayload = await runAntiGravityVisualDataAgent(report, visualBrief, pool);
@@ -1078,6 +1080,8 @@ async function executeResearchForEventInternal(
     rendered: false
   });
   console.log(`[Research Workflow] Phase 2 (VISUAL_DATA) validated: Gate beforeComposition passed=${gate2Passed}`);
+
+  if (!gate2Passed) throw new Error('Visual workflow gate rejected unpersisted, unattributed or unlinked assets.');
 
   // Phase 3: COMPOSITION (REPORT_COMPOSER)
   const layoutPlan = visualPayload.layoutPlan as any;
@@ -1091,12 +1095,14 @@ async function executeResearchForEventInternal(
   });
   console.log(`[Research Workflow] Phase 3 (COMPOSITION) validated: Gate beforeRender passed=${gate3Passed}`);
 
+  if (!gate3Passed) throw new Error('Composition workflow gate rejected invalid asset references.');
+
   // Phase 4: PERSISTENCE & RENDER PREPARATION
   report.visualPayload = visualPayload;
   report.visual_payload = visualPayload;
   report.layoutPlan = visualPayload.layoutPlan;
   report.layout_plan = visualPayload.layoutPlan;
-  report.visualStatus = visualPayload.macroChart ? 'COMPLETE' : 'HERO_FALLBACK';
+  report.visualStatus = visualPayload.assetRegistry?.some(asset => asset.type === 'research_exhibit' && asset.stored) ? 'COMPLETE' : visualPayload.assetRegistry?.some(asset => asset.type === 'image' && asset.stored) ? 'HERO_FALLBACK' : 'FAILED';
   report.visual_status = report.visualStatus;
 
   await saveResearchReport(report, pool);

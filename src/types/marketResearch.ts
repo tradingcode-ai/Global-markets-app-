@@ -282,10 +282,26 @@ export interface ResearchVisualCandidate {
   }>;
 }
 
+export interface StoredReportVisual {
+  dataUrl: string;
+  sha256: string;
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+  byteLength: number;
+  width: number;
+  height: number;
+  captureMethod: 'download' | 'element_screenshot' | 'pdf_crop';
+  capturedAt: string;
+  pdfPage?: number;
+  crop?: { x: number; y: number; width: number; height: number };
+}
+
 export interface ReportAsset {
   id: string;
   type: AssetType;
   purpose: string;
+  claimIds?: string[];
+  stored?: StoredReportVisual;
+  license?: { name: string; url?: string; author?: string; fileTitle?: string; date?: string };
   source: {
     publisher?: string;
     researchDivision?: string;
@@ -555,7 +571,10 @@ export interface ReportLayoutPlan {
 }
 
 export interface VisualEnrichmentPayload {
-  hero: EditorialHeroPayload;
+  version?: 2;
+  hero?: EditorialHeroPayload;
+  availability?: { photo: string; evidence: string };
+  retrievalLog?: Array<{ channel: DiscoveryChannel; outcome: string }>;
   marketCapImpactUsdBillions?: number;
   market_cap_impact_usd_billions?: number;
   macroChart?: MacroChartPayload;

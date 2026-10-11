@@ -5,6 +5,7 @@ import {
   ResearchConfig 
 } from '../types/marketResearch';
 import { getDefaultResearchConfig } from './marketResearchConfig';
+import { isResearchReportRetained, retainResearchDashboard } from '../utils/researchReportPolicy';
 
 const BASE_URL = '';
 
@@ -148,13 +149,37 @@ export const INITIAL_RESEARCH_EVENTS: ResearchEvent[] = [
 const CONFIG_STORAGE_KEY = 'global_markets_deep_research_config_v2';
 const DASHBOARD_SNAPSHOT_KEY = 'global_markets_research_dashboard_snapshot_v2';
 
+const MAX_CACHED_REPORTS = 3;
+
+function browserSnapshot(data: ResearchDashboardData, previous?: ResearchDashboardData | null): ResearchDashboardData {
+  const retained = retainResearchDashboard(data);
+  const recentReports = [...(retained.recentReports || [])]
+    .sort((a, b) => Date.parse(b.createdAt || b.created_at || '') - Date.parse(a.createdAt || a.created_at || ''))
+    .slice(0, MAX_CACHED_REPORTS)
+    .map(report => {
+      const payload = report.visualPayload || report.visual_payload;
+      const oldReport = previous?.recentReports?.find(old => old.id === report.id);
+      const oldPayload = oldReport?.visualPayload || oldReport?.visual_payload;
+      const complete = oldPayload && payload && oldPayload.enrichedAt === payload.enrichedAt &&
+        oldPayload.assetRegistry?.some(asset => asset.stored) && !payload.assetRegistry?.some(asset => asset.stored);
+      return payload ? { ...report, visual_payload: undefined, visualPayload: complete ? oldPayload : payload } : report;
+    });
+  return retainResearchDashboard({ ...retained, recentReports, recent_reports: undefined });
+}
+
 export function getStoredDashboardSnapshot(): ResearchDashboardData | null {
   try {
     const raw = localStorage.getItem(DASHBOARD_SNAPSHOT_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.recentReports) && parsed.recentReports.length > 0) {
-        return parsed;
+      if (parsed && Array.isArray(parsed.recentReports)) {
+        const snapshot = browserSnapshot(parsed);
+        // Migrate older caches and physically remove expired/excess browser copies.
+        if (JSON.stringify(snapshot) !== raw) {
+          try { localStorage.setItem(DASHBOARD_SNAPSHOT_KEY, JSON.stringify(snapshot)); }
+          catch { localStorage.removeItem(DASHBOARD_SNAPSHOT_KEY); }
+        }
+        return snapshot;
       }
     }
   } catch (err) {
@@ -164,11 +189,20 @@ export function getStoredDashboardSnapshot(): ResearchDashboardData | null {
 }
 
 export function persistDashboardSnapshot(data: ResearchDashboardData): void {
-  try {
-    localStorage.setItem(DASHBOARD_SNAPSHOT_KEY, JSON.stringify(data));
-  } catch (err) {
-    console.warn('[MarketResearchService] Error saving dashboard snapshot:', err);
+  const snapshot = browserSnapshot(data, getStoredDashboardSnapshot());
+  // Cache at most three newest reports, evicting whole oldest copies on quota pressure.
+  // Complete reports and images remain in PostgreSQL regardless of browser capacity.
+  for (let count = snapshot.recentReports?.length || 0; count >= 0; count--) {
+    const candidate = retainResearchDashboard({ ...snapshot, recentReports: snapshot.recentReports?.slice(0, count) });
+    try {
+      localStorage.setItem(DASHBOARD_SNAPSHOT_KEY, JSON.stringify(candidate));
+      return;
+    } catch (err) {
+      if (!err || typeof err !== 'object' || !('name' in err) ||
+          !['QuotaExceededError', 'NS_ERROR_DOM_QUOTA_REACHED'].includes(String(err.name))) break;
+    }
   }
+  console.warn('[MarketResearchService] Browser snapshot could not be saved; PostgreSQL reports are unaffected.');
 }
 
 function getStoredConfig(): ResearchConfig {
@@ -217,8 +251,9 @@ export async function fetchResearchDashboard(): Promise<ResearchDashboardData> {
       const json = await res.json();
       if (json && (json.stats || json.recentReports)) {
         // Save fresh snapshot locally
-        persistDashboardSnapshot(json);
-        return json;
+        const retained = retainResearchDashboard(json);
+        persistDashboardSnapshot(retained);
+        return retained;
       }
     }
   } catch (err) {
@@ -235,11 +270,11 @@ export async function fetchResearchDashboard(): Promise<ResearchDashboardData> {
 
   return {
     activeEvents: [],
-    recentReports: INITIAL_RESEARCH_REPORTS,
+    recentReports: INITIAL_RESEARCH_REPORTS.filter(report => isResearchReportRetained(report)),
     recentEvents: INITIAL_RESEARCH_EVENTS,
     stats: {
       totalEvents: INITIAL_RESEARCH_EVENTS.length,
-      totalReports: INITIAL_RESEARCH_REPORTS.length,
+      totalReports: INITIAL_RESEARCH_REPORTS.filter(report => isResearchReportRetained(report)).length,
       activeCount: 0,
       monitoredAssetsCount: monitoredAssets.length,
       lastRunAt: new Date().toISOString()
@@ -247,7 +282,7 @@ export async function fetchResearchDashboard(): Promise<ResearchDashboardData> {
     config,
     kpi: {
       active_research_count: 0,
-      completed_reports_count: INITIAL_RESEARCH_REPORTS.length,
+      completed_reports_count: INITIAL_RESEARCH_REPORTS.filter(report => isResearchReportRetained(report)).length,
       triggered_events_count: INITIAL_RESEARCH_EVENTS.length,
       monitored_assets_count: monitoredAssets.length
     }
@@ -311,13 +346,13 @@ export async function fetchResearchReports(params?: {
     if (res.ok) {
       const json = await res.json();
       if (Array.isArray(json.reports)) {
-        return json.reports;
+        return json.reports.filter((report: ResearchReport) => isResearchReportRetained(report));
       }
       if (Array.isArray(json.data)) {
-        return json.data;
+        return json.data.filter((report: ResearchReport) => isResearchReportRetained(report));
       }
       if (Array.isArray(json)) {
-        return json;
+        return json.filter((report: ResearchReport) => isResearchReportRetained(report));
       }
     }
   } catch (err) {
@@ -334,7 +369,7 @@ export async function fetchResearchReports(params?: {
     return reports;
   }
 
-  let reports = [...INITIAL_RESEARCH_REPORTS];
+  let reports = INITIAL_RESEARCH_REPORTS.filter(report => isResearchReportRetained(report));
   if (params?.ticker) {
     reports = reports.filter(r => r.ticker.toUpperCase() === params.ticker?.toUpperCase());
   }
@@ -345,15 +380,24 @@ export async function fetchResearchReports(params?: {
  * Fetch a specific research report by ID
  */
 export async function fetchResearchReportById(id: string): Promise<ResearchReport | null> {
+  const cached = getStoredDashboardSnapshot()?.recentReports?.find(report => report.id === id);
+  if (cached?.visualPayload?.assetRegistry?.some(asset => asset.stored)) return cached;
+  const cacheCompleteReport = (report: ResearchReport): ResearchReport | null => {
+    if (!isResearchReportRetained(report)) return null;
+    const snapshot = getStoredDashboardSnapshot();
+    persistDashboardSnapshot({ ...snapshot, recentReports: [...(snapshot?.recentReports || []).filter(old => old.id !== id), report] });
+    return report;
+  };
   try {
     const res = await fetch(`${BASE_URL}/api/research/reports/${encodeURIComponent(id)}`);
+    if (res.status === 404) return null;
     if (res.ok) {
       const json = await res.json();
       if (json && json.report) {
-        return json.report;
+        return cacheCompleteReport(json.report);
       }
       if (json && json.id) {
-        return json;
+        return cacheCompleteReport(json);
       }
     }
   } catch (err) {
@@ -366,7 +410,7 @@ export async function fetchResearchReportById(id: string): Promise<ResearchRepor
   if (fromSnapshot) return fromSnapshot;
 
   const found = INITIAL_RESEARCH_REPORTS.find(r => r.id === id);
-  return found || null;
+  return found && isResearchReportRetained(found) ? found : null;
 }
 
 /**

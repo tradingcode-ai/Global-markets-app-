@@ -1,3 +1,9 @@
+/**
+ * Runtime v2: original figures only, captured/downloaded and embedded in report JSONB.
+ * See docs/architecture/report-visual-acquisition.md for the executed acquisition contract.
+ * Legacy EXACT/DERIVED_CHART helpers below describe compatibility for old reports;
+ * new enrichments never generate financial charts from extracted/model datapoints.
+ */
 export type VisualPurpose =
   | 'trend'
   | 'comparison'
@@ -1455,4 +1461,22 @@ export const REPORT_COMPOSER_INTEGRITY_RULES = {
   neverPreferAestheticBalanceOverEvidenceIntegrity: true,
   preserveClaimAssetLinkage: true,
   preserveSourceProvenance: true,
+} as const;
+
+/** Executed storage/capture contract for new enrichments. */
+export const ORIGINAL_VISUAL_RUNTIME_V2 = {
+  financialVisualMode: 'ORIGINAL_RESEARCH_VISUAL',
+  bytesStoredIn: 'assetRegistry[].stored.dataUrl inside PostgreSQL visual_payload JSONB',
+  externalUrlsAreCitationsOnly: true,
+  inspectSourceDocumentBeforeCapture: true,
+  inspectActualPixelsBeforeSelection: true,
+  codeEnforcesDiscoveryChannelHosts: true,
+  maxEvidenceBytes: 1024 * 1024,
+  maxPhotoBytes: 500 * 1024,
+  maxPixelReviewsPerSource: 4,
+  sourceDeadlineMs: 60000,
+  maxPdfPagesInspected: 2,
+  nominatedPdfPageFirst: true,
+  imageProvider: 'Wikimedia Commons structured API with reusable license metadata',
+  failureBehavior: 'Explicit unavailable; continue ordered retrieval; never remote-image fallback',
 } as const;

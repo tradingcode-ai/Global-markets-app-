@@ -8,6 +8,7 @@ import {
 } from '../types/marketResearch';
 import { getDefaultResearchConfig } from './marketResearchConfig';
 import { getResearchSessionSnapshot } from './researchSessionQuotes';
+import { isResearchReportRetained, RESEARCH_REPORT_RETENTION_MS, retainResearchDashboard, withoutReportVisualBytes } from '../utils/researchReportPolicy';
 
 // In-Memory Fallback Store
 interface InMemoryResearchStore {
@@ -257,7 +258,7 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
 
       // Hydrate in-memory store with reports from PostgreSQL on startup
       try {
-        const repRes = await client.query('SELECT * FROM market_research_reports ORDER BY created_at DESC LIMIT 50');
+        const repRes = await client.query('SELECT * FROM market_research_reports WHERE created_at > $1 ORDER BY created_at DESC LIMIT 50', [new Date(Date.now() - RESEARCH_REPORT_RETENTION_MS).toISOString()]);
         if (repRes.rows && repRes.rows.length > 0) {
           const dbReports: ResearchReport[] = repRes.rows.map(r => ({
             id: r.id,
@@ -596,6 +597,10 @@ export async function cleanupStaleResearchEvents(
   maxAgeMinutes = 60,
   pool?: pg.Pool | null
 ): Promise<number> {
+  await cleanupExpiredResearchReports(pool).catch(() => {
+    console.warn('[Market Research Store] Report retention cleanup failed; background task will retry.');
+  });
+
   // Seal previous session events first
   await closePreviousSessionEvents(pool).catch(err => {
     console.warn('[Market Research Store] Session reconciliation warning:', err?.message || err);
@@ -641,6 +646,57 @@ export async function cleanupStaleResearchEvents(
 // ----------------------------------------------------------------------------
 // Reports Management
 // ----------------------------------------------------------------------------
+
+/** Physically delete expired report text and inline image bytes; clear derived event copies atomically. */
+export async function cleanupExpiredResearchReports(pool?: pg.Pool | null, now = Date.now()): Promise<number> {
+  const expiredIds = new Set(inMemoryStore.reports.filter(report => !isResearchReportRetained(report, now)).map(report => report.id));
+  inMemoryStore.reports = inMemoryStore.reports.filter(report => isResearchReportRetained(report, now));
+  for (const event of inMemoryStore.events) {
+    if (expiredIds.has(event.reportId || event.report_id || '')) {
+      event.reportId = undefined;
+      event.report_id = undefined;
+      event.catalystSummary = undefined;
+    }
+  }
+  if (expiredIds.size) cachedDashboard = null;
+  if (!pool) return expiredIds.size;
+  await ensureResearchTables(pool);
+  const result = await pool.query(
+    `WITH expired AS (
+       DELETE FROM market_research_reports WHERE created_at <= $1 RETURNING id
+     ), cleared AS (
+       UPDATE market_research_events SET report_id = NULL, catalyst_summary = NULL
+       WHERE report_id IN (SELECT id FROM expired) RETURNING id
+     ) SELECT id FROM expired`,
+    [new Date(now - RESEARCH_REPORT_RETENTION_MS).toISOString()]
+  );
+  for (const row of result.rows || []) expiredIds.add(row.id);
+  for (const event of inMemoryStore.events) {
+    if (expiredIds.has(event.reportId || event.report_id || '')) {
+      event.reportId = undefined;
+      event.report_id = undefined;
+      event.catalystSummary = undefined;
+    }
+  }
+  if (expiredIds.size) cachedDashboard = null;
+  return expiredIds.size;
+}
+
+/** Runs even when market scanning is disabled; retries failed DB deletions next minute. */
+export function startResearchReportRetention(pool: pg.Pool | null): () => void {
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try { await cleanupExpiredResearchReports(pool); }
+    catch { console.warn('[Market Research Store] Report retention cleanup failed; will retry next minute.'); }
+    finally { running = false; }
+  };
+  void run();
+  const timer = setInterval(() => { void run(); }, 60_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
 
 export async function saveResearchReport(report: ResearchReport, pool: pg.Pool | null): Promise<ResearchReport> {
   // Update memory store
@@ -712,8 +768,8 @@ export async function getResearchReport(id: string, pool?: pg.Pool | null): Prom
     try {
       await ensureResearchTables(pool);
       const res = await pool.query(
-        `SELECT * FROM market_research_reports WHERE id = $1 LIMIT 1`,
-        [id]
+        `SELECT * FROM market_research_reports WHERE id = $1 AND created_at > $2 LIMIT 1`,
+        [id, new Date(Date.now() - RESEARCH_REPORT_RETENTION_MS).toISOString()]
       );
       if (res.rows && res.rows.length > 0) {
         const r = res.rows[0];
@@ -742,13 +798,14 @@ export async function getResearchReport(id: string, pool?: pg.Pool | null): Prom
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
         };
       }
+      return null; // A database miss/expiry must not resurrect a RAM copy.
     } catch (err: any) {
       console.warn('[Market Research Store] DB getReport error:', err.message);
     }
   }
 
   const found = inMemoryStore.reports.find(r => r.id === id);
-  return found || null;
+  return found && isResearchReportRetained(found) ? found : null;
 }
 
 export async function getResearchReports(
@@ -758,8 +815,8 @@ export async function getResearchReports(
   if (pool) {
     try {
       await ensureResearchTables(pool);
-      let sql = `SELECT * FROM market_research_reports WHERE 1=1`;
-      const params: any[] = [];
+      let sql = `SELECT * FROM market_research_reports WHERE created_at > $1`;
+      const params: any[] = [new Date(Date.now() - RESEARCH_REPORT_RETENTION_MS).toISOString()];
 
       if (options?.ticker) {
         params.push(options.ticker.toUpperCase());
@@ -795,14 +852,15 @@ export async function getResearchReports(
           rawMarkdown: r.raw_markdown || undefined,
           status: r.status,
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
-        }));
+        })).filter(report => isResearchReportRetained(report));
       }
+      return []; // Do not resurrect deleted reports from the RAM fallback.
     } catch (err: any) {
       console.warn('[Market Research Store] DB getReports error:', err.message);
     }
   }
 
-  let list = [...inMemoryStore.reports];
+  let list = inMemoryStore.reports.filter(report => isResearchReportRetained(report));
   if (options?.ticker) {
     list = list.filter(r => r.ticker.toUpperCase() === options.ticker!.toUpperCase());
   }
@@ -863,7 +921,7 @@ const DASHBOARD_CACHE_TTL_MS = 15000; // 15 seconds fast in-memory cache
 export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<ResearchDashboardData> {
   const now = Date.now();
   if (cachedDashboard && now - cachedDashboard.timestamp < DASHBOARD_CACHE_TTL_MS) {
-    return cachedDashboard.data;
+    return retainResearchDashboard(cachedDashboard.data);
   }
 
   // Reconcile before reading, so a completed session is not returned as live.
@@ -924,11 +982,11 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
 
   const data: ResearchDashboardData = {
     activeEvents,
-    recentReports: reports,
+    recentReports: reports.filter(report => isResearchReportRetained(report)).map(withoutReportVisualBytes),
     recentEvents: events,
     stats: {
       totalEvents: events.length,
-      totalReports: reports.length,
+      totalReports: reports.filter(report => isResearchReportRetained(report)).length,
       activeCount: activeEvents.length,
       monitoredAssetsCount: monitoredAssets.length,
       lastRunAt: inMemoryStore.lastRunAt
