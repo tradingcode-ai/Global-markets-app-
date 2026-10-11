@@ -5,6 +5,9 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import pg from 'pg';
 import { getReportedHistoricalQuarters } from './src/data/reportedHistoricalFinancials';
+import { COMMODITIES_DATA } from './src/data/commoditiesData';
+import { SOVEREIGN_BONDS_DATA } from './src/data/bondsData';
+import { SP_MACRO_SECTORS, SP_INDUSTRY_CLUSTERS } from './src/data/spSectorsData';
 import { 
   isSameFiscalQuarter, 
   getOfficialFiscalQuarterLabel, 
@@ -31,6 +34,7 @@ import {
 } from './src/services/marketResearchMonitor';
 import { fetchVerifiedResearchQuote } from './src/services/researchSessionQuotes';
 import { withoutReportVisualBytes } from './src/utils/researchReportPolicy';
+import { getVerifiedAlertPreviousClose, isFreshSecAcceptance } from './src/services/notificationRules';
 const { Pool } = pg;
 
 dotenv.config({ path: '.env.local' });
@@ -77,6 +81,9 @@ interface CachedQuote {
   lastUpdated: string;
   isLive: boolean;
   provider?: string;
+  providerMarketSymbol?: string;
+  providerName?: string;
+  providerInstrumentType?: string;
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
   twoHundredDayAverage?: number;
@@ -88,6 +95,16 @@ interface CachedQuote {
   postMarketChange?: number;
   postMarketChangePercent?: number;
   marketState?: 'PRE' | 'REGULAR' | 'POST' | 'CLOSED';
+  providerTradeTimestamp?: string;
+  providerDelaySeconds?: number;
+  regularSessionStartMs?: number;
+  regularSessionEndMs?: number;
+  exchangeTimezoneName?: string;
+  alertCurrentPrice?: number;
+  alertPreviousClose?: number;
+  alertChangePercent?: number;
+  is52WeekMetricsVerified?: boolean;
+  isTwoHundredDayAverageVerified?: boolean;
   primaryListingSymbol?: string;
   exchangeName?: string;
   localPrice?: number;
@@ -109,6 +126,8 @@ interface TechStatsCacheEntry {
   fiftyTwoWeekHigh: number;
   fiftyTwoWeekLow: number;
   sparkline: number[];
+  is52WeekMetricsVerified: boolean;
+  isTwoHundredDayAverageVerified: boolean;
   timestamp: number;
 }
 const techStatsCache: Record<string, TechStatsCacheEntry> = {};
@@ -1213,16 +1232,19 @@ const STOCK_TECHNICAL_MAP: Record<string, { high52: number; low52: number; dma20
 // Murban and Oman futures use the standard CNBC/Yahoo commodity quote pipeline.
 
 // Multi-Source Live Market Quote Fetcher
-async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
+async function fetchQuote(inputSymbol: string): Promise<CachedQuote>;
+async function fetchQuote(inputSymbol: string, notificationYahooOnly: true): Promise<CachedQuote | null>;
+async function fetchQuote(inputSymbol: string, notificationYahooOnly = false): Promise<CachedQuote | null> {
   const normalizedKey = inputSymbol.toUpperCase().trim();
   const now = Date.now();
+  const cacheKey = notificationYahooOnly ? `notification-yahoo:${normalizedKey}` : normalizedKey;
 
-  if (quotesCache[normalizedKey] && now - quotesCache[normalizedKey].timestamp < CACHE_TTL_MS) {
-    return quotesCache[normalizedKey].data;
+  if (quotesCache[cacheKey] && now - quotesCache[cacheKey].timestamp < CACHE_TTL_MS) {
+    return quotesCache[cacheKey].data;
   }
 
   // 1. Try US Mortgage via US30YFRM:Exchange Live Feed
-  if (normalizedKey === 'US30YMORT' || normalizedKey === 'US30YFRM') {
+  if (!notificationYahooOnly && (normalizedKey === 'US30YMORT' || normalizedKey === 'US30YFRM')) {
     const cnbcQuote = await fetchQuoteFromCnbc('US30YFRM');
     if (cnbcQuote) {
       cnbcQuote.provider = 'US30YFRM:Exchange (Live Feed)';
@@ -1242,7 +1264,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
   }
 
   // 2. Try CNBC Real-Time API for Commodities & Sovereign Yields
-  if (CNBC_SYMBOL_MAP[normalizedKey]) {
+  if (!notificationYahooOnly && CNBC_SYMBOL_MAP[normalizedKey]) {
     const cnbcQuote = await fetchQuoteFromCnbc(normalizedKey);
     if (cnbcQuote) {
       quotesCache[normalizedKey] = { data: cnbcQuote, timestamp: now };
@@ -1252,6 +1274,10 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
 
   // 3. Try Yahoo Finance Real-Time API (with lightweight 1d bars on live polling and 30-min cached 200 DMA + 52W High/Low)
   const yahooSymbol = YAHOO_SYMBOL_MAP[normalizedKey] || normalizedKey;
+  const notificationYahooController = notificationYahooOnly ? new AbortController() : undefined;
+  const notificationYahooTimeout = notificationYahooController
+    ? setTimeout(() => notificationYahooController.abort(), 8000)
+    : undefined;
   try {
     const cachedTech = techStatsCache[yahooSymbol];
     const isTechFresh = cachedTech && (now - cachedTech.timestamp < TECH_STATS_TTL_MS);
@@ -1261,7 +1287,8 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
+      },
+      ...(notificationYahooController ? { signal: notificationYahooController.signal } : {})
     });
 
     if (response.ok) {
@@ -1270,6 +1297,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
       const meta = result?.meta;
       const quotesData = result?.indicators?.quote?.[0];
       const rawCloses = quotesData?.close;
+      const providerTimestamps: unknown[] = Array.isArray(result?.timestamp) ? result.timestamp : [];
       const closes: number[] = Array.isArray(rawCloses)
         ? rawCloses.filter((v: any) => typeof v === 'number' && !isNaN(v))
         : [];
@@ -1319,6 +1347,27 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           const rawHigh = meta.fiftyTwoWeekHigh || (closes.length > 0 ? Math.max(...closes) : 0);
           const rawLow = meta.fiftyTwoWeekLow || (closes.length > 0 ? Math.min(...closes) : 0);
 
+          const latestDailyBarSeconds = providerTimestamps.reduce<number>((latest: number, value: unknown, index: number) => {
+            const timestamp = typeof value === 'number' ? value : NaN;
+            const close = Array.isArray(rawCloses) ? rawCloses[index] : undefined;
+            return Number.isFinite(timestamp) && typeof close === 'number' && Number.isFinite(close) && timestamp > latest
+              ? timestamp
+              : latest;
+          }, 0);
+          const earliestDailyBarSeconds = providerTimestamps.reduce<number>((earliest: number, value: unknown, index: number) => {
+            const timestamp = typeof value === 'number' ? value : NaN;
+            const close = Array.isArray(rawCloses) ? rawCloses[index] : undefined;
+            return typeof timestamp === 'number' && Number.isFinite(timestamp) && typeof close === 'number' && Number.isFinite(close) && (earliest === 0 || timestamp < earliest)
+              ? timestamp
+              : earliest;
+          }, 0);
+          const hasLongDailyHistory = closes.length >= 200 && earliestDailyBarSeconds > 0 && latestDailyBarSeconds - earliestDailyBarSeconds >= 230 * 86400;
+          const is52WeekMetricsVerified =
+            Number.isFinite(meta.fiftyTwoWeekHigh) && meta.fiftyTwoWeekHigh > 0 &&
+            Number.isFinite(meta.fiftyTwoWeekLow) && meta.fiftyTwoWeekLow > 0 &&
+            meta.fiftyTwoWeekHigh >= meta.fiftyTwoWeekLow;
+          const isTwoHundredDayAverageVerified = hasLongDailyHistory;
+
           fiftyTwoWeekHigh = rawHigh > 0 
             ? Number(rawHigh.toFixed(priceDecimals)) 
             : (STOCK_TECHNICAL_MAP[yahooSymbol]?.high52 || STOCK_TECHNICAL_MAP[normalizedKey]?.high52 || Number((price * 1.15).toFixed(priceDecimals)));
@@ -1327,21 +1376,58 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
             : (STOCK_TECHNICAL_MAP[yahooSymbol]?.low52 || STOCK_TECHNICAL_MAP[normalizedKey]?.low52 || Number((price * 0.72).toFixed(priceDecimals)));
           cleanSparkline = closes.slice(-14).map(v => Number(v.toFixed(priceDecimals)));
 
-          techStatsCache[yahooSymbol] = {
-            twoHundredDayAverage,
-            fiftyTwoWeekHigh,
-            fiftyTwoWeekLow,
-            sparkline: cleanSparkline,
-            timestamp: now
-          };
+          if (!notificationYahooOnly) {
+            techStatsCache[yahooSymbol] = {
+              twoHundredDayAverage,
+              fiftyTwoWeekHigh,
+              fiftyTwoWeekLow,
+              sparkline: cleanSparkline,
+              is52WeekMetricsVerified,
+              isTwoHundredDayAverageVerified,
+              timestamp: now
+            };
+          }
         }
 
+        const regularPeriod = meta.currentTradingPeriod?.regular;
+        const regularSessionStartMs = Number.isFinite(regularPeriod?.start) ? regularPeriod.start * 1000 : undefined;
+        const regularSessionEndMs = Number.isFinite(regularPeriod?.end) ? regularPeriod.end * 1000 : undefined;
+        const providerTradeTimestamp = Number.isFinite(meta.regularMarketTime)
+          ? new Date(meta.regularMarketTime * 1000).toISOString()
+          : undefined;
+        const alertCurrentPrice = Number.isFinite(meta.regularMarketPrice) && meta.regularMarketPrice > 0
+          ? meta.regularMarketPrice
+          : undefined;
+        const alertPreviousClose = getVerifiedAlertPreviousClose({
+          officialPreviousClose: meta.regularMarketPreviousClose ?? meta.previousClose,
+          chartPreviousClose: meta.chartPreviousClose,
+          chartRange: rangeParam,
+          regularSessionStartSeconds: regularPeriod?.start,
+          // Keep provider timestamp/close indices aligned; dropping a bad timestamp
+          // independently would pair a close with the wrong trading day.
+          timestampsSeconds: providerTimestamps.map(value => typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN),
+          closes: Array.isArray(rawCloses) ? rawCloses : []
+        });
+        const alertChangePercent = alertCurrentPrice && alertPreviousClose
+          ? ((alertCurrentPrice - alertPreviousClose) / alertPreviousClose) * 100
+          : undefined;
+        const is52WeekMetricsVerified = isTechFresh
+          ? cachedTech.is52WeekMetricsVerified
+          : Number.isFinite(meta.fiftyTwoWeekHigh) && meta.fiftyTwoWeekHigh > 0 &&
+            Number.isFinite(meta.fiftyTwoWeekLow) && meta.fiftyTwoWeekLow > 0 && meta.fiftyTwoWeekHigh >= meta.fiftyTwoWeekLow;
+        const isTwoHundredDayAverageVerified = isTechFresh
+          ? cachedTech.isTwoHundredDayAverageVerified
+          : Number.isFinite(meta.regularMarketTime) && closes.length >= 200 && (() => {
+              const timestamps = providerTimestamps.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+              return timestamps.length > 1 && Math.max(...timestamps) - Math.min(...timestamps) >= 230 * 86400;
+            })();
+
         // Dynamic FX conversion to USD
-        const fxRateToUsd = await getFxRateToUsd(currency);
+        const fxRateToUsd = notificationYahooOnly ? 1 : await getFxRateToUsd(currency);
         const priceUsd = currency === 'USD' ? price : Number((price * fxRateToUsd).toFixed(2));
 
         // Fetch authoritative key financial statistics (Market Cap, P/E, EV)
-        const keyStats = await getKeyFinancialStatistics(yahooSymbol, currency);
+        const keyStats = notificationYahooOnly ? null : await getKeyFinancialStatistics(yahooSymbol, currency);
 
         // Determine Market State (REGULAR, PRE, POST, or CLOSED)
         const nowSec = Math.floor(Date.now() / 1000);
@@ -1349,7 +1435,7 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
 
         if (meta.currentTradingPeriod?.regular) {
           const { pre, regular, post } = meta.currentTradingPeriod;
-          if (nowSec >= regular.start && nowSec <= regular.end) {
+          if (nowSec >= regular.start && nowSec < regular.end) {
             marketState = 'REGULAR';
           } else if (pre && nowSec >= pre.start && nowSec < pre.end) {
             marketState = 'PRE';
@@ -1450,6 +1536,9 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           lastUpdated: new Date().toISOString(),
           isLive: true,
           provider: `Yahoo Finance Primary Exchange (${yahooSymbol})`,
+          providerMarketSymbol: typeof meta.symbol === 'string' ? meta.symbol : notificationYahooOnly ? undefined : yahooSymbol,
+          providerName: typeof meta.shortName === 'string' ? meta.shortName : typeof meta.longName === 'string' ? meta.longName : undefined,
+          providerInstrumentType: typeof meta.instrumentType === 'string' ? meta.instrumentType : typeof meta.quoteType === 'string' ? meta.quoteType : undefined,
           fiftyTwoWeekHigh,
           fiftyTwoWeekLow,
           twoHundredDayAverage,
@@ -1461,6 +1550,16 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           postMarketChange,
           postMarketChangePercent,
           marketState,
+          providerTradeTimestamp,
+          providerDelaySeconds: Number.isFinite(meta.exchangeDataDelayedBy) ? meta.exchangeDataDelayedBy : undefined,
+          regularSessionStartMs,
+          regularSessionEndMs,
+          exchangeTimezoneName: meta.exchangeTimezoneName,
+          alertCurrentPrice,
+          alertPreviousClose,
+          alertChangePercent,
+          is52WeekMetricsVerified,
+          isTwoHundredDayAverageVerified,
           primaryListingSymbol: yahooSymbol,
           exchangeName: keyStats?.exchangeName || meta.exchangeName,
           localPrice: price,
@@ -1473,12 +1572,19 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
           enterpriseValueUsd: keyStats?.enterpriseValueUsd
         };
 
+        if (notificationYahooOnly) {
+          delete quote.fiftyTwoWeekHigh;
+          delete quote.fiftyTwoWeekLow;
+          delete quote.twoHundredDayAverage;
+          delete quote.sparkline;
+        }
+
         // Cache under requested symbol and canonical primary symbol
-        quotesCache[normalizedKey] = { data: quote, timestamp: now };
-        quotesCache[yahooSymbol] = { data: quote, timestamp: now };
+        quotesCache[cacheKey] = { data: quote, timestamp: now };
+        if (!notificationYahooOnly) quotesCache[yahooSymbol] = { data: quote, timestamp: now };
 
         // Cache under any associated aliases (e.g. 8035.T -> TOELY)
-        if (PRIMARY_TO_LEGACY_ALIASES[yahooSymbol]) {
+        if (!notificationYahooOnly && PRIMARY_TO_LEGACY_ALIASES[yahooSymbol]) {
           for (const alias of PRIMARY_TO_LEGACY_ALIASES[yahooSymbol]) {
             quotesCache[alias] = { data: { ...quote, symbol: alias }, timestamp: now };
           }
@@ -1489,11 +1595,15 @@ async function fetchQuote(inputSymbol: string): Promise<CachedQuote> {
     }
   } catch (err) {
     // Upstream network or parsing error; proceed to cache and verified baseline fallback
+  } finally {
+    if (notificationYahooTimeout) clearTimeout(notificationYahooTimeout);
   }
 
+  if (notificationYahooOnly) return null;
+
   // 4. Fallback to existing cached quote if available (even if expired)
-  if (quotesCache[normalizedKey]) {
-    return quotesCache[normalizedKey].data;
+  if (quotesCache[cacheKey]) {
+    return quotesCache[cacheKey].data;
   }
   if (quotesCache[yahooSymbol]) {
     return quotesCache[yahooSymbol].data;
@@ -1557,6 +1667,33 @@ app.get('/api/market-quotes', async (req, res) => {
     const requestedSymbols = symbolsParam 
       ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
       : DEFAULT_ALL_SYMBOLS;
+
+    if (req.query.alertOnly === '1') {
+      const requested = [...new Set(requestedSymbols)].slice(0, 80);
+      const unprocessedSymbols = [...new Set(requestedSymbols)].slice(80);
+      const quotesMap: Record<string, CachedQuote> = {};
+      const unavailableSymbols = new Set<string>();
+      let nextIndex = 0;
+      const worker = async () => {
+        while (nextIndex < requested.length) {
+          const symbol = requested[nextIndex++];
+          try {
+            const quote = await fetchQuote(symbol, true);
+            const providerSymbol = quote?.providerMarketSymbol?.toUpperCase();
+            const expectedProviderSymbol = quote?.primaryListingSymbol?.toUpperCase();
+            if (!quote || !providerSymbol || !expectedProviderSymbol || providerSymbol !== expectedProviderSymbol || !quote.provider?.startsWith('Yahoo Finance')) {
+              unavailableSymbols.add(symbol);
+              continue;
+            }
+            quotesMap[symbol] = quote;
+          } catch {
+            unavailableSymbols.add(symbol);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, requested.length) }, () => worker()));
+      return res.json({ success: true, quotes: quotesMap, unavailableSymbols: [...unavailableSymbols], unprocessedSymbols, source: 'Yahoo Finance quote metadata' });
+    }
 
     const settled = await Promise.allSettled(requestedSymbols.map(sym => fetchQuote(sym)));
 
@@ -2569,6 +2706,179 @@ const GLOBAL_MARKET_DEFINITIONS = [
     fallbackVolume: 220000000
   }
 ];
+
+
+type NotificationAssetGroup = 'Global indices' | 'Sector indices & ETFs' | 'Commodities' | 'Sovereign yields';
+interface NotificationAssetCatalogEntry {
+  symbol: string;
+  name: string;
+  assetClass: string;
+  group: NotificationAssetGroup;
+  categoryKey: string;
+  thresholdPct?: number;
+  unit?: string;
+  currency?: string;
+  providerSymbol?: string;
+  quoteAvailable: boolean;
+  coverageReason?: string;
+  routeKind: 'global-index' | 'sector' | 'commodity' | 'bond';
+  targetId?: string;
+}
+
+const NON_EQUITY_RESEARCH_CATEGORIES = new Set([
+  'global_indices', 'sector_indices_etfs', 'brent_wti', 'gold', 'silver', 'other_commodities', 'global_rates'
+]);
+const UNVERIFIED_NOTIFICATION_PROVIDER_ALIASES = new Set(['SX7P', 'US2Y', 'URANIUM', 'LITHIUM']);
+
+function getNotificationProviderSymbol(symbol: string, group?: NotificationAssetGroup): string | undefined {
+  const normalized = symbol.toUpperCase().trim();
+  if (!normalized || UNVERIFIED_NOTIFICATION_PROVIDER_ALIASES.has(normalized)) return undefined;
+  if (group === 'Sovereign yields' && !['US10Y', 'US30Y'].includes(normalized)) return undefined;
+  return YAHOO_SYMBOL_MAP[normalized] || normalized;
+}
+
+function buildNotificationAssetCatalog(config: Awaited<ReturnType<typeof getStoredResearchConfig>>): NotificationAssetCatalogEntry[] {
+  const entries = new Map<string, NotificationAssetCatalogEntry>();
+  const add = (entry: Omit<NotificationAssetCatalogEntry, 'thresholdPct' | 'providerSymbol' | 'quoteAvailable' | 'coverageReason'>) => {
+    const symbol = entry.symbol.toUpperCase().trim();
+    if (!symbol) return;
+    const providerSymbol = getNotificationProviderSymbol(symbol, entry.group);
+    entries.set(symbol, {
+      ...entry,
+      symbol,
+      providerSymbol,
+      quoteAvailable: Boolean(providerSymbol),
+      coverageReason: providerSymbol ? undefined : (entry.group === 'Sovereign yields'
+        ? 'No verified direct yield quote with provider session boundaries is available.'
+        : 'The configured provider mapping is a proxy or does not identify this exact instrument.')
+    });
+  };
+
+  for (const market of GLOBAL_MARKET_DEFINITIONS) {
+    add({ symbol: market.yahooTicker, name: market.name, assetClass: 'Global index', group: 'Global indices', categoryKey: 'global_indices', routeKind: 'global-index', targetId: market.id });
+  }
+  for (const sector of SP_MACRO_SECTORS) {
+    add({ symbol: sector.symbol, name: sector.name + ' Index', assetClass: 'Sector index', group: 'Sector indices & ETFs', categoryKey: 'global_indices', routeKind: 'sector', targetId: sector.id });
+    add({ symbol: sector.benchmarkEtf, name: sector.benchmarkEtfName, assetClass: 'Sector ETF', group: 'Sector indices & ETFs', categoryKey: 'sector_indices_etfs', routeKind: 'sector', targetId: sector.id });
+  }
+  for (const cluster of SP_INDUSTRY_CLUSTERS) {
+    const funds = [cluster.primaryEtf, cluster.dedicatedEtf, ...cluster.secondaryThematics].filter(Boolean);
+    for (const fund of funds) {
+      add({ symbol: fund.symbol, name: fund.name, assetClass: 'Industry ETF', group: 'Sector indices & ETFs', categoryKey: 'sector_indices_etfs', routeKind: 'sector', targetId: cluster.id });
+    }
+  }
+  for (const commodity of COMMODITIES_DATA) {
+    const symbol = commodity.symbol.toUpperCase();
+    const categoryKey = symbol === 'WTI' || symbol === 'BRENT' ? 'brent_wti'
+      : symbol === 'GOLD' ? 'gold'
+        : symbol === 'SILVER' ? 'silver' : 'other_commodities';
+    add({ symbol, name: commodity.name, assetClass: 'Commodity', group: 'Commodities', categoryKey, routeKind: 'commodity', targetId: commodity.id, unit: commodity.unit, currency: commodity.currency });
+  }
+  for (const bond of SOVEREIGN_BONDS_DATA) {
+    add({ symbol: bond.symbol, name: bond.name, assetClass: 'Sovereign yield index', group: 'Sovereign yields', categoryKey: 'global_rates', routeKind: 'bond', targetId: bond.id, unit: 'relative yield movement', currency: '%' });
+  }
+
+  for (const [key, asset] of Object.entries(config.assets || {})) {
+    const categoryKey = asset.categoryKey;
+    if (!NON_EQUITY_RESEARCH_CATEGORIES.has(categoryKey)) continue;
+    const symbol = (asset.symbol || key).toUpperCase().trim();
+    if (entries.has(symbol)) continue;
+    const group: NotificationAssetGroup = categoryKey === 'global_indices' ? 'Global indices'
+      : categoryKey === 'global_rates' ? 'Sovereign yields'
+        : categoryKey === 'sector_indices_etfs' ? 'Sector indices & ETFs' : 'Commodities';
+    const routeKind = group === 'Global indices' ? 'global-index'
+      : group === 'Sovereign yields' ? 'bond'
+        : group === 'Sector indices & ETFs' ? 'sector' : 'commodity';
+    add({ symbol, name: asset.name || symbol, assetClass: asset.assetClass || group, group, categoryKey, routeKind });
+  }
+
+  return [...entries.values()].map(entry => {
+    const configured = config.assets?.[entry.symbol] || Object.values(config.assets || {}).find(asset => asset.symbol.toUpperCase() === entry.symbol);
+    const configCategoryKey = configured?.categoryKey || entry.categoryKey;
+    const customThreshold = configured?.customThresholdPct;
+    const categoryThreshold = configCategoryKey ? config.categories?.[configCategoryKey]?.thresholdPct : undefined;
+    const threshold = Number.isFinite(customThreshold) && customThreshold! > 0 ? customThreshold
+      : Number.isFinite(categoryThreshold) && categoryThreshold! > 0 ? categoryThreshold : undefined;
+    return { ...entry, name: configured?.name || entry.name, assetClass: configured?.assetClass || entry.assetClass, categoryKey: configCategoryKey, thresholdPct: threshold };
+  }).sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+}
+
+let notificationAssetConfigCache: { config: Awaited<ReturnType<typeof getStoredResearchConfig>>; expiresAt: number } | null = null;
+let notificationAssetConfigInFlight: Promise<Awaited<ReturnType<typeof getStoredResearchConfig>>> | null = null;
+const NOTIFICATION_CONFIG_TIMEOUT_MS = 6000;
+
+async function getNotificationAssetConfig() {
+  if (notificationAssetConfigCache && notificationAssetConfigCache.expiresAt > Date.now()) return notificationAssetConfigCache.config;
+  if (!notificationAssetConfigInFlight) {
+    notificationAssetConfigInFlight = getStoredResearchConfig(getAgentPgPool())
+      .then(config => {
+        notificationAssetConfigCache = { config, expiresAt: Date.now() + 30000 };
+        return config;
+      })
+      .finally(() => { notificationAssetConfigInFlight = null; });
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      notificationAssetConfigInFlight,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('Research configuration did not respond in time.')), NOTIFICATION_CONFIG_TIMEOUT_MS);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+app.get('/api/notification-assets', async (_req, res) => {
+  try {
+    const config = await getNotificationAssetConfig();
+    return res.json({ success: true, assets: buildNotificationAssetCatalog(config), updatedAt: new Date().toISOString() });
+  } catch (error: any) {
+    return res.status(503).json({ success: false, error: error?.message || 'Notification asset catalog unavailable.' });
+  }
+});
+
+app.get('/api/notification-asset-quotes', async (req, res) => {
+  try {
+    const allRequested = typeof req.query.symbols === 'string'
+      ? [...new Set(req.query.symbols.split(',').map(symbol => symbol.trim().toUpperCase()).filter(Boolean))]
+      : [];
+    const requested = allRequested.slice(0, 80);
+    const unprocessedSymbols = allRequested.slice(80);
+    if (!requested.length) return res.json({ success: true, quotes: {}, unavailableSymbols: [] });
+    const config = await getNotificationAssetConfig();
+    const catalog = buildNotificationAssetCatalog(config);
+    const bySymbol = new Map(catalog.map(asset => [asset.symbol, asset]));
+    const quotes: Record<string, CachedQuote> = {};
+    const unavailableSymbols = new Set<string>();
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < requested.length) {
+        const symbol = requested[nextIndex++];
+        const asset = bySymbol.get(symbol);
+        if (!asset?.quoteAvailable || !asset.providerSymbol) {
+          unavailableSymbols.add(symbol);
+          continue;
+        }
+        try {
+          const quote = await fetchQuote(symbol, true);
+          if (!quote || quote.providerMarketSymbol?.toUpperCase() !== asset.providerSymbol.toUpperCase() || !quote.provider?.startsWith('Yahoo Finance')) {
+            unavailableSymbols.add(symbol);
+            continue;
+          }
+          quotes[symbol] = quote;
+        } catch {
+          unavailableSymbols.add(symbol);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, requested.length) }, () => worker()));
+    return res.json({ success: true, quotes, unavailableSymbols: [...unavailableSymbols], unprocessedSymbols });
+  } catch (error: any) {
+    return res.status(503).json({ success: false, error: error?.message || 'Verified notification quotes unavailable.' });
+  }
+});
 
 
 type MarketHistoryRange = '24U' | '1W' | '3M' | 'YTD' | '1Y' | '5Y' | '10Y' | 'ALL';
@@ -4026,10 +4336,10 @@ interface Sec8KItem {
   acceptanceDateTime: string;
   form: string;
   items: string[];
-  isItem202Earnings: boolean;
+  isItem202FinancialResults: boolean;
   docUrl: string;
   primaryDocument: string;
-  classification: 'earnings-beat' | 'earnings-miss' | 'sec-8k';
+  classification: 'earnings-beat' | 'earnings-miss' | 'earnings-release' | 'sec-8k';
   title: string;
   body: string;
   fiscalQuarter?: string;
@@ -4041,144 +4351,187 @@ interface Sec8KItem {
   };
 }
 
-let sec8kFilingsCache: { data: Sec8KItem[]; timestamp: number } | null = null;
-const SEC_8K_CACHE_TTL = 60 * 1000; // 60s cache to respect SEC EDGAR rate limits
+const sec8kFilingsCacheBySymbol = new Map<string, { data: Sec8KItem[]; timestamp: number }>();
+const sec8kInFlightBySymbol = new Map<string, Promise<{ filings: Sec8KItem[]; failed: boolean }>>();
+const SEC_8K_CACHE_TTL = 60 * 1000;
+let secRequestStartQueue: Promise<void> = Promise.resolve();
+let lastSecRequestStartedAt = 0;
+let secCompanyTickerMapCache: Record<string, string> = {};
+let secCompanyTickerMapFetchedAt = 0;
+let secCompanyTickerMapLookup: Promise<Record<string, string> | null> | null = null;
+let secCompanyTickerMapFailedAt = 0;
 
-async function fetchRecent8KFilings(requestedSymbols?: string[]): Promise<Sec8KItem[]> {
-  const now = Date.now();
-  if (sec8kFilingsCache && (now - sec8kFilingsCache.timestamp) < SEC_8K_CACHE_TTL && !requestedSymbols) {
-    return sec8kFilingsCache.data;
+async function paceSecRequestStart(): Promise<void> {
+  const previous = secRequestStartQueue;
+  let release = () => {};
+  secRequestStartQueue = new Promise<void>(resolve => { release = () => resolve(); });
+  await previous;
+  try {
+    const delayMs = Math.max(0, 125 - (Date.now() - lastSecRequestStartedAt));
+    if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+    lastSecRequestStartedAt = Date.now();
+  } finally {
+    release();
   }
+}
 
-  const targetSymbols = requestedSymbols || [
-    'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'META', 'AVGO', 'AMD', 'TSM', 'INTC', 'MRVL', 'MU'
-  ];
+async function getOfficialSecTickerMap(): Promise<Record<string, string> | null> {
+  const now = Date.now();
+  if (Object.keys(secCompanyTickerMapCache).length && now - secCompanyTickerMapFetchedAt < 24 * 60 * 60 * 1000) return secCompanyTickerMapCache;
+  if (now - secCompanyTickerMapFailedAt < 60 * 1000) return null;
+  if (secCompanyTickerMapLookup) return secCompanyTickerMapLookup;
 
-  const results: Sec8KItem[] = [];
-
-  for (const sym of targetSymbols) {
-    const cik = SEC_CIK_REGISTRY[sym];
-    if (!cik) continue;
-
+  secCompanyTickerMapLookup = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     try {
-      const url = `https://data.sec.gov/submissions/CIK${cik}.json`;
-      const response = await fetch(url, {
+      await paceSecRequestStart();
+      const response = await fetch('https://www.sec.gov/files/company_tickers.json', {
+        signal: controller.signal,
         headers: {
           'User-Agent': 'GlobalMarketsTerminal/1.0 institutional-desk@investmentresearch.com',
           'Accept-Encoding': 'gzip, deflate'
         }
       });
-
-      if (!response.ok) continue;
-
-      const data = await response.json();
-      const recent = data?.filings?.recent;
-      const companyName = data?.name || sym;
-
-      if (!recent || !Array.isArray(recent.form)) continue;
-
-      const reportedHistory = getReportedHistoricalQuarters(sym);
-      const calendarEntry = VERIFIED_EARNINGS_CALENDAR_REGISTRY[sym];
-
-      // Scan filings for Form 8-K
-      for (let i = 0; i < recent.form.length && i < 25; i++) {
-        if (recent.form[i] === '8-K') {
-          const accessionNumber = recent.accessionNumber[i];
-          const filingDate = recent.filingDate[i];
-          const acceptanceDateTime = recent.acceptanceDateTime[i];
-          const primaryDoc = recent.primaryDocument[i];
-          const rawItems = (recent.items?.[i] || '').split(',').map((it: string) => it.trim()).filter(Boolean);
-          const isItem202 = rawItems.includes('2.02');
-
-          const cleanCik = parseInt(cik, 10);
-          const cleanAccession = accessionNumber.replace(/-/g, '');
-          const docUrl = `https://www.sec.gov/Archives/edgar/data/${cleanCik}/${cleanAccession}/${primaryDoc}`;
-
-          let classification: 'earnings-beat' | 'earnings-miss' | 'sec-8k' = 'sec-8k';
-          let metrics: Sec8KItem['metrics'] | undefined = undefined;
-          let quarterLabel: string | undefined = undefined;
-
-          if (isItem202) {
-            // Find if there is a reported quarter near this filing date
-            const matchedQuarter = reportedHistory.find(q => {
-              if (!q.fiscalDate) return false;
-              const fTime = new Date(filingDate).getTime();
-              const qTime = new Date(q.fiscalDate).getTime();
-              // Within 45 days of fiscal period end
-              return Math.abs(fTime - qTime) <= 45 * 86400 * 1000;
-            });
-
-            if (matchedQuarter && calendarEntry && calendarEntry.eps !== undefined) {
-              quarterLabel = matchedQuarter.quarter;
-              metrics = {
-                epsActual: matchedQuarter.eps,
-                epsEstimate: calendarEntry.eps,
-                revenueActual: matchedQuarter.revenue,
-                revenueEstimate: calendarEntry.rev
-              };
-
-              // Only classify as beat or miss when verified actual and consensus both exist
-              if (metrics.epsActual !== undefined && metrics.epsEstimate !== undefined) {
-                if (metrics.epsActual >= metrics.epsEstimate) {
-                  classification = 'earnings-beat';
-                } else {
-                  classification = 'earnings-miss';
-                }
-              }
-            }
-          }
-
-          let title = `${sym} — SEC Form 8-K Filed`;
-          let body = `${companyName} (${sym}) filed official Form 8-K with the SEC on ${filingDate}. Items disclosed: ${rawItems.join(', ') || 'General'}.`;
-
-          if (classification === 'earnings-beat') {
-            title = `${sym} — Earnings Beat (SEC Form 8-K Item 2.02)`;
-            body = `${companyName} (${sym}) reported quarterly earnings on SEC Form 8-K. Actual EPS $${metrics?.epsActual?.toFixed(2)} beat consensus $${metrics?.epsEstimate?.toFixed(2)}. Accession: ${accessionNumber}.`;
-          } else if (classification === 'earnings-miss') {
-            title = `${sym} — Earnings Miss (SEC Form 8-K Item 2.02)`;
-            body = `${companyName} (${sym}) reported quarterly earnings on SEC Form 8-K. Actual EPS $${metrics?.epsActual?.toFixed(2)} missed consensus $${metrics?.epsEstimate?.toFixed(2)}. Accession: ${accessionNumber}.`;
-          } else if (isItem202) {
-            title = `${sym} — SEC Form 8-K Item 2.02 (Results of Operations)`;
-            body = `${companyName} (${sym}) filed official financial results of operations under Item 2.02 on ${filingDate}. Official SEC Accession: ${accessionNumber}.`;
-          }
-
-          results.push({
-            id: `SEC_8K:${sym}:${accessionNumber}`,
-            ticker: sym,
-            companyName,
-            cik,
-            accessionNumber,
-            filingDate,
-            acceptanceDateTime,
-            form: '8-K',
-            items: rawItems,
-            isItem202Earnings: isItem202,
-            docUrl,
-            primaryDocument: primaryDoc,
-            classification,
-            title,
-            body,
-            fiscalQuarter: quarterLabel,
-            metrics
-          });
-
-          // Limit to 2 most recent 8-Ks per company to avoid payload bloat
-          const companyFilingsCount = results.filter(r => r.ticker === sym).length;
-          if (companyFilingsCount >= 2) break;
-        }
+      if (!response.ok) throw new Error('SEC ticker directory returned HTTP ' + response.status);
+      const payload = await response.json();
+      const nextMap: Record<string, string> = {};
+      for (const item of Object.values(payload || {}) as any[]) {
+        const ticker = typeof item?.ticker === 'string' ? item.ticker.trim().toUpperCase() : '';
+        const cik = Number(item?.cik_str);
+        if (ticker && Number.isInteger(cik) && cik > 0) nextMap[ticker] = String(cik).padStart(10, '0');
       }
-    } catch (err) {
-      console.warn(`[SEC EDGAR 8-K] Error fetching filings for ${sym}:`, err);
+      if (Object.keys(nextMap).length === 0) throw new Error('SEC ticker directory was empty');
+      secCompanyTickerMapCache = nextMap;
+      secCompanyTickerMapFetchedAt = Date.now();
+      return nextMap;
+    } catch (error) {
+      secCompanyTickerMapFailedAt = Date.now();
+      console.warn('SEC ticker directory is unavailable:', error);
+      return null;
+    } finally {
+      clearTimeout(timeout);
+      secCompanyTickerMapLookup = null;
     }
+  })();
+  return secCompanyTickerMapLookup;
+}
+
+async function fetchOneRecent8K(sym: string, cik: string): Promise<{ filings: Sec8KItem[]; failed: boolean }> {
+  const now = Date.now();
+  const cached = sec8kFilingsCacheBySymbol.get(sym);
+  if (cached && now - cached.timestamp < SEC_8K_CACHE_TTL) {
+    return { filings: cached.data.filter(filing => isFreshSecAcceptance(filing.acceptanceDateTime, Date.now())), failed: false };
+  }
+  const inFlight = sec8kInFlightBySymbol.get(sym);
+  if (inFlight) return inFlight;
+
+  const request = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const url = 'https://data.sec.gov/submissions/CIK' + cik + '.json';
+      await paceSecRequestStart();
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'GlobalMarketsTerminal/1.0 institutional-desk@investmentresearch.com',
+          'Accept-Encoding': 'gzip, deflate'
+        }
+      });
+      if (!response.ok) throw new Error('SEC submissions returned HTTP ' + response.status);
+      const data = await response.json();
+      if (data?.cik !== undefined && String(data.cik).replace(/^0+/, '').padStart(10, '0') !== String(cik).replace(/^0+/, '').padStart(10, '0')) {
+        throw new Error('SEC submission CIK did not match the requested company');
+      }
+      if (data?.tickers !== undefined && (!Array.isArray(data.tickers) || !data.tickers.some((value: unknown) => typeof value === 'string' && value.toUpperCase() === sym))) {
+        throw new Error('SEC submission ticker list did not match the requested symbol');
+      }
+      const recent = data?.filings?.recent;
+      if (!recent || !Array.isArray(recent.form)) throw new Error('SEC submissions had no recent forms');
+
+      const filings: Sec8KItem[] = [];
+      const companyName = data?.name || sym;
+      const indicesToScan = Math.min(recent.form.length, 100);
+      for (let i = 0; i < indicesToScan && filings.length < 2; i++) {
+        if (recent.form[i] !== '8-K' || !isFreshSecAcceptance(recent.acceptanceDateTime?.[i], Date.now())) continue;
+        const accessionNumber = recent.accessionNumber?.[i];
+        const filingDate = recent.filingDate?.[i];
+        const acceptanceDateTime = recent.acceptanceDateTime?.[i];
+        const primaryDoc = recent.primaryDocument?.[i];
+        if (typeof accessionNumber !== 'string' || typeof filingDate !== 'string' || typeof acceptanceDateTime !== 'string' || typeof primaryDoc !== 'string') continue;
+        const rawItems = (typeof recent.items?.[i] === 'string' ? recent.items[i] : '').split(',').map((item: string) => item.trim()).filter(Boolean);
+        const isItem202 = rawItems.includes('2.02');
+        const cleanCik = parseInt(cik, 10);
+        const cleanAccession = accessionNumber.replace(/-/g, '');
+        const docUrl = 'https://www.sec.gov/Archives/edgar/data/' + cleanCik + '/' + cleanAccession + '/' + primaryDoc;
+        const classification: 'earnings-release' | 'sec-8k' = isItem202 ? 'earnings-release' : 'sec-8k';
+        const title = isItem202 ? sym + ' - Financial Results Filed (SEC Form 8-K Item 2.02)' : sym + ' - SEC Form 8-K Filed';
+        const body = companyName + ' (' + sym + ') filed Form 8-K on ' + filingDate + '; SEC acceptance ' + acceptanceDateTime + '. Items: ' + (rawItems.join(', ') || 'not listed') + '. Accession: ' + accessionNumber + '.';
+        filings.push({
+          id: 'SEC_8K:' + sym + ':' + accessionNumber,
+          ticker: sym,
+          companyName,
+          cik,
+          accessionNumber,
+          filingDate,
+          acceptanceDateTime,
+          form: '8-K',
+          items: rawItems,
+          isItem202FinancialResults: isItem202,
+          docUrl,
+          primaryDocument: primaryDoc,
+          classification,
+          title,
+          body
+        });
+      }
+      sec8kFilingsCacheBySymbol.set(sym, { data: filings, timestamp: Date.now() });
+      return { filings, failed: false };
+    } catch (error) {
+      console.warn('[SEC EDGAR 8-K] Error fetching filings for ' + sym + ':', error);
+      return { filings: [], failed: true };
+    } finally {
+      clearTimeout(timeout);
+      sec8kInFlightBySymbol.delete(sym);
+    }
+  })();
+  sec8kInFlightBySymbol.set(sym, request);
+  return request;
+}
+
+async function fetchRecent8KFilings(
+  requestedSymbols: string[] = [],
+  failedSymbols: string[] = [],
+  unavailableSymbols: string[] = []
+): Promise<Sec8KItem[]> {
+  const targetSymbols = Array.from(new Set(requestedSymbols.map(symbol => symbol.trim().toUpperCase()).filter(Boolean))).slice(0, 100);
+  const cikBySymbol: Record<string, string> = {};
+  for (const sym of targetSymbols) if (SEC_CIK_REGISTRY[sym]) cikBySymbol[sym] = SEC_CIK_REGISTRY[sym];
+  const needsDirectory = targetSymbols.some(sym => !cikBySymbol[sym]);
+  const officialTickerMap = needsDirectory ? await getOfficialSecTickerMap() : null;
+  for (const sym of targetSymbols) {
+    if (cikBySymbol[sym]) continue;
+    const resolved = officialTickerMap?.[sym];
+    if (resolved) cikBySymbol[sym] = resolved;
+    else if (officialTickerMap) unavailableSymbols.push(sym);
+    else failedSymbols.push(sym);
   }
 
-  // Sort by filing date descending
-  results.sort((a, b) => new Date(b.acceptanceDateTime || b.filingDate).getTime() - new Date(a.acceptanceDateTime || a.filingDate).getTime());
-
-  if (!requestedSymbols) {
-    sec8kFilingsCache = { data: results, timestamp: now };
-  }
-
+  const results: Sec8KItem[] = [];
+  let nextIndex = 0;
+  const workerCount = Math.min(3, targetSymbols.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < targetSymbols.length) {
+      const sym = targetSymbols[nextIndex++];
+      const cik = cikBySymbol[sym];
+      if (!cik) continue;
+      const result = await fetchOneRecent8K(sym, cik);
+      results.push(...result.filings);
+      if (result.failed) failedSymbols.push(sym);
+    }
+  }));
+  results.sort((a, b) => Date.parse(b.acceptanceDateTime) - Date.parse(a.acceptanceDateTime));
   return results;
 }
 
@@ -4188,14 +4541,21 @@ app.get('/api/sec-8k-filings', async (req, res) => {
     const symbolsParam = req.query.symbols as string;
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-      : undefined;
+      : [];
 
-    const filings = await fetchRecent8KFilings(requestedSymbols);
+    const failedSymbols: string[] = [];
+    const unavailableSymbols: string[] = [];
+    const filings = await fetchRecent8KFilings(requestedSymbols, failedSymbols, unavailableSymbols);
+    const unprocessedSymbols = requestedSymbols.slice(100);
     return res.json({
       success: true,
+      partial: failedSymbols.length > 0 || unavailableSymbols.length > 0 || unprocessedSymbols.length > 0,
       timestamp: new Date().toISOString(),
       provider: 'SEC EDGAR Official Regulatory Submissions API (Form 8-K)',
       count: filings.length,
+      unavailableSymbols,
+      failedSymbols: Array.from(new Set(failedSymbols)),
+      unprocessedSymbols,
       filings
     });
   } catch (err: any) {

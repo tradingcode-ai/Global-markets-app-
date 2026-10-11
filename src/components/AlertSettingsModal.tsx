@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { AlertPreferences } from '../types';
+import { AlertPreferences, NotificationAssetCatalogItem } from '../types';
 import { 
   X, 
   Bell, 
@@ -9,10 +9,11 @@ import {
   Check, 
   Sliders,
   Activity,
+  Globe,
   Search,
   Filter
 } from 'lucide-react';
-import { ALL_APP_STOCKS } from '../data/allAppStocks';
+import { NOTIFICATION_APP_STOCKS } from '../data/allAppStocks';
 import { StockLogo } from './StockLogo';
 import MomentumIcon from './MomentumIcon';
 import { SystemStatusPanel } from './SystemStatusPanel';
@@ -22,6 +23,10 @@ interface AlertSettingsModalProps {
   onUpdatePreferences: (prefs: AlertPreferences) => void;
   browserPermission: NotificationPermission;
   onRequestBrowserPermission: () => void;
+  secFeedStatus?: string | null;
+  stockQuoteFeedStatus?: string | null;
+  notificationAssets?: NotificationAssetCatalogItem[];
+  assetFeedStatus?: string | null;
   onClose: () => void;
 }
 
@@ -30,11 +35,20 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
   onUpdatePreferences,
   browserPermission,
   onRequestBrowserPermission,
+  secFeedStatus,
+  stockQuoteFeedStatus,
+  notificationAssets = [],
+  assetFeedStatus,
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'alerts' | 'system'>('alerts');
+  const [activeTab, setActiveTab] = useState<'alerts' | 'assets' | 'system'>('alerts');
   const [tickerSearch, setTickerSearch] = useState('');
   const [tickerCategory, setTickerCategory] = useState<string>('ALL');
+  const [assetSearch, setAssetSearch] = useState('');
+  const [assetGroupFilter, setAssetGroupFilter] = useState<'ALL' | NotificationAssetCatalogItem['group']>('ALL');
+  const [assetsSelectedOnly, setAssetsSelectedOnly] = useState(false);
+  const nonEquitySymbols = useMemo(() => new Set(notificationAssets.map(asset => asset.symbol.toUpperCase())), [notificationAssets]);
+  const stockUniverse = useMemo(() => NOTIFICATION_APP_STOCKS.filter(stock => !nonEquitySymbols.has(stock.ticker.toUpperCase())), [nonEquitySymbols]);
 
   const toggleTicker = (ticker: string) => {
     let nextList = [...preferences.subscribedTickers];
@@ -52,7 +66,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
   const selectAllTickers = () => {
     onUpdatePreferences({
       ...preferences,
-      subscribedTickers: ALL_APP_STOCKS.map(s => s.ticker)
+      subscribedTickers: stockUniverse.map(s => s.ticker)
     });
   };
 
@@ -63,9 +77,23 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     });
   };
 
+  const toggleAsset = (symbol: string) => {
+    const current = preferences.subscribedAssetSymbols || [];
+    const hasSymbol = current.some(value => value.toUpperCase() === symbol.toUpperCase());
+    const next = hasSymbol
+      ? current.filter(value => value.toUpperCase() !== symbol.toUpperCase())
+      : [...current, symbol.toUpperCase()];
+    onUpdatePreferences({ ...preferences, subscribedAssetSymbols: next });
+  };
+
+  const selectSupportedAssets = (assets: NotificationAssetCatalogItem[]) => {
+    const supported = assets.filter(asset => asset.quoteAvailable && Number.isFinite(asset.thresholdPct) && (asset.thresholdPct as number) > 0).map(asset => asset.symbol);
+    onUpdatePreferences({ ...preferences, subscribedAssetSymbols: [...new Set([...(preferences.subscribedAssetSymbols || []), ...supported])] });
+  };
+
   const filteredStocks = useMemo(() => {
     const q = tickerSearch.trim().toLowerCase();
-    return ALL_APP_STOCKS.filter(stock => {
+    return stockUniverse.filter(stock => {
       if (tickerCategory === 'SUBSCRIBED' && !preferences.subscribedTickers.includes(stock.ticker)) {
         return false;
       }
@@ -80,7 +108,18 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
         stock.exchange.toLowerCase().includes(q)
       );
     });
-  }, [tickerSearch, tickerCategory, preferences.subscribedTickers]);
+  }, [tickerSearch, tickerCategory, preferences.subscribedTickers, stockUniverse]);
+
+  const filteredAssets = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    return notificationAssets.filter(asset => {
+      if (assetGroupFilter !== 'ALL' && asset.group !== assetGroupFilter) return false;
+      if (assetsSelectedOnly && !(preferences.subscribedAssetSymbols || []).some(symbol => symbol.toUpperCase() === asset.symbol.toUpperCase())) return false;
+      return !query || asset.symbol.toLowerCase().includes(query) || asset.name.toLowerCase().includes(query) || asset.group.toLowerCase().includes(query) || asset.assetClass.toLowerCase().includes(query);
+    });
+  }, [assetSearch, assetGroupFilter, assetsSelectedOnly, notificationAssets, preferences.subscribedAssetSymbols]);
+
+  const assetGroups = useMemo(() => Array.from(new Set(filteredAssets.map(asset => asset.group))), [filteredAssets]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
@@ -123,6 +162,19 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
           <button
             type="button"
+            onClick={() => setActiveTab('assets')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition cursor-pointer ${
+              activeTab === 'assets'
+                ? 'border-blue-600 text-blue-700 bg-white rounded-t-lg shadow-2xs'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Global Markets</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('system')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition cursor-pointer ${
               activeTab === 'system'
@@ -140,6 +192,113 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
         <div className="p-6 overflow-y-auto">
           {activeTab === 'system' ? (
             <SystemStatusPanel />
+          ) : activeTab === 'assets' ? (
+            <div className="space-y-4 text-xs text-slate-600">
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-slate-900">Global Markets volatility alerts</h4>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">Uses mapped Yahoo instruments and the active research threshold for each asset category. Alerts require a source trade timestamp no more than 2 minutes old, no reported provider delay, and an open provider session. Checks run while this tab is open and active.</p>
+                  </div>
+                  <input
+                    aria-label="Enable Global Markets volatility alerts"
+                    type="checkbox"
+                    checked={preferences.alertOnAssetVolatility ?? true}
+                    onChange={(event) => onUpdatePreferences({ ...preferences, alertOnAssetVolatility: event.target.checked })}
+                    className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-0"
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-blue-200/70 pt-3">
+                  <span className="font-semibold text-blue-900">{(preferences.subscribedAssetSymbols || []).length} selected</span>
+                  <span role="status" className="text-[10px] text-slate-600">{assetFeedStatus || 'Eligibility requires a fresh source timestamp, no reported delay, and an active provider session.'}</span>
+                </div>
+              </div>
+
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={assetSearch}
+                  onChange={(event) => setAssetSearch(event.target.value)}
+                  placeholder="Search indices, sector ETFs, commodities, or yields"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {([
+                  ['ALL', 'All'],
+                  ['Global indices', 'Indices'],
+                  ['Sector indices & ETFs', 'Sectors & ETFs'],
+                  ['Commodities', 'Commodities'],
+                  ['Sovereign yields', 'Yields']
+                ] as const).map(([group, label]) => (
+                  <button key={group} type="button" onClick={() => setAssetGroupFilter(group)} className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${assetGroupFilter === group ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                    {label}{group === 'ALL' ? ` (${notificationAssets.length})` : ` (${notificationAssets.filter(asset => asset.group === group).length})`}
+                  </button>
+                ))}
+                <label className="ml-auto inline-flex items-center gap-1.5 px-1 text-[10px] text-slate-600">
+                  <input type="checkbox" checked={assetsSelectedOnly} onChange={event => setAssetsSelectedOnly(event.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300 text-slate-700 focus:ring-0" />
+                  Selected only
+                </label>
+              </div>
+
+              {assetGroups.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-slate-500">No matching market assets are available in the current catalog.</div>
+              ) : assetGroups.map(group => {
+                const groupAssets = filteredAssets.filter(asset => asset.group === group);
+                return (
+                  <section key={group} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
+                      <div>
+                        <h5 className="font-bold text-slate-800">{group}</h5>
+                        <p className="text-[10px] text-slate-500">{groupAssets.length} catalogued assets</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => selectSupportedAssets(groupAssets)}
+                        className="rounded-md px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
+                      >
+                        Select mapped assets
+                      </button>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {groupAssets.map(asset => {
+                        const selected = (preferences.subscribedAssetSymbols || []).some(value => value.toUpperCase() === asset.symbol.toUpperCase());
+                        const hasThreshold = Number.isFinite(asset.thresholdPct) && (asset.thresholdPct as number) > 0;
+                        const supported = asset.quoteAvailable && hasThreshold;
+                        const thresholdLabel = hasThreshold
+                          ? `${asset.thresholdPct}%${asset.group === 'Sovereign yields' ? ' relative yield move' : ''}`
+                          : 'Threshold unavailable';
+                        return (
+                          <label key={`${asset.group}:${asset.symbol}`} className={`flex items-start gap-3 px-3 py-2.5 ${supported || selected ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed bg-slate-50/70'}`}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              disabled={!supported && !selected}
+                              onChange={() => toggleAsset(asset.symbol)}
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-0 disabled:opacity-40"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-mono-code font-bold text-slate-900">{asset.symbol}</span>
+                                <span className="text-slate-600">{asset.name}</span>
+                                <span className="rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold text-blue-800">{thresholdLabel}</span>
+                                {asset.unit && <span className="text-[9px] text-slate-500">{asset.unit}{asset.currency ? ` · ${asset.currency}` : ''}</span>}
+                              </span>
+                              <span className="mt-1 block text-[10px] text-slate-500">
+                                {supported ? `Source mapped: ${asset.providerSymbol}` : asset.coverageReason || (hasThreshold ? 'A direct provider instrument is not mapped for this asset.' : 'No active research threshold is configured for this asset category.')}
+                              </span>
+                            </span>
+                            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${supported ? 'bg-slate-100 text-slate-700' : 'bg-rose-50 text-rose-700'}`}>{supported ? 'SOURCE MAPPED' : 'UNAVAILABLE'}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           ) : (
             <div className="space-y-5 text-xs text-slate-600">
               {/* 1. Browser System Push Permission */}
@@ -167,7 +326,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 </div>
 
                 <p className="text-slate-500 text-[11px] leading-relaxed mb-3">
-                  Verstuur systeemberichten via het besturingssysteem, zelfs wanneer dit tabblad op de achtergrond draait.
+                  Systeemberichten verschijnen zolang Global Markets open en actief is. Markt- en SEC-controles pauzeren wanneer dit tabblad verborgen is.
                 </p>
 
                 {browserPermission !== 'granted' ? (
@@ -269,6 +428,26 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition">
                     <input
                       type="checkbox"
+                      checked={preferences.alertOnRelease ?? true}
+                      onChange={(e) => onUpdatePreferences({ ...preferences, alertOnRelease: e.target.checked })}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-0 w-4 h-4"
+                    />
+                    <span className="font-semibold text-slate-800 text-xs">SEC Item 2.02 financial results</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition">
+                    <input
+                      type="checkbox"
+                      checked={preferences.alertOnSec8K ?? true}
+                      onChange={(e) => onUpdatePreferences({ ...preferences, alertOnSec8K: e.target.checked })}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-0 w-4 h-4"
+                    />
+                    <span className="font-semibold text-slate-800 text-xs">Other SEC Form 8-K filings</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition">
+                    <input
+                      type="checkbox"
                       checked={preferences.alertOnEarningsMiss ?? preferences.alertOnMiss ?? true}
                       onChange={(e) => onUpdatePreferences({
                         ...preferences,
@@ -282,7 +461,18 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                       <span>Earnings Misses</span>
                     </div>
                   </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition">
+                    <input
+                      type="checkbox"
+                      checked={preferences.alertOnDmaBreakdown ?? true}
+                      onChange={(e) => onUpdatePreferences({ ...preferences, alertOnDmaBreakdown: e.target.checked })}
+                      className="rounded border-slate-300 text-amber-600 focus:ring-0 w-4 h-4"
+                    />
+                    <span className="font-semibold text-slate-800 text-xs">Verified 200-day breakdown</span>
+                  </label>
                 </div>
+                <p role="status" className="text-[10px] text-slate-600">Beat/miss comparison is unavailable until a feed supplies actual EPS and consensus for the same period and reporting basis. The current Yahoo company view does not establish that match.</p>
               </div>
 
               {/* 5. Ticker Subscriptions for Push Engine */}
@@ -294,8 +484,10 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                       <span>Push Engine — Gevolgde Aandelen ({preferences.subscribedTickers.length})</span>
                     </h4>
                     <p className="text-[10px] text-slate-500 mt-0.5">
-                      Kies voor welke individuele aandelen je browser push-alerts wilt ontvangen (beats/misses, 52W records, &gt;5% moves). Staat los van de News Agent.
+                      Kies voor welke individuele aandelen je live prijsalerts en recente SEC-filings wilt ontvangen. Een lege selectie schakelt automatische meldingen uit. Staat los van de News Agent.
                     </p>
+                    {secFeedStatus && <p role="status" className="text-[10px] text-slate-600 mt-2">SEC feed: {secFeedStatus}</p>}
+                    {stockQuoteFeedStatus && <p role="status" className="text-[10px] text-slate-600 mt-1">Price feed: {stockQuoteFeedStatus}</p>}
                   </div>
                   <div className="space-x-2 text-[11px] shrink-0">
                     <button
@@ -303,7 +495,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                       onClick={selectAllTickers}
                       className="text-blue-600 hover:underline cursor-pointer font-semibold"
                     >
-                      Alles ({ALL_APP_STOCKS.length})
+                      Alles ({stockUniverse.length})
                     </button>
                     <span className="text-slate-300">•</span>
                     <button
@@ -340,7 +532,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
                   <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px]">
                     {[
-                      { id: 'ALL', label: `Alles (${ALL_APP_STOCKS.length})` },
+                      { id: 'ALL', label: `Alles (${stockUniverse.length})` },
                       { id: 'SUBSCRIBED', label: `Actief (${preferences.subscribedTickers.length})` },
                       { id: 'mega_cap', label: 'Mega-Cap' },
                       { id: 'semiconductors', label: 'Chips' },
@@ -410,10 +602,20 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
-          {activeTab === 'alerts' ? (
+          {activeTab === 'assets' ? (
+            <>
+              <span className="text-[11px] text-slate-500">{(preferences.subscribedAssetSymbols || []).length} assets selected · {assetFeedStatus || 'Alerts require a fresh source timestamp, no reported delay, and an active session'}</span>
+              <button
+                onClick={onClose}
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition cursor-pointer shadow-2xs"
+              >
+                Save settings
+              </button>
+            </>
+          ) : activeTab === 'alerts' ? (
             <>
               <span className="text-[11px] text-slate-500 font-medium">
-                {preferences.subscribedTickers.length} van {ALL_APP_STOCKS.length} tickers geselecteerd voor push-meldingen
+                {preferences.subscribedTickers.length} van {stockUniverse.length} tickers geselecteerd voor push-meldingen
               </span>
               <button
                 onClick={onClose}

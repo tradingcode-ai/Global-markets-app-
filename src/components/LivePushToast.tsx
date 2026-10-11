@@ -8,14 +8,16 @@ import {
   AlertCircle, 
   FileCheck2, 
   TrendingUp, 
-  TrendingDown 
+  TrendingDown,
+  Globe
 } from 'lucide-react';
 import MomentumIcon from './MomentumIcon';
+import { formatNotificationEventTime } from '../services/notificationRules';
 
 interface LivePushToastProps {
   notification: PushNotificationItem | null;
   onDismiss: () => void;
-  onViewDetails: (ticker: string) => void;
+  onViewDetails: (ticker: string, notification?: PushNotificationItem) => void;
 }
 
 export const LivePushToast: React.FC<LivePushToastProps> = ({
@@ -36,11 +38,18 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
   const isUp = notification.type === 'momentum-up' || notification.type === 'earnings-beat' || notification.type === 'beat';
   const isDown = notification.type === 'momentum-down' || notification.type === 'earnings-miss' || notification.type === 'miss';
   const isSec8k = notification.type === 'sec-8k';
+  const isResultsRelease = notification.type === 'earnings-release';
+  const isDmaBreakdown = notification.type === 'dma-breakdown';
   const is52wHigh = notification.type === '52w-high';
   const is52wLow = notification.type === '52w-low';
+  const isAssetVolatility = notification.type === 'asset-volatility';
 
-  const borderColor = isSec8k 
+  const borderColor = isAssetVolatility
+    ? 'border-blue-400 ring-blue-50'
+    : isSec8k || isResultsRelease
     ? 'border-indigo-400 ring-indigo-50' 
+    : isDmaBreakdown
+    ? 'border-amber-400 ring-amber-50'
     : is52wHigh 
     ? 'border-blue-400 ring-blue-50'
     : is52wLow
@@ -55,8 +64,11 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
     notification.type === 'momentum-up' ? 'MOMENTUM UP ALERT' :
     notification.type === 'momentum-down' ? 'MOMENTUM DOWN ALERT' :
     notification.type === 'sec-8k' ? 'OFFICIAL SEC FORM 8-K' :
+    notification.type === 'earnings-release' ? 'SEC FINANCIAL RESULTS FILED' :
+    notification.type === 'dma-breakdown' ? '200-DAY AVERAGE BREAKDOWN' :
     notification.type === '52w-high' ? '52-WEEK HIGH ALERT' :
     notification.type === '52w-low' ? '52-WEEK LOW ALERT' :
+    isAssetVolatility ? 'GLOBAL MARKETS VOLATILITY ALERT' :
     'INSTITUTIONAL MARKET DISPATCH';
 
   const renderIcon = () => {
@@ -65,8 +77,11 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
     if (notification.type === 'earnings-beat' || notification.type === 'beat') return <Award className="w-4 h-4 text-emerald-600" />;
     if (notification.type === 'earnings-miss' || notification.type === 'miss') return <AlertCircle className="w-4 h-4 text-rose-600" />;
     if (notification.type === 'sec-8k') return <FileCheck2 className="w-4 h-4 text-indigo-600" />;
+    if (notification.type === 'earnings-release') return <FileCheck2 className="w-4 h-4 text-indigo-600" />;
+    if (notification.type === 'dma-breakdown') return <AlertCircle className="w-4 h-4 text-amber-600" />;
     if (notification.type === '52w-high') return <TrendingUp className="w-4 h-4 text-blue-600" />;
     if (notification.type === '52w-low') return <TrendingDown className="w-4 h-4 text-amber-600" />;
+    if (isAssetVolatility) return <Globe className="w-4 h-4 text-blue-600" />;
     return <Bell className="w-4 h-4 text-blue-600" />;
   };
 
@@ -94,9 +109,11 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
             isDown ? 'bg-rose-50 border-rose-300 text-rose-600 shadow-xs' :
             notification.type === 'earnings-beat' || notification.type === 'beat' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' :
             notification.type === 'earnings-miss' || notification.type === 'miss' ? 'bg-rose-50 border-rose-300 text-rose-700' :
-            isSec8k ? 'bg-indigo-50 border-indigo-300 text-indigo-700' :
+            isSec8k || isResultsRelease ? 'bg-indigo-50 border-indigo-300 text-indigo-700' :
+            isDmaBreakdown ? 'bg-amber-50 border-amber-300 text-amber-700' :
             is52wHigh ? 'bg-blue-50 border-blue-300 text-blue-700' :
             is52wLow ? 'bg-amber-50 border-amber-300 text-amber-700' :
+            isAssetVolatility ? 'bg-blue-50 border-blue-300 text-blue-700' :
             'bg-slate-100 border-slate-200 text-slate-700'
           }`}>
             {isUp ? (
@@ -107,12 +124,16 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
               <Award className="w-5 h-5 text-emerald-600" />
             ) : notification.type === 'earnings-miss' || notification.type === 'miss' ? (
               <AlertCircle className="w-5 h-5 text-rose-600" />
-            ) : isSec8k ? (
+            ) : isSec8k || isResultsRelease ? (
               <FileCheck2 className="w-5 h-5 text-indigo-600" />
+            ) : isDmaBreakdown ? (
+              <AlertCircle className="w-5 h-5 text-amber-600" />
             ) : is52wHigh ? (
               <TrendingUp className="w-5 h-5 text-blue-600" />
             ) : is52wLow ? (
               <TrendingDown className="w-5 h-5 text-amber-600" />
+            ) : isAssetVolatility ? (
+              <Globe className="w-5 h-5 text-blue-600" />
             ) : (
               <Bell className="w-5 h-5 text-blue-600" />
             )}
@@ -122,6 +143,11 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
             <div className="font-bold text-slate-900 font-mono-code mb-1">
               {notification.title}
             </div>
+            {isAssetVolatility && notification.metadata?.assetClass && (
+              <div className="mb-1 text-[10px] font-semibold text-blue-700">
+                {notification.metadata.assetClass} · {notification.metadata.thresholdPct}% threshold · {notification.metadata.providerSymbol}
+              </div>
+            )}
             <p className="text-slate-600 text-[11px] leading-relaxed">
               {notification.body}
             </p>
@@ -130,16 +156,16 @@ export const LivePushToast: React.FC<LivePushToastProps> = ({
 
         <div className="flex items-center justify-between pt-1 text-[11px]">
           <span className="text-slate-400 font-mono-code">
-            {notification.tradingDate ? `Trading Date: ${notification.tradingDate}` : 'Delivered to desktop & log'}
+            Event: {formatNotificationEventTime(notification.eventOccurredAt, notification.deliveredAt || notification.timestamp, notification.tradingDate)}
           </span>
           <button
             onClick={() => {
-              onViewDetails(notification.ticker);
+              onViewDetails(notification.ticker, notification);
               onDismiss();
             }}
             className="flex items-center gap-1 font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
           >
-            <span>Open Profile</span>
+            <span>{isAssetVolatility ? 'Open Market' : 'Open Profile'}</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>

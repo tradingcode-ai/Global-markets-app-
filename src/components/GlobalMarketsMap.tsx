@@ -1175,7 +1175,7 @@ const MarketHistoryChart: React.FC<MarketHistoryChartProps> = ({
   );
 };
 
-export const GlobalMarketsMap: React.FC = () => {
+export const GlobalMarketsMap: React.FC<{ selectedTicker?: string | null; selectionRequestId?: number }> = ({ selectedTicker = null, selectionRequestId = 0 }) => {
   const [markets, setMarkets] = useState<MarketItem[]>(DEFAULT_MARKETS);
 
   const [isExpanded, setIsExpanded] = useState(() => {
@@ -1200,6 +1200,19 @@ export const GlobalMarketsMap: React.FC = () => {
   
   // Selected market for detailed analysis below the list (null initially as requested)
   const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedTicker) return;
+    const match = markets.find(market => market.yahooTicker.toUpperCase() === selectedTicker.toUpperCase());
+    if (match) {
+      setSelectedMarketId(match.id);
+      setActiveTab('all');
+      setIsExpanded(true);
+      window.setTimeout(() => document.getElementById('global-markets-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    }
+  // The request ID intentionally retriggers the selection when the same market is opened twice.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTicker, selectionRequestId]);
   
   // Tab filter: 'open' | 'closed' | 'all'
   const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'all'>('open');
@@ -1674,7 +1687,7 @@ export const GlobalMarketsMap: React.FC = () => {
   };
 
   return (
-    <div className={`mb-5 bg-[#070b14] border border-slate-800/90 rounded-2xl overflow-hidden shadow-2xl text-slate-100 transition-all duration-300 ${
+    <div id="global-markets-map" className={`mb-5 bg-[#070b14] border border-slate-800/90 rounded-2xl overflow-hidden shadow-2xl text-slate-100 transition-all duration-300 ${
       isFullscreen
         ? 'fixed inset-0 z-50 rounded-none overflow-y-auto p-2 sm:p-4 bg-[#070b14]'
         : (isExpanded

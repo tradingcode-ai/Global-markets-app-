@@ -11,9 +11,11 @@ import {
   FileCheck2,
   ExternalLink,
   Award,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 import { playCorporateChime } from '../services/notificationService';
+import { formatNotificationEventTime } from '../services/notificationRules';
 import MomentumIcon from './MomentumIcon';
 
 interface NotificationCenterModalProps {
@@ -21,7 +23,7 @@ interface NotificationCenterModalProps {
   onClose: () => void;
   onMarkAllAsRead: () => void;
   onClearNotifications: () => void;
-  onSelectTicker: (ticker: string) => void;
+  onSelectTicker: (ticker: string, notification?: PushNotificationItem) => void;
 }
 
 export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = ({
@@ -32,15 +34,19 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   onSelectTicker
 }) => {
   const [filterType, setFilterType] = useState<string>('all');
+  const [assetGroupFilter, setAssetGroupFilter] = useState<string>('all');
 
   const filtered = notifications.filter(n => {
     if (filterType === 'all') return true;
+    if (filterType === 'unread') return !n.read;
     if (filterType === 'earnings-beat') return n.type === 'earnings-beat' || n.type === 'beat';
     if (filterType === 'earnings-miss') return n.type === 'earnings-miss' || n.type === 'miss';
+    if (filterType === 'earnings-release') return n.type === 'earnings-release';
     if (filterType === 'momentum-up') return n.type === 'momentum-up';
     if (filterType === 'momentum-down') return n.type === 'momentum-down';
     if (filterType === 'sec-8k') return n.type === 'sec-8k';
-    if (filterType === 'technical') return n.type === '52w-high' || n.type === '52w-low';
+    if (filterType === 'technical') return n.type === '52w-high' || n.type === '52w-low' || n.type === 'dma-breakdown';
+    if (filterType === 'asset-volatility') return n.type === 'asset-volatility' && (assetGroupFilter === 'all' || n.metadata?.assetGroup === assetGroupFilter);
     return n.type === filterType;
   });
 
@@ -62,6 +68,13 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-50 text-rose-800 border border-rose-200">
             <AlertCircle className="w-3 h-3 text-rose-600" />
             Earnings Miss
+          </span>
+        );
+      case 'earnings-release':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-50 text-indigo-800 border border-indigo-200">
+            <FileCheck2 className="w-3 h-3 text-indigo-600" />
+            Financial Results Filed
           </span>
         );
       case 'momentum-up':
@@ -92,11 +105,24 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
             52-Week Low
           </span>
         );
+      case 'dma-breakdown':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 text-amber-800 border border-amber-200">
+            200-Day Average
+          </span>
+        );
       case 'sec-8k':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-50 text-indigo-800 border border-indigo-200">
             <FileCheck2 className="w-3 h-3 text-indigo-600" />
             SEC Form 8-K
+          </span>
+        );
+      case 'asset-volatility':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-50 text-blue-800 border border-blue-200">
+            <Globe className="w-3 h-3 text-blue-600" />
+            Global Markets
           </span>
         );
       default:
@@ -131,7 +157,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500">Verified earnings releases, SEC 8-K filings & momentum signals</p>
+              <p className="text-xs text-slate-500">Fresh SEC filings and verified market signals</p>
             </div>
           </div>
           
@@ -162,12 +188,28 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
               All ({notifications.length})
             </button>
             <button
+              onClick={() => setFilterType('unread')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                filterType === 'unread' ? 'bg-blue-100 text-blue-900 font-semibold' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Unread ({unreadCount})
+            </button>
+            <button
               onClick={() => setFilterType('earnings-beat')}
               className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
                 filterType === 'earnings-beat' ? 'bg-emerald-100 text-emerald-900 font-semibold' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               Beats
+            </button>
+            <button
+              onClick={() => setFilterType('earnings-release')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                filterType === 'earnings-release' ? 'bg-indigo-100 text-indigo-900 font-semibold' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Results filed
             </button>
             <button
               onClick={() => setFilterType('earnings-miss')}
@@ -209,7 +251,16 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                 filterType === 'technical' ? 'bg-blue-100 text-blue-900 font-semibold' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              52W High/Low
+              52W / DMA
+            </button>
+            <button
+              onClick={() => setFilterType('asset-volatility')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                filterType === 'asset-volatility' ? 'bg-blue-100 text-blue-900 font-semibold' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Globe className="h-3 w-3" />
+              Global Markets
             </button>
           </div>
 
@@ -235,6 +286,27 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
           </div>
         </div>
 
+        {filterType === 'asset-volatility' && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-white px-5 py-2">
+            {([
+              ['all', 'All'],
+              ['Global indices', 'Indices'],
+              ['Sector indices & ETFs', 'Sectors & ETFs'],
+              ['Commodities', 'Commodities'],
+              ['Sovereign yields', 'Yields']
+            ] as const).map(([group, label]) => {
+              const count = group === 'all'
+                ? notifications.filter(item => item.type === 'asset-volatility').length
+                : notifications.filter(item => item.type === 'asset-volatility' && item.metadata?.assetGroup === group).length;
+              return (
+                <button key={group} type="button" onClick={() => setAssetGroupFilter(group)} className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${assetGroupFilter === group ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                  {label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Notifications List */}
         <div className="p-5 overflow-y-auto space-y-2.5 flex-1 text-xs">
           {filtered.length === 0 ? (
@@ -250,14 +322,17 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
               const isBeat = item.type === 'earnings-beat' || item.type === 'beat';
               const isMiss = item.type === 'earnings-miss' || item.type === 'miss';
               const isSec8k = item.type === 'sec-8k';
+              const isRelease = item.type === 'earnings-release';
+              const isDmaBreakdown = item.type === 'dma-breakdown';
               const is52wHigh = item.type === '52w-high';
               const is52wLow = item.type === '52w-low';
+              const isAssetVolatility = item.type === 'asset-volatility';
 
               return (
                 <div
                   key={item.id}
                   onClick={() => {
-                    onSelectTicker(item.ticker);
+                    onSelectTicker(item.ticker, item);
                     onClose();
                   }}
                   className={`p-3.5 rounded-xl border transition cursor-pointer relative ${
@@ -277,9 +352,11 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                       isDown ? 'bg-rose-50 border-rose-300 text-rose-600 shadow-xs' :
                       isBeat ? 'bg-emerald-50 border-emerald-300 text-emerald-700' :
                       isMiss ? 'bg-rose-50 border-rose-300 text-rose-700' :
-                      isSec8k ? 'bg-indigo-50 border-indigo-300 text-indigo-700' :
+                      isSec8k || isRelease ? 'bg-indigo-50 border-indigo-300 text-indigo-700' :
+                      isDmaBreakdown ? 'bg-amber-50 border-amber-300 text-amber-700' :
                       is52wHigh ? 'bg-blue-50 border-blue-300 text-blue-700' :
                       is52wLow ? 'bg-amber-50 border-amber-300 text-amber-700' :
+                      isAssetVolatility ? 'bg-blue-50 border-blue-300 text-blue-700' :
                       'bg-slate-100 border-slate-200 text-slate-700'
                     }`}>
                       {isUp ? (
@@ -290,12 +367,16 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                         <Award className="w-5 h-5 text-emerald-600" />
                       ) : isMiss ? (
                         <AlertCircle className="w-5 h-5 text-rose-600" />
-                      ) : isSec8k ? (
+                      ) : isSec8k || isRelease ? (
                         <FileCheck2 className="w-5 h-5 text-indigo-600" />
+                      ) : isDmaBreakdown ? (
+                        <AlertCircle className="w-5 h-5 text-amber-600" />
                       ) : is52wHigh ? (
                         <TrendingUp className="w-5 h-5 text-blue-600" />
                       ) : is52wLow ? (
                         <TrendingDown className="w-5 h-5 text-amber-600" />
+                      ) : isAssetVolatility ? (
+                        <Globe className="w-5 h-5 text-blue-600" />
                       ) : (
                         <Bell className="w-5 h-5 text-slate-500" />
                       )}
@@ -308,13 +389,20 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                           {item.ticker}
                         </span>
                         {renderBadge(item.type)}
+                        {isAssetVolatility && item.metadata?.assetClass && (
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-slate-600">
+                            {item.metadata.assetClass}{item.metadata.thresholdPct !== undefined ? ` · ±${item.metadata.thresholdPct}%` : ''}
+                          </span>
+                        )}
                         {item.tradingDate && (
                           <span className="text-[10px] text-slate-400 font-mono-code">
                             {item.tradingDate}
                           </span>
                         )}
                         <span className="text-[10px] text-slate-400 ml-auto font-mono-code">
-                          {item.timestamp}
+                          <time dateTime={item.eventOccurredAt || item.deliveredAt || item.timestamp} title={item.deliveredAt || item.timestamp ? `Delivered ${item.deliveredAt || item.timestamp}` : undefined}>
+                            {formatNotificationEventTime(item.eventOccurredAt, item.deliveredAt || item.timestamp, item.tradingDate)}
+                          </time>
                         </span>
                       </div>
 

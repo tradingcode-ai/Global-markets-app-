@@ -46,7 +46,7 @@ interface JPMorganTableViewProps {
   onSelectResult: (result: QuarterlyResult) => void;
   onGenerateAiMemo: (result: QuarterlyResult) => void;
   onSelectCommodity?: (id: string) => void;
-  onTriggerTechnicalAlert?: (ticker: string, currentPrice: number, dma200: number, high52: number, low52: number) => void;
+  onTriggerTechnicalAlert?: (ticker: string, currentPrice: number, dma200: number, high52: number, low52: number) => string;
 }
 
 type ViewMode = 'list' | 'grouped';
@@ -97,6 +97,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string>('ALL');
   const [tableSearch, setTableSearch] = useState<string>('');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [dmaAlertFeedback, setDmaAlertFeedback] = useState<{ ticker: string; message: string } | null>(null);
 
   // Assemble unified list of Equities (US & EU Tech) + Commodities
   const allAssets: UnifiedAsset[] = useMemo(() => {
@@ -1018,15 +1019,15 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                             <div className="mt-1.5">
                               {tech.belowTwoHundredDayAverage ? (
                                 <button
-                                  onClick={() => onTriggerTechnicalAlert?.(
-                                    asset.ticker, 
+                                  onClick={() => setDmaAlertFeedback({ ticker: asset.ticker, message: onTriggerTechnicalAlert?.(
+                                    asset.ticker,
                                     asset.price, 
                                     tech.twoHundredDayAverage, 
                                     tech.fiftyTwoWeekHigh, 
                                     tech.fiftyTwoWeekLow
-                                  )}
+                                  ) || 'No alert was created.' })}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition cursor-pointer shadow-2xs"
-                                  title={`Warning: ${asset.ticker} (${curSym}${asset.price.toFixed(2)}) is below its 200 DMA (${curSym}${tech.twoHundredDayAverage.toFixed(2)}). Click to trigger institutional alert.`}
+                                  title="Check for a fresh regular-session quote and a provider-verified 200-day average."
                                 >
                                   <AlertTriangle className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                   <span>BELOW 200 DMA ({tech.distanceFromTwoHundredDayPercent}%)</span>
@@ -1036,6 +1037,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                                   <span>▲ Above 200 DMA (+{tech.distanceFromTwoHundredDayPercent}%)</span>
                                 </span>
                               )}
+                              {dmaAlertFeedback?.ticker === asset.ticker && <p role="status" className="mt-1 text-[10px] text-slate-600">{dmaAlertFeedback.message}</p>}
                             </div>
                           </div>
                         );
@@ -1286,15 +1288,15 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                                   <div className="mt-1.5">
                                     {tech.belowTwoHundredDayAverage ? (
                                       <button
-                                        onClick={() => onTriggerTechnicalAlert?.(
-                                          asset.ticker, 
+                                        onClick={() => setDmaAlertFeedback({ ticker: asset.ticker, message: onTriggerTechnicalAlert?.(
+                                          asset.ticker,
                                           asset.price, 
                                           tech.twoHundredDayAverage, 
                                           tech.fiftyTwoWeekHigh, 
                                           tech.fiftyTwoWeekLow
-                                        )}
+                                        ) || 'No alert was created.' })}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition cursor-pointer shadow-2xs"
-                                        title={`Warning: ${asset.ticker} (${curSym}${asset.price.toFixed(2)}) is below its 200 DMA (${curSym}${tech.twoHundredDayAverage.toFixed(2)}). Click to trigger institutional alert.`}
+                                        title="Check for a fresh regular-session quote and a provider-verified 200-day average."
                                       >
                                         <AlertTriangle className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                         <span>BELOW 200 DMA ({tech.distanceFromTwoHundredDayPercent}%)</span>
@@ -1304,6 +1306,7 @@ export const JPMorganTableView: React.FC<JPMorganTableViewProps> = ({
                                         <span>▲ Above 200 DMA (+{tech.distanceFromTwoHundredDayPercent}%)</span>
                                       </span>
                                     )}
+                                    {dmaAlertFeedback?.ticker === asset.ticker && <p role="status" className="mt-1 text-[10px] text-slate-600">{dmaAlertFeedback.message}</p>}
                                   </div>
                                 </div>
                               );

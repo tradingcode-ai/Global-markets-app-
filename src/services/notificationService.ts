@@ -3,6 +3,13 @@ import { PushNotificationItem, AlertPreferences, NotificationEventType } from '.
 const STORAGE_KEY_NOTIFS = 'veritas_earnings_push_notifications';
 const STORAGE_KEY_PREFS = 'veritas_earnings_alert_preferences';
 const STORAGE_KEY_FIRED_ALERTS = 'veritas_institutional_fired_alerts_v2';
+const SEEDED_NOTIFICATION_IDS = new Set([
+  'notif_avgo_momentum_up_75',
+  'notif_nvda_earnings_beat_q2_2026',
+  'notif_amd_momentum_down_dma',
+  'notif_asml_momentum_down_dma'
+]);
+const memoryFiredAlerts = new Map<string, number>();
 
 export const DEFAULT_PREFERENCES: AlertPreferences = {
   browserNotificationsEnabled: false,
@@ -12,12 +19,15 @@ export const DEFAULT_PREFERENCES: AlertPreferences = {
     'ORCL', 'AMD', 'CRM', 'NFLX', 'ASML', 'ARM', 'QCOM', 'INTC', 
     'MU', 'PLTR', 'NOW', 'PANW', 'CRWD', 'SAP'
   ],
+  subscribedAssetSymbols: [],
+  alertOnAssetVolatility: true,
   alertOnEarningsBeat: true,
   alertOnEarningsMiss: true,
   alertOnSec8K: true,
   alertOnMomentumUp: true,
   alertOnMomentumDown: true,
   alertOnFiftyTwoWeekHighLow: true,
+  alertOnDmaBreakdown: true,
   // Backwards compatibility defaults
   alertOnRelease: true,
   alertOnMajorSurprise: true,
@@ -83,11 +93,14 @@ export function getMarketSessionId(): string {
  */
 export function hasAlertFired(dedupeKey: string): boolean {
   if (!dedupeKey) return false;
+  if (memoryFiredAlerts.has(dedupeKey)) return true;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FIRED_ALERTS);
     if (!raw) return false;
     const map: Record<string, number> = JSON.parse(raw);
-    return Boolean(map[dedupeKey]);
+    const fired = Boolean(map[dedupeKey]);
+    if (fired) memoryFiredAlerts.set(dedupeKey, map[dedupeKey]);
+    return fired;
   } catch {
     return false;
   }
@@ -99,10 +112,11 @@ export function hasAlertFired(dedupeKey: string): boolean {
  */
 export function recordAlertFired(dedupeKey: string): void {
   if (!dedupeKey) return;
+  const now = Date.now();
+  memoryFiredAlerts.set(dedupeKey, now);
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FIRED_ALERTS);
     const map: Record<string, number> = raw ? JSON.parse(raw) : {};
-    const now = Date.now();
     map[dedupeKey] = now;
 
     const cutoff = now - 14 * 86400 * 1000;
@@ -184,8 +198,33 @@ export function getStoredNotifications(): PushNotificationItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_NOTIFS);
     if (raw) {
-      const items: PushNotificationItem[] = JSON.parse(raw);
-      return items.map(item => {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const items = parsed.filter((item): item is PushNotificationItem =>
+        Boolean(item) && typeof item === 'object' &&
+        typeof (item as PushNotificationItem).id === 'string' &&
+        typeof (item as PushNotificationItem).ticker === 'string' &&
+        typeof (item as PushNotificationItem).title === 'string' &&
+        typeof (item as PushNotificationItem).body === 'string' &&
+        typeof (item as PushNotificationItem).type === 'string'
+      );
+      const seenIds = new Set<string>();
+      const seenDedupeKeys = new Set<string>();
+      const cleanItems = items.filter(item => {
+        if (SEEDED_NOTIFICATION_IDS.has(item.id) || seenIds.has(item.id)) return false;
+        if (typeof item.dedupeKey === 'string' && item.dedupeKey && seenDedupeKeys.has(item.dedupeKey)) return false;
+        seenIds.add(item.id);
+        if (typeof item.dedupeKey === 'string' && item.dedupeKey) seenDedupeKeys.add(item.dedupeKey);
+        return true;
+      });
+      if (cleanItems.length !== parsed.length) {
+        try {
+          localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(cleanItems));
+        } catch {
+          // Keep returning the retained history if storage is full or unavailable.
+        }
+      }
+      return cleanItems.map(item => {
         let type = item.type;
         // Normalize any legacy types stored before the new taxonomy
         if (type === ('miss' as any) || type === ('beat' as any)) {
@@ -201,6 +240,7 @@ export function getStoredNotifications(): PushNotificationItem[] {
         }
         return {
           ...item,
+          deliveredAt: item.deliveredAt || item.timestamp,
           type
         };
       });
@@ -224,15 +264,18 @@ export function getStoredPreferences(): AlertPreferences {
     const raw = localStorage.getItem(STORAGE_KEY_PREFS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      let subTickers = parsed.subscribedTickers;
-      if (!Array.isArray(subTickers)) {
-        subTickers = DEFAULT_PREFERENCES.subscribedTickers;
-      }
+      const subTickers = Array.isArray(parsed.subscribedTickers)
+        ? Array.from(new Set(parsed.subscribedTickers.filter((ticker: unknown): ticker is string => typeof ticker === 'string').map((ticker: string) => ticker.toUpperCase().trim()).filter(Boolean)))
+        : DEFAULT_PREFERENCES.subscribedTickers;
+      const subscribedAssetSymbols = Array.isArray(parsed.subscribedAssetSymbols)
+        ? Array.from(new Set(parsed.subscribedAssetSymbols.filter((symbol: unknown): symbol is string => typeof symbol === 'string').map((symbol: string) => symbol.toUpperCase().trim()).filter(Boolean)))
+        : DEFAULT_PREFERENCES.subscribedAssetSymbols;
 
       return {
         ...DEFAULT_PREFERENCES,
         ...parsed,
         subscribedTickers: subTickers,
+        subscribedAssetSymbols,
         // Map legacy keys to new taxonomy if missing
         alertOnEarningsBeat: parsed.alertOnEarningsBeat ?? parsed.alertOnRelease ?? true,
         alertOnEarningsMiss: parsed.alertOnEarningsMiss ?? parsed.alertOnRelease ?? true,
@@ -240,6 +283,8 @@ export function getStoredPreferences(): AlertPreferences {
         alertOnMomentumUp: parsed.alertOnMomentumUp ?? parsed.alertOnFivePercentMove ?? true,
         alertOnMomentumDown: parsed.alertOnMomentumDown ?? parsed.alertOnFivePercentMove ?? true,
         alertOnFiftyTwoWeekHighLow: parsed.alertOnFiftyTwoWeekHighLow ?? true,
+        alertOnDmaBreakdown: parsed.alertOnDmaBreakdown ?? true,
+        alertOnAssetVolatility: parsed.alertOnAssetVolatility ?? true,
       };
     }
   } catch (e) {
@@ -256,6 +301,37 @@ export function savePreferences(prefs: AlertPreferences) {
   }
 }
 
+function isAlertEnabled(item: Omit<PushNotificationItem, 'id' | 'timestamp' | 'read'>, prefs: AlertPreferences): boolean {
+  const ticker = item.ticker.toUpperCase().trim();
+  if (item.type === 'asset-volatility') {
+    return Boolean(ticker && Array.isArray(prefs.subscribedAssetSymbols) && prefs.subscribedAssetSymbols.some(value => typeof value === 'string' && value.toUpperCase().trim() === ticker) && (prefs.alertOnAssetVolatility ?? true));
+  }
+  if (!ticker || !Array.isArray(prefs.subscribedTickers) || !prefs.subscribedTickers.some(value => typeof value === 'string' && value.toUpperCase().trim() === ticker)) return false;
+  switch (item.type) {
+    case 'earnings-beat':
+    case 'beat':
+      return prefs.alertOnEarningsBeat ?? prefs.alertOnRelease ?? true;
+    case 'earnings-miss':
+    case 'miss':
+      return prefs.alertOnEarningsMiss ?? prefs.alertOnRelease ?? true;
+    case 'earnings-release':
+      return prefs.alertOnRelease ?? true;
+    case 'sec-8k':
+      return prefs.alertOnSec8K ?? prefs.alertOnRelease ?? true;
+    case 'momentum-up':
+      return prefs.alertOnMomentumUp ?? prefs.alertOnFivePercentMove ?? true;
+    case 'momentum-down':
+      return prefs.alertOnMomentumDown ?? prefs.alertOnFivePercentMove ?? true;
+    case '52w-high':
+    case '52w-low':
+      return prefs.alertOnFiftyTwoWeekHighLow ?? true;
+    case 'dma-breakdown':
+      return prefs.alertOnDmaBreakdown ?? true;
+    default:
+      return true;
+  }
+}
+
 /**
  * Dispatches a push notification with deterministic event ID and strict deduplication.
  * Returns true if dispatched, false if suppressed as a duplicate.
@@ -265,7 +341,10 @@ export function dispatchPushNotification(
   prefs: AlertPreferences,
   onNewNotification: (notif: PushNotificationItem) => void
 ): boolean {
-  const tradingDay = item.tradingDate || getTradingDayKey();
+  if (!isAlertEnabled(item, prefs) || !item.dedupeKey || !item.eventOccurredAt) return false;
+  const eventTime = Date.parse(item.eventOccurredAt);
+  if (!Number.isFinite(eventTime)) return false;
+  const tradingDay = item.tradingDate || item.eventOccurredAt.slice(0, 10);
 
   // 1. Strict deduplication check
   if (item.dedupeKey && hasAlertFired(item.dedupeKey)) {
@@ -278,17 +357,17 @@ export function dispatchPushNotification(
   }
 
   // 3. Generate deterministic ID (no Math.random)
-  const cleanKey = item.dedupeKey
-    ? item.dedupeKey.toLowerCase().replace(/[^a-z0-9_-]/g, '_')
-    : `${item.ticker.toLowerCase()}_${item.type}_${Date.now()}`;
+  const cleanKey = item.dedupeKey.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
   const deterministicId = `notif_${cleanKey}`;
+  const deliveredAt = new Date().toISOString();
 
   const newNotif: PushNotificationItem = {
     ...item,
     id: deterministicId,
     tradingDate: tradingDay,
-    timestamp: 'Just now',
-    read: false,
+    timestamp: item.eventOccurredAt,
+    deliveredAt,
+    read: item.metadata?.eventIsHistorical === true,
   };
 
   // Play corporate chime if sound is enabled

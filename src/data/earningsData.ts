@@ -1,4 +1,4 @@
-import { CompanyMeta, QuarterlyResult, PushNotificationItem } from '../types';
+import { CompanyMeta, QuarterlyResult } from '../types';
 
 export const TECH_COMPANIES: Record<string, CompanyMeta> = {
   NVDA: {
@@ -648,72 +648,5 @@ export const INITIAL_EARNINGS_RESULTS: QuarterlyResult[] = [
       { name: 'Data Center', revenue: '$2.83B', growthYoY: '+115%', beatExpectation: true },
       { name: 'Client', revenue: '$1.49B', growthYoY: '+49%', beatExpectation: true }
     ]
-  }
-];
-
-export const INITIAL_PUSH_NOTIFICATIONS: PushNotificationItem[] = [
-  {
-    id: 'notif_avgo_momentum_up_75',
-    ticker: 'AVGO',
-    companyName: 'Broadcom Inc.',
-    title: 'AVGO — Momentum Up (+7.80%)',
-    body: 'Broadcom Inc. (AVGO) crossed the +7.5% threshold with an active price of $184.20 (+7.80%). Accelerated AI networking demand.',
-    timestamp: '1 hour ago',
-    tradingDate: '2026-09-24',
-    type: 'momentum-up',
-    dedupeKey: 'MOMENTUM_UP:AVGO:+7.5%:2026-09-24',
-    read: false,
-    metrics: {
-      priceMove: 7.80
-    }
-  },
-  {
-    id: 'notif_nvda_earnings_beat_q2_2026',
-    ticker: 'NVDA',
-    companyName: 'NVIDIA Corporation',
-    title: 'NVDA — Earnings Beat (Q2 Record Datacenter)',
-    body: 'NVIDIA delivered record Q2 data center revenue of $26.3B (+154% YoY). Actual EPS $0.68 beat consensus $0.64. Raised Q3 guidance to $32.5B on Blackwell acceleration.',
-    timestamp: '2 hours ago',
-    tradingDate: '2026-08-27',
-    type: 'earnings-beat',
-    dedupeKey: 'EARNINGS_BEAT:NVDA:Q2-2026',
-    read: false,
-    metrics: {
-      epsActual: 0.68,
-      epsEstimate: 0.64,
-      revenueActual: 30.04,
-      revenueEstimate: 28.7,
-      priceMove: 4.8
-    }
-  },
-  {
-    id: 'notif_amd_momentum_down_dma',
-    ticker: 'AMD',
-    companyName: 'Advanced Micro Devices, Inc.',
-    title: 'AMD — Momentum Down (-3.50%)',
-    body: 'AMD ($154.20) noteert een daling van -3.50% onder het 200-daags gemiddelde ($159.80). 52-Weken range: $94.04 - $227.30.',
-    timestamp: '4 hours ago',
-    tradingDate: '2026-09-24',
-    type: 'momentum-down',
-    dedupeKey: 'MOMENTUM_DOWN:AMD:2026-09-24',
-    read: false,
-    metrics: {
-      priceMove: -3.50
-    }
-  },
-  {
-    id: 'notif_asml_momentum_down_dma',
-    ticker: 'ASML',
-    companyName: 'ASML Holding N.V.',
-    title: 'ASML — Momentum Down (-5.25%)',
-    body: 'ASML ($845.50) noteert een daling van -5.25% onder het 200-daags gemiddelde ($892.40). 52-Weken High €1,069.78 / Low €725.10.',
-    timestamp: '6 hours ago',
-    tradingDate: '2026-09-24',
-    type: 'momentum-down',
-    dedupeKey: 'MOMENTUM_DOWN:ASML:2026-09-24',
-    read: true,
-    metrics: {
-      priceMove: -5.25
-    }
   }
 ];

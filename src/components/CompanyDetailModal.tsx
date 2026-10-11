@@ -7,7 +7,6 @@ import {
   TrendingDown, 
   Clock, 
   Cpu, 
-  Send, 
   CheckCircle2, 
   Loader2, 
   FileText,
@@ -37,7 +36,7 @@ interface CompanyDetailModalProps {
   result: QuarterlyResult | null;
   quote?: LiveQuote | null;
   onClose: () => void;
-  onTriggerTestPush: (result: QuarterlyResult) => void;
+  onCheckRecentSecFiling: (ticker: string) => Promise<string>;
   preferences: AlertPreferences;
 }
 
@@ -45,7 +44,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   result,
   quote,
   onClose,
-  onTriggerTestPush,
+  onCheckRecentSecFiling,
   preferences
 }) => {
   const [loadingAi, setLoadingAi] = useState<boolean>(false);
@@ -55,6 +54,8 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [liveOutlooks, setLiveOutlooks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showLiveGraph, setShowLiveGraph] = useState(false);
+  const [secCheckLoading, setSecCheckLoading] = useState(false);
+  const [secCheckMessage, setSecCheckMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
@@ -62,6 +63,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
 
   useEffect(() => {
     setShowLiveGraph(false);
+    setSecCheckMessage(null);
   }, [result?.ticker]);
 
   useEffect(() => {
@@ -997,13 +999,25 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         <div className="border-t border-slate-100 bg-slate-50/70 w-full">
           <div className={`p-4 flex items-center justify-between ${isFullScreen ? 'px-6 sm:px-8 max-w-7xl mx-auto w-full' : ''}`}>
             <button
-              id="btn-test-push-company"
-              onClick={() => onTriggerTestPush(result)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-semibold text-xs transition cursor-pointer"
+              id="btn-check-sec-company"
+              disabled={secCheckLoading || !result}
+              onClick={async () => {
+                if (!result) return;
+                setSecCheckLoading(true);
+                setSecCheckMessage(null);
+                try {
+                  setSecCheckMessage(await onCheckRecentSecFiling(result.ticker));
+                } catch {
+                  setSecCheckMessage('SEC EDGAR is temporarily unavailable. Try again shortly.');
+                } finally {
+                  setSecCheckLoading(false);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-semibold text-xs transition cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             >
-              <Send className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden sm:inline">Broadcast Push Notification</span>
-              <span className="sm:hidden">Push Alert</span>
+              {secCheckLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" /> : <FileText className="w-3.5 h-3.5 text-emerald-600" />}
+              <span className="hidden sm:inline">{secCheckLoading ? 'Checking SEC filings…' : 'Check recent SEC filing'}</span>
+              <span className="sm:hidden">{secCheckLoading ? 'Checking…' : 'Check SEC'}</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -1034,6 +1048,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </button>
             </div>
           </div>
+          {secCheckMessage && <p role="status" className="px-4 pb-3 text-[11px] text-slate-600">{secCheckMessage}</p>}
         </div>
       </div>
     </div>

@@ -64,6 +64,8 @@ interface SPSectorsAndEtfsViewProps {
   onSelectTicker?: (ticker: string) => void;
   onRefreshQuotes?: () => void;
   isLoadingQuotes?: boolean;
+  selectedAssetSymbol?: string | null;
+  assetSelectionRequestId?: number;
 }
 
 // 11 Professional Sector Icon Badges & Theme Colors
@@ -86,7 +88,9 @@ export const SPSectorsAndEtfsView: React.FC<SPSectorsAndEtfsViewProps> = ({
   recentTicks = {},
   onSelectTicker,
   onRefreshQuotes,
-  isLoadingQuotes = false
+  isLoadingQuotes = false,
+  selectedAssetSymbol = null,
+  assetSelectionRequestId = 0
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewFilter, setViewFilter] = useState<'ALL' | 'SECTORS' | 'PRODUCTS'>('ALL');
@@ -105,6 +109,32 @@ export const SPSectorsAndEtfsView: React.FC<SPSectorsAndEtfsViewProps> = ({
     sectorId: defaultSector.id,
     isIndex: true
   });
+
+  useEffect(() => {
+    if (!selectedAssetSymbol) return;
+    const normalized = selectedAssetSymbol.toUpperCase();
+    const sector = SP_MACRO_SECTORS.find(item => item.symbol.toUpperCase() === normalized || item.benchmarkEtf.toUpperCase() === normalized);
+    if (sector) {
+      const isIndex = sector.symbol.toUpperCase() === normalized;
+      setSelectedChartSecurity({
+        symbol: isIndex ? sector.symbol : sector.benchmarkEtf,
+        name: isIndex ? `${sector.name} Index` : sector.benchmarkEtfName,
+        category: isIndex ? `S&P Sector (GICS ${sector.gicsCode})` : 'Sector benchmark ETF',
+        benchmarkEtf: sector.benchmarkEtf,
+        sectorId: sector.id,
+        isIndex
+      });
+      return;
+    }
+    for (const cluster of SP_INDUSTRY_CLUSTERS) {
+      const funds = [cluster.primaryEtf, ...(cluster.dedicatedEtf ? [cluster.dedicatedEtf] : []), ...cluster.secondaryThematics];
+      const fund = funds.find(item => item.symbol.toUpperCase() === normalized);
+      if (fund) {
+        setSelectedChartSecurity({ symbol: fund.symbol, name: fund.name, category: cluster.name });
+        return;
+      }
+    }
+  }, [selectedAssetSymbol, assetSelectionRequestId]);
 
   const [activeTimeframe, setActiveTimeframe] = useState<ChartTimeframe>('1Y');
   const [chartData, setChartData] = useState<ChartPoint[]>([]);

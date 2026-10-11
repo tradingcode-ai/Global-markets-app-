@@ -1,3 +1,9 @@
+import { TECH_COMPANIES } from './earningsData';
+import { SHOVEL_SELLERS_COMPANIES } from './shovelSellersData';
+import { HYPERSCALER_COMPANIES } from './hyperscalersData';
+import { FINANCIAL_COMPANIES } from './financialsData';
+import { AEROSPACE_DEFENSE_COMPANIES } from './aerospaceDefenseData';
+
 export interface AppStockMeta {
   ticker: string;
   name: string;
@@ -80,3 +86,35 @@ export const ALL_APP_STOCKS: AppStockMeta[] = [
 export const CANONICAL_NEWS_AGENT_TICKERS = ['ASML', 'MSFT', 'NVDA', 'TSM'];
 
 export const ALL_APP_TICKERS = ALL_APP_STOCKS.map(s => s.ticker);
+
+const registryStock = (
+  meta: { ticker: string; name: string; country?: string; exchange?: string; sector?: string },
+  category: AppStockMeta['category'],
+  categoryLabel: string
+): AppStockMeta => ({
+  ticker: meta.ticker.toUpperCase(),
+  name: meta.name,
+  category,
+  categoryLabel,
+  exchange: meta.exchange || 'Exchange unavailable',
+  country: meta.country || 'Country unavailable'
+});
+
+const additionalRegistryStocks: AppStockMeta[] = [
+  ...Object.values(TECH_COMPANIES).map(meta => {
+    const sector = (meta.sector || '').toLowerCase();
+    const category = sector.includes('semiconductor') ? 'semiconductors' : sector.includes('megacap') || sector.includes('big tech') ? 'mega_cap' : 'software';
+    const label = category === 'semiconductors' ? 'Semiconductors & Equipment' : category === 'mega_cap' ? 'Mega-Cap Tech' : 'Cloud & Enterprise Software';
+    return registryStock(meta, category, label);
+  }),
+  ...Object.values(SHOVEL_SELLERS_COMPANIES).map(meta => registryStock(meta, 'semiconductors', 'Semiconductors & Equipment')),
+  ...Object.values(HYPERSCALER_COMPANIES).map(meta => registryStock(meta, 'software', 'Cloud & Enterprise Software')),
+  ...Object.values(FINANCIAL_COMPANIES).filter(meta => !/index/i.test(`${meta.name} ${meta.sector || ''}`)).map(meta => registryStock(meta, 'financials', 'Financials & Banking')),
+  ...Object.values(AEROSPACE_DEFENSE_COMPANIES).map(meta => registryStock(meta, 'aerospace', 'Aerospace & Defense'))
+];
+
+// The alert picker uses every public equity already represented by the app's company registries.
+// Registry prices and historical fundamentals are intentionally not copied into this metadata list.
+export const NOTIFICATION_APP_STOCKS: AppStockMeta[] = Array.from(
+  new Map([...additionalRegistryStocks, ...ALL_APP_STOCKS].map(stock => [stock.ticker.toUpperCase(), stock])).values()
+);

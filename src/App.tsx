@@ -4,11 +4,11 @@ import {
   AlertPreferences, 
   PushNotificationItem,
   NotificationEventType,
-  LiveQuote
+  LiveQuote,
+  NotificationAssetCatalogItem
 } from './types';
 import { 
   INITIAL_EARNINGS_RESULTS, 
-  INITIAL_PUSH_NOTIFICATIONS, 
   TECH_COMPANIES 
 } from './data/earningsData';
 import { SHOVEL_SELLERS_COMPANIES } from './data/shovelSellersData';
@@ -16,7 +16,7 @@ import { HYPERSCALER_COMPANIES, HYPERSCALER_TICKERS } from './data/hyperscalersD
 import { FINANCIAL_COMPANIES, FINANCIAL_RESULTS } from './data/financialsData';
 import { AEROSPACE_DEFENSE_RESULTS, AEROSPACE_DEFENSE_COMPANIES } from './data/aerospaceDefenseData';
 import { COMMODITIES_DATA } from './data/commoditiesData';
-import { getStockTechnicalMetrics } from './data/technicalData';
+import { SP_MACRO_SECTORS, SP_INDUSTRY_CLUSTERS } from './data/spSectorsData';
 import { getStoredAnalystSnapshots, saveAnalystSnapshots, mergeAnalystSnapshots } from './services/marketDataService';
 import { getCurrencySymbol } from './utils/formatters';
 import { resolveLiveQuote } from './utils/marketSession';
@@ -28,11 +28,19 @@ import {
   requestBrowserPushPermission, 
   dispatchPushNotification, 
   playCorporateChime,
-  getTradingDayKey,
   hasAlertFired,
   recordAlertFired
 } from './services/notificationService';
-import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar, fetchQuarterlyAnalystOutlook } from './services/marketDataService';
+import {
+  advanceQuoteObservation,
+  getEligibleMarketQuote,
+  getNewConfiguredThresholdCrossing,
+  getNewMomentumCrossing,
+  getQuoteObservation,
+  isFreshSecAcceptance,
+  saveQuoteObservation
+} from './services/notificationRules';
+import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar, fetchQuarterlyAnalystOutlook, fetchNotificationAssetCatalog, fetchNotificationAssetQuotes, fetchNotificationStockQuotes } from './services/marketDataService';
 import { CorporateHeader } from './components/CorporateHeader';
 import { RealTimeTrackerBar } from './components/RealTimeTrackerBar';
 import { GlobalMarketsMap } from './components/GlobalMarketsMap';
@@ -91,10 +99,27 @@ export default function App() {
   );
 
   const [notifications, setNotifications] = useState<PushNotificationItem[]>(() => {
-    const stored = getStoredNotifications();
-    return stored.length > 0 ? stored : INITIAL_PUSH_NOTIFICATIONS;
+    return getStoredNotifications();
   });
   const [preferences, setPreferences] = useState<AlertPreferences>(getStoredPreferences);
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
+  const preferencesVersionRef = useRef(0);
+  const lastAlertObservationPreferencesVersionRef = useRef(0);
+  const lastAssetObservationPreferencesVersionRef = useRef(0);
+  const marketQuotesInFlightRef = useRef(false);
+  const [secFeedStatus, setSecFeedStatus] = useState<string | null>(null);
+  const [notificationAssetCatalog, setNotificationAssetCatalog] = useState<NotificationAssetCatalogItem[]>([]);
+  const notificationAssetCatalogRef = useRef<NotificationAssetCatalogItem[]>([]);
+  notificationAssetCatalogRef.current = notificationAssetCatalog;
+  const [assetFeedStatus, setAssetFeedStatus] = useState<string | null>(null);
+  const [stockQuoteFeedStatus, setStockQuoteFeedStatus] = useState<string | null>(null);
+  const lastAssetQuotePollRef = useRef(0);
+  const assetQuoteRequestInFlightRef = useRef(false);
+  const lastStockQuotePollRef = useRef(0);
+  const stockQuoteRequestInFlightRef = useRef(false);
+  const lastAssetThresholdSignatureRef = useRef('');
+  const assetCatalogRequestInFlightRef = useRef(false);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
 
   // News Agent Linked Tickers State (Decoupled from Push Engine, coupled with PostgreSQL database)
@@ -136,6 +161,10 @@ export default function App() {
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedBondId, setSelectedBondId] = useState<string>('us-10y-treasury');
   const [selectedCommodityId, setSelectedCommodityId] = useState<string>('wti-crude');
+  const [selectedGlobalMarketSymbol, setSelectedGlobalMarketSymbol] = useState<string | null>(null);
+  const [globalMarketSelectionRequestId, setGlobalMarketSelectionRequestId] = useState(0);
+  const [selectedSectorAssetSymbol, setSelectedSectorAssetSymbol] = useState<string | null>(null);
+  const [sectorAssetSelectionRequestId, setSectorAssetSelectionRequestId] = useState(0);
   
   // Modals
   const [selectedResultForModal, setSelectedResultForModal] = useState<QuarterlyResult | null>(null);
@@ -144,6 +173,31 @@ export default function App() {
   const [activeToast, setActiveToast] = useState<PushNotificationItem | null>(null);
 
   const quotesRef = useRef<Record<string, LiveQuote>>({});
+
+  useEffect(() => {
+    let active = true;
+    const refreshCatalog = async () => {
+      if (assetCatalogRequestInFlightRef.current || (typeof document !== 'undefined' && document.hidden)) return;
+      assetCatalogRequestInFlightRef.current = true;
+      try {
+        const catalog = await fetchNotificationAssetCatalog();
+        if (!active) return;
+        setNotificationAssetCatalog(catalog);
+        if (catalog.length === 0) setAssetFeedStatus('Global Markets alert catalog is unavailable; no non-equity assets can be monitored.');
+      } finally {
+        assetCatalogRequestInFlightRef.current = false;
+      }
+    };
+    void refreshCatalog();
+    const interval = window.setInterval(() => { void refreshCatalog(); }, 60000);
+    const onVisibilityChange = () => { if (!document.hidden) void refreshCatalog(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   // Analyst consensus is live Yahoo Finance data. The client refreshes it periodically
   // instead of keeping a stale month-long localStorage snapshot.
@@ -239,248 +293,427 @@ export default function App() {
     }
   }, []);
 
-  // Check Market Session Technical & Momentum Alerts (52-week high/low, > 5% movement)
-  // Ensures alerts fire at most once per calendar trading day per asset/event direction
+  // Automatic equity alerts require a fresh provider trade inside its exact regular session.
   const checkMarketSessionAlerts = useCallback((liveData: Record<string, LiveQuote>) => {
-    const tradingDay = getTradingDayKey();
+    const activePreferences = preferencesRef.current;
+    if (activePreferences.subscribedTickers.length === 0) return;
+    const preferencesChanged = lastAlertObservationPreferencesVersionRef.current !== preferencesVersionRef.current;
+    lastAlertObservationPreferencesVersionRef.current = preferencesVersionRef.current;
+    const handledSymbols = new Set<string>();
+    const nonEquitySymbols = new Set(notificationAssetCatalogRef.current.map(asset => asset.symbol.toUpperCase()));
 
-    for (const [sym, quote] of Object.entries(liveData)) {
-      if (!quote || typeof quote.price !== 'number' || quote.price <= 0) continue;
+    for (const subscribedTicker of activePreferences.subscribedTickers) {
+      const sym = subscribedTicker.toUpperCase().trim();
+      if (nonEquitySymbols.has(sym)) continue;
+      const quote = resolveLiveQuote(sym, liveData);
+      const eligible = getEligibleMarketQuote(quote);
+      if (!quote || !eligible) continue;
 
-      // Filter by subscribed tickers if configured
-      if (preferences.subscribedTickers.length > 0 && !preferences.subscribedTickers.includes(sym)) {
+      const eventSymbol = (quote.primaryListingSymbol || quote.symbol || sym).toUpperCase();
+      if (handledSymbols.has(eventSymbol)) continue;
+      handledSymbols.add(eventSymbol);
+
+      if (preferencesChanged) {
+        saveQuoteObservation(eventSymbol, {
+          sessionDate: eligible.sessionDate,
+          tradeTimeMs: eligible.tradeTimeMs,
+          price: eligible.price,
+          changePercent: eligible.changePercent,
+          fiftyTwoWeekHigh: quote.is52WeekMetricsVerified ? quote.fiftyTwoWeekHigh : undefined,
+          fiftyTwoWeekLow: quote.is52WeekMetricsVerified ? quote.fiftyTwoWeekLow : undefined
+        });
         continue;
       }
 
-      // Resolve company or asset name
-      const companyName = 
+      const previousObservation = getQuoteObservation(eventSymbol);
+      if (previousObservation && previousObservation.sessionDate === eligible.sessionDate && eligible.tradeTimeMs <= previousObservation.tradeTimeMs) {
+        continue;
+      }
+      const advanced = advanceQuoteObservation(previousObservation, eligible, quote);
+      saveQuoteObservation(eventSymbol, advanced.observation);
+      if (!advanced.mayTrigger || !advanced.previous) continue;
+
+      const previous = advanced.previous;
+      const companyName =
         TECH_COMPANIES[sym]?.name ||
         SHOVEL_SELLERS_COMPANIES[sym]?.name ||
         HYPERSCALER_COMPANIES[sym]?.name ||
         FINANCIAL_COMPANIES[sym]?.name ||
         AEROSPACE_DEFENSE_COMPANIES[sym]?.name ||
-        COMMODITIES_DATA.find(c => c.symbol === sym)?.name ||
         quote.companyName ||
         sym;
-
       const curSym = getCurrencySymbol(quote.currency);
+      const crossing = getNewMomentumCrossing(previous.changePercent, eligible.changePercent);
 
-      // Technical 52W High & Low Metrics
-      const tech = getStockTechnicalMetrics(sym, quote.price, quote);
-
-      // 1. 52-Week High Alert (Strictly 52w-high, NEVER beat)
-      if (tech.is52WeekHigh && (preferences.alertOnFiftyTwoWeekHighLow ?? true)) {
-        const dedupeKey = `52W_HIGH:${sym}:${tradingDay}`;
-        if (!hasAlertFired(dedupeKey)) {
-          dispatchPushNotification(
-            {
-              ticker: sym,
-              companyName,
-              title: `${sym} — 52-Week High (${curSym}${quote.price.toFixed(2)})`,
-              body: `${companyName} (${sym}) reached a new 52-week high of ${curSym}${quote.price.toFixed(2)} (Range: ${curSym}${tech.fiftyTwoWeekLow.toFixed(2)} - ${curSym}${tech.fiftyTwoWeekHigh.toFixed(2)}).`,
-              type: '52w-high',
-              dedupeKey,
-              tradingDate: tradingDay,
-              metrics: {
-                priceMove: quote.changePercent
-              },
-              metadata: {
-                currentPrice: quote.price,
-                percentageChange: quote.changePercent,
-                source: quote.provider || 'Live Market Feed'
-              }
-            },
-            preferences,
-            (newNotif) => {
-              setNotifications(prev => {
-                const next = [newNotif, ...prev];
-                saveNotifications(next);
-                return next;
-              });
-              setActiveToast(newNotif);
-            }
-          );
-        }
-      }
-
-      // 2. 52-Week Low Alert (Strictly 52w-low, NEVER miss)
-      if (tech.is52WeekLow && (preferences.alertOnFiftyTwoWeekHighLow ?? true)) {
-        const dedupeKey = `52W_LOW:${sym}:${tradingDay}`;
-        if (!hasAlertFired(dedupeKey)) {
-          dispatchPushNotification(
-            {
-              ticker: sym,
-              companyName,
-              title: `${sym} — 52-Week Low (${curSym}${quote.price.toFixed(2)})`,
-              body: `${companyName} (${sym}) reached a new 52-week low of ${curSym}${quote.price.toFixed(2)} (Range: ${curSym}${tech.fiftyTwoWeekLow.toFixed(2)} - ${curSym}${tech.fiftyTwoWeekHigh.toFixed(2)}).`,
-              type: '52w-low',
-              dedupeKey,
-              tradingDate: tradingDay,
-              metrics: {
-                priceMove: quote.changePercent
-              },
-              metadata: {
-                currentPrice: quote.price,
-                percentageChange: quote.changePercent,
-                source: quote.provider || 'Live Market Feed'
-              }
-            },
-            preferences,
-            (newNotif) => {
-              setNotifications(prev => {
-                const next = [newNotif, ...prev];
-                saveNotifications(next);
-                return next;
-              });
-              setActiveToast(newNotif);
-            }
-          );
-        }
-      }
-
-      // 3. Multi-tier Momentum Up: starts at +5.0%, then every +2.5% (+7.5%, +10.0%, +12.5%, etc.)
-      const MOMENTUM_UP_THRESHOLDS = [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25.0, 27.5, 30.0, 35.0, 40.0, 50.0];
-      if (quote.changePercent >= 5.0 && (preferences.alertOnMomentumUp ?? preferences.alertOnFivePercentMove ?? true)) {
-        for (const threshold of MOMENTUM_UP_THRESHOLDS) {
-          if (quote.changePercent >= threshold) {
-            const dedupeKey = `MOMENTUM_UP:${sym}:+${threshold.toFixed(1)}%:${tradingDay}`;
-            if (!hasAlertFired(dedupeKey)) {
-              dispatchPushNotification(
-                {
-                  ticker: sym,
-                  companyName,
-                  title: `${sym} — Momentum Up (+${quote.changePercent.toFixed(2)}%)`,
-                  body: `${companyName} (${sym}) crossed the +${threshold.toFixed(1)}% threshold with an active price of ${curSym}${quote.price.toFixed(2)} (+${quote.changePercent.toFixed(2)}%).`,
-                  type: 'momentum-up',
-                  dedupeKey,
-                  tradingDate: tradingDay,
-                  metrics: {
-                    priceMove: quote.changePercent
-                  },
-                  metadata: {
-                    currentPrice: quote.price,
-                    percentageChange: quote.changePercent,
-                    source: quote.provider || 'Live Market Feed'
-                  }
-                },
-                preferences,
-                (newNotif) => {
-                  setNotifications(prev => {
-                    const next = [newNotif, ...prev];
-                    saveNotifications(next);
-                    return next;
-                  });
-                  setActiveToast(newNotif);
-                }
-              );
-            }
+      if (crossing) {
+        const thresholdKey = (symbol: string, threshold: number) => {
+          const label = (threshold > 0 ? '+' : '') + threshold.toFixed(1) + '%';
+          return 'MOMENTUM_' + crossing.direction.toUpperCase() + ':' + symbol + ':' + label + ':' + eligible.sessionDate;
+        };
+        const momentumEnabled = crossing.direction === 'up'
+          ? activePreferences.alertOnMomentumUp ?? activePreferences.alertOnFivePercentMove ?? true
+          : activePreferences.alertOnMomentumDown ?? activePreferences.alertOnFivePercentMove ?? true;
+        if (momentumEnabled) {
+          for (const crossedThreshold of crossing.crossedThresholds) {
+            const canonicalKey = thresholdKey(eventSymbol, crossedThreshold);
+            const legacySelectedKey = thresholdKey(sym, crossedThreshold);
+            if (legacySelectedKey !== canonicalKey && hasAlertFired(legacySelectedKey)) recordAlertFired(canonicalKey);
+            if (crossedThreshold !== crossing.threshold) recordAlertFired(canonicalKey);
           }
-        }
-      }
 
-      // 4. Multi-tier Momentum Down: starts at -5.0%, then every -2.5% (-7.5%, -10.0%, -12.5%, etc.)
-      const MOMENTUM_DOWN_THRESHOLDS = [-5.0, -7.5, -10.0, -12.5, -15.0, -17.5, -20.0, -22.5, -25.0, -27.5, -30.0, -35.0, -40.0, -50.0];
-      if (quote.changePercent <= -5.0 && (preferences.alertOnMomentumDown ?? preferences.alertOnFivePercentMove ?? true)) {
-        for (const threshold of MOMENTUM_DOWN_THRESHOLDS) {
-          if (quote.changePercent <= threshold) {
-            const dedupeKey = `MOMENTUM_DOWN:${sym}:${threshold.toFixed(1)}%:${tradingDay}`;
-            if (!hasAlertFired(dedupeKey)) {
-              dispatchPushNotification(
-                {
-                  ticker: sym,
-                  companyName,
-                  title: `${sym} — Momentum Down (${quote.changePercent.toFixed(2)}%)`,
-                  body: `${companyName} (${sym}) fell through the ${threshold.toFixed(1)}% threshold with an active price of ${curSym}${quote.price.toFixed(2)} (${quote.changePercent.toFixed(2)}%).`,
-                  type: 'momentum-down',
-                  dedupeKey,
-                  tradingDate: tradingDay,
-                  metrics: {
-                    priceMove: quote.changePercent
-                  },
-                  metadata: {
-                    currentPrice: quote.price,
-                    percentageChange: quote.changePercent,
-                    source: quote.provider || 'Live Market Feed'
-                  }
-                },
-                preferences,
-                (newNotif) => {
-                  setNotifications(prev => {
-                    const next = [newNotif, ...prev];
-                    saveNotifications(next);
-                    return next;
-                  });
-                  setActiveToast(newNotif);
-                }
-              );
-            }
-          }
-        }
-      }
-    }
-  }, [preferences]);
-
-  // Sync real-time SEC EDGAR 8-K Regulatory Filings Pipeline
-  const loadSec8kFilings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/sec-8k-filings');
-      if (!res.ok) return;
-      const json = await res.json();
-      if (!json.success || !Array.isArray(json.filings)) return;
-
-      for (const filing of json.filings) {
-        if (preferences.subscribedTickers.length > 0 && !preferences.subscribedTickers.includes(filing.ticker)) {
-          continue;
-        }
-
-        // Filter based on preferences
-        if (filing.classification === 'earnings-beat' && !(preferences.alertOnEarningsBeat ?? true)) continue;
-        if (filing.classification === 'earnings-miss' && !(preferences.alertOnEarningsMiss ?? true)) continue;
-        if (filing.classification === 'sec-8k' && !(preferences.alertOnSec8K ?? true)) continue;
-
-        const dedupeKey = filing.id; // e.g. SEC_8K:NVDA:0001045810-26-000078
-        if (hasAlertFired(dedupeKey)) continue;
-
-        dispatchPushNotification(
-          {
-            ticker: filing.ticker,
-            companyName: filing.companyName,
-            title: filing.title,
-            body: filing.body,
-            type: filing.classification,
+          const dedupeKey = thresholdKey(eventSymbol, crossing.threshold);
+          const legacySelectedKey = thresholdKey(sym, crossing.threshold);
+          if (legacySelectedKey !== dedupeKey && hasAlertFired(legacySelectedKey)) recordAlertFired(dedupeKey);
+          const sign = crossing.direction === 'up' ? '+' : '';
+          const moveText = sign + eligible.changePercent.toFixed(2) + '%';
+          dispatchPushNotification({
+            ticker: sym,
+            companyName,
+            title: sym + ' - Momentum ' + (crossing.direction === 'up' ? 'Up' : 'Down') + ' (' + moveText + ')',
+            body: companyName + ' (' + sym + ') crossed the ' + sign + crossing.threshold.toFixed(1) + '% threshold during the regular session at ' + curSym + eligible.price.toFixed(2) + '. Move from the verified prior close: ' + moveText + '.',
+            type: crossing.direction === 'up' ? 'momentum-up' : 'momentum-down',
             dedupeKey,
-            source: 'SEC EDGAR Official Form 8-K',
-            tradingDate: filing.filingDate,
-            metrics: filing.metrics,
+            eventOccurredAt: quote.providerTradeTimestamp,
+            source: quote.provider || 'Yahoo Finance quote feed',
+            tradingDate: eligible.sessionDate,
+            metrics: { priceMove: eligible.changePercent },
             metadata: {
-              epsActual: filing.metrics?.epsActual,
-              epsEstimate: filing.metrics?.epsEstimate,
-              revenueActual: filing.metrics?.revenueActual,
-              revenueEstimate: filing.metrics?.revenueEstimate,
-              filingAccession: filing.accessionNumber,
-              filingUrl: filing.docUrl,
-              fiscalQuarter: filing.fiscalQuarter,
-              source: 'SEC EDGAR Form 8-K'
+              currentPrice: eligible.price,
+              percentageChange: eligible.changePercent,
+              quoteTimestamp: quote.providerTradeTimestamp,
+              previousClose: eligible.previousClose,
+              source: quote.provider || 'Yahoo Finance quote feed'
             }
-          },
-          preferences,
-          (newNotif) => {
+          }, activePreferences, (newNotif) => {
             setNotifications(prev => {
               const next = [newNotif, ...prev];
               saveNotifications(next);
               return next;
             });
             setActiveToast(newNotif);
-          }
-        );
+          });
+        }
       }
-    } catch (err) {
-      console.warn('Could not sync SEC 8-K filings:', err);
+
+      if (quote.is52WeekMetricsVerified && (activePreferences.alertOnFiftyTwoWeekHighLow ?? true)) {
+        const high = quote.fiftyTwoWeekHigh;
+        const low = quote.fiftyTwoWeekLow;
+        if (Number.isFinite(high) && (high as number) > 0 && previous.price < (high as number) && eligible.price >= (high as number)) {
+          const dedupeKey = '52W_HIGH:' + eventSymbol + ':' + eligible.sessionDate;
+          dispatchPushNotification({
+            ticker: sym,
+            companyName,
+            title: sym + ' — Verified 52-Week High (' + curSym + eligible.price.toFixed(2) + ')',
+            body: companyName + ' (' + sym + ') reached the provider-supplied 52-week high of ' + curSym + (high as number).toFixed(2) + ' during the regular session.',
+            type: '52w-high',
+            dedupeKey,
+            eventOccurredAt: quote.providerTradeTimestamp,
+            source: quote.provider || 'Yahoo Finance quote feed',
+            tradingDate: eligible.sessionDate,
+            metrics: { priceMove: eligible.changePercent },
+            metadata: { currentPrice: eligible.price, quoteTimestamp: quote.providerTradeTimestamp, source: quote.provider || 'Yahoo Finance quote feed' }
+          }, activePreferences, (newNotif) => {
+            setNotifications(prev => {
+              const next = [newNotif, ...prev];
+              saveNotifications(next);
+              return next;
+            });
+            setActiveToast(newNotif);
+          });
+        }
+        if (Number.isFinite(low) && (low as number) > 0 && previous.price > (low as number) && eligible.price <= (low as number)) {
+          const dedupeKey = '52W_LOW:' + eventSymbol + ':' + eligible.sessionDate;
+          dispatchPushNotification({
+            ticker: sym,
+            companyName,
+            title: sym + ' — Verified 52-Week Low (' + curSym + eligible.price.toFixed(2) + ')',
+            body: companyName + ' (' + sym + ') reached the provider-supplied 52-week low of ' + curSym + (low as number).toFixed(2) + ' during the regular session.',
+            type: '52w-low',
+            dedupeKey,
+            eventOccurredAt: quote.providerTradeTimestamp,
+            source: quote.provider || 'Yahoo Finance quote feed',
+            tradingDate: eligible.sessionDate,
+            metrics: { priceMove: eligible.changePercent },
+            metadata: { currentPrice: eligible.price, quoteTimestamp: quote.providerTradeTimestamp, source: quote.provider || 'Yahoo Finance quote feed' }
+          }, activePreferences, (newNotif) => {
+            setNotifications(prev => {
+              const next = [newNotif, ...prev];
+              saveNotifications(next);
+              return next;
+            });
+            setActiveToast(newNotif);
+          });
+        }
+      }
     }
-  }, [preferences]);
+  }, []);
+
+  const checkNotificationAssetAlerts = useCallback((
+    liveData: Record<string, LiveQuote>,
+    catalog: NotificationAssetCatalogItem[],
+    requestPreferencesVersion: number
+  ) => {
+    const activePreferences = preferencesRef.current;
+    const selectedSymbols = Array.isArray(activePreferences.subscribedAssetSymbols)
+      ? new Set(activePreferences.subscribedAssetSymbols.map(symbol => symbol.toUpperCase().trim()))
+      : new Set<string>();
+    if (selectedSymbols.size === 0) return;
+    const thresholdSignature = catalog
+      .filter(asset => selectedSymbols.has(asset.symbol.toUpperCase()) && asset.quoteAvailable && Number.isFinite(asset.thresholdPct))
+      .map(asset => asset.symbol.toUpperCase() + ':' + asset.thresholdPct)
+      .sort()
+      .join('|');
+    const thresholdsChanged = thresholdSignature !== lastAssetThresholdSignatureRef.current;
+    lastAssetThresholdSignatureRef.current = thresholdSignature;
+    const preferencesChanged = lastAssetObservationPreferencesVersionRef.current !== requestPreferencesVersion || requestPreferencesVersion !== preferencesVersionRef.current || thresholdsChanged;
+    lastAssetObservationPreferencesVersionRef.current = preferencesVersionRef.current;
+    const handledProviderSymbols = new Set<string>();
+
+    for (const asset of catalog) {
+      const displaySymbol = asset.symbol.toUpperCase().trim();
+      if (!selectedSymbols.has(displaySymbol) || !asset.quoteAvailable || !Number.isFinite(asset.thresholdPct) || (asset.thresholdPct as number) <= 0) continue;
+      const quote = liveData[displaySymbol];
+      const eligible = getEligibleMarketQuote(quote);
+      if (!quote || !eligible) continue;
+      const providerSymbol = (quote.providerMarketSymbol || '').toUpperCase().trim();
+      if (!providerSymbol || providerSymbol !== asset.providerSymbol?.toUpperCase() || handledProviderSymbols.has(providerSymbol)) continue;
+      handledProviderSymbols.add(providerSymbol);
+
+      const observationKey = 'ASSET:' + providerSymbol;
+      if (preferencesChanged || activePreferences.alertOnAssetVolatility === false) {
+        saveQuoteObservation(observationKey, {
+          sessionDate: eligible.sessionDate,
+          tradeTimeMs: eligible.tradeTimeMs,
+          price: eligible.price,
+          changePercent: eligible.changePercent
+        });
+        continue;
+      }
+
+      const previousObservation = getQuoteObservation(observationKey);
+      if (previousObservation && previousObservation.sessionDate === eligible.sessionDate && eligible.tradeTimeMs <= previousObservation.tradeTimeMs) continue;
+      const advanced = advanceQuoteObservation(previousObservation, eligible, quote);
+      saveQuoteObservation(observationKey, advanced.observation);
+      if (!advanced.mayTrigger || !advanced.previous) continue;
+
+      const direction = getNewConfiguredThresholdCrossing(advanced.previous.changePercent, eligible.changePercent, asset.thresholdPct as number);
+      if (!direction) continue;
+      const thresholdText = (direction === 'up' ? '+' : '-') + (asset.thresholdPct as number).toFixed(2) + '%';
+      const moveText = (eligible.changePercent > 0 ? '+' : '') + eligible.changePercent.toFixed(2) + '%';
+      const sourceName = quote.providerName || quote.providerMarketSymbol || providerSymbol;
+      const sourceKind = quote.providerInstrumentType ? ' ' + quote.providerInstrumentType.toLowerCase() : '';
+      const priceText = asset.group === 'Sovereign yields'
+        ? eligible.price.toFixed(3) + ' CBOE yield-index level'
+        : asset.group === 'Global indices' || (asset.group === 'Sector indices & ETFs' && (quote.providerInstrumentType || '').toUpperCase() === 'INDEX') || /index|indices/i.test(asset.assetClass)
+          ? eligible.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' index points'
+          : asset.group === 'Commodities'
+          ? (() => {
+              const currency = asset.currency || quote.currency || '';
+              const unit = asset.unit || '';
+              const hasCurrencyInUnit = currency && unit.toUpperCase().includes(currency.toUpperCase());
+              return (hasCurrencyInUnit ? '' : currency + ' ') + eligible.price.toFixed(2) + (unit ? ' ' + unit : '');
+            })()
+            : getCurrencySymbol(quote.currency) + eligible.price.toFixed(2) + ' per share';
+      const label = asset.name + ' (' + displaySymbol + ')';
+      const dedupeKey = 'ASSET_VOLATILITY:' + direction.toUpperCase() + ':' + providerSymbol + ':' + (asset.thresholdPct as number).toFixed(2) + ':' + eligible.sessionDate;
+      dispatchPushNotification({
+        ticker: displaySymbol,
+        companyName: asset.name,
+        title: label + ' ' + (direction === 'up' ? 'Up' : 'Down') + ' (' + moveText + ')',
+        body: sourceName + ' (' + providerSymbol + sourceKind + ') crossed the ' + thresholdText + ' research threshold during its provider session. Verified source move: ' + moveText + ' from the prior session close; latest level: ' + priceText + '.',
+        type: 'asset-volatility',
+        dedupeKey,
+        eventOccurredAt: quote.providerTradeTimestamp,
+        source: quote.provider || 'Yahoo Finance',
+        tradingDate: eligible.sessionDate,
+        metrics: { priceMove: eligible.changePercent },
+        metadata: {
+          currentPrice: eligible.price,
+          percentageChange: eligible.changePercent,
+          quoteTimestamp: quote.providerTradeTimestamp,
+          previousClose: eligible.previousClose,
+          source: quote.provider || 'Yahoo Finance',
+          assetClass: asset.assetClass,
+          assetGroup: asset.group,
+          assetCategoryKey: asset.categoryKey,
+          thresholdPct: asset.thresholdPct,
+          assetUnit: asset.unit,
+          providerSymbol
+        }
+      }, activePreferences, (newNotif) => {
+        setNotifications(prev => {
+          const next = [newNotif, ...prev];
+          saveNotifications(next);
+          return next;
+        });
+        setActiveToast(newNotif);
+      });
+    }
+  }, []);
+
+  const dispatchSecFilings = useCallback((filings: any[], activePreferences: AlertPreferences): number => {
+    let dispatchedCount = 0;
+    for (const filing of filings) {
+      const sym = typeof filing?.ticker === 'string' ? filing.ticker.toUpperCase().trim() : '';
+      const accession = typeof filing?.accessionNumber === 'string' ? filing.accessionNumber : '';
+      const acceptedAt = typeof filing?.acceptanceDateTime === 'string' ? filing.acceptanceDateTime : '';
+      const isNonEquityAsset = notificationAssetCatalogRef.current.some(asset => asset.symbol.toUpperCase() === sym);
+      const isSelected = !isNonEquityAsset && activePreferences.subscribedTickers.some(value => value.toUpperCase().trim() === sym);
+      if (!sym || !accession || !isSelected || !isFreshSecAcceptance(acceptedAt)) continue;
+
+      const isResultsRelease = filing.items?.includes('2.02') || filing.isItem202FinancialResults === true;
+      const notificationType: NotificationEventType = isResultsRelease ? 'earnings-release' : 'sec-8k';
+      const dedupeKey = 'SEC_8K:' + sym + ':' + accession;
+      const releaseBody = sym + ' filed SEC Form 8-K Item 2.02 at ' + acceptedAt + '. This feed does not verify a same-period, same-basis EPS or revenue consensus comparison, so no beat/miss classification is available. Accession: ' + accession + '.';
+      const acceptedNotification = dispatchPushNotification({
+        ticker: sym,
+        companyName: filing.companyName || sym,
+        title: isResultsRelease ? sym + ' — Financial Results Filed (SEC Item 2.02)' : filing.title,
+        body: isResultsRelease ? releaseBody : filing.body,
+        type: notificationType,
+        dedupeKey,
+        eventOccurredAt: acceptedAt,
+        source: 'SEC EDGAR Official Form 8-K',
+        tradingDate: filing.filingDate,
+        metadata: {
+          filingAccession: accession,
+          filingUrl: filing.docUrl,
+          source: 'SEC EDGAR Form 8-K'
+        }
+      }, activePreferences, (newNotif) => {
+        setNotifications(prev => {
+          const next = [newNotif, ...prev];
+          saveNotifications(next);
+          return next;
+        });
+        setActiveToast(newNotif);
+      });
+      if (acceptedNotification) dispatchedCount++;
+    }
+    return dispatchedCount;
+  }, []);
+
+  // SEC acceptance times are source event times; historical submissions are ignored.
+  const loadSec8kFilings = useCallback(async () => {
+    const nonEquitySymbols = new Set(notificationAssetCatalogRef.current.map(asset => asset.symbol.toUpperCase()));
+    const requestedTickers = preferencesRef.current.subscribedTickers.map(value => value.toUpperCase().trim()).filter(value => Boolean(value) && !nonEquitySymbols.has(value));
+    if (requestedTickers.length === 0) {
+      setSecFeedStatus('Automatic SEC monitoring is off because no stocks are selected.');
+      return;
+    }
+    const preferenceVersion = preferencesVersionRef.current;
+    try {
+      const query = encodeURIComponent(requestedTickers.join(','));
+      const response = await fetch('/api/sec-8k-filings?symbols=' + query);
+      if (!response.ok) throw new Error('SEC request returned HTTP ' + response.status);
+      const payload = await response.json();
+      if (!payload?.success || !Array.isArray(payload.filings)) throw new Error('SEC response was unavailable');
+      if (preferenceVersion !== preferencesVersionRef.current) return;
+
+      const currentNonEquitySymbols = new Set(notificationAssetCatalogRef.current.map(asset => asset.symbol.toUpperCase()));
+      const currentTickers = preferencesRef.current.subscribedTickers.map(value => value.toUpperCase().trim()).filter(value => Boolean(value) && !currentNonEquitySymbols.has(value));
+      if (currentTickers.join(',') !== requestedTickers.join(',')) return;
+      const unavailable = Array.isArray(payload.unavailableSymbols) ? payload.unavailableSymbols : [];
+      const failed = Array.isArray(payload.failedSymbols) ? payload.failedSymbols : [];
+      const unprocessed = Array.isArray(payload.unprocessedSymbols) ? payload.unprocessedSymbols : [];
+      const coverageNotes = [];
+      if (unavailable.length) coverageNotes.push('SEC company mapping unavailable: ' + unavailable.join(', '));
+      if (failed.length) coverageNotes.push('SEC lookup failed: ' + failed.join(', '));
+      if (unprocessed.length) coverageNotes.push('Not checked because of request limit: ' + unprocessed.join(', '));
+      setSecFeedStatus(coverageNotes.length
+        ? coverageNotes.join(' · ')
+        : 'SEC EDGAR checks selected stocks for newly accepted Form 8-K filings. Only acceptances from the last 10 minutes can trigger.');
+      dispatchSecFilings(payload.filings, preferencesRef.current);
+    } catch (error) {
+      setSecFeedStatus('SEC monitoring is temporarily unavailable: ' + (error instanceof Error ? error.message : 'request failed'));
+      console.warn('Could not sync SEC 8-K filings:', error);
+    }
+  }, [dispatchSecFilings]);
+
+  const loadNotificationAssetQuotes = useCallback(async (requestVersion = preferencesVersionRef.current) => {
+    if (assetQuoteRequestInFlightRef.current || Date.now() - lastAssetQuotePollRef.current < 15000) return;
+    const activePreferences = preferencesRef.current;
+    const selectedAssetSymbols = Array.isArray(activePreferences.subscribedAssetSymbols)
+      ? [...new Set(activePreferences.subscribedAssetSymbols.map(symbol => symbol.toUpperCase().trim()).filter(Boolean))]
+      : [];
+    if (selectedAssetSymbols.length === 0 || activePreferences.alertOnAssetVolatility === false) {
+      setAssetFeedStatus(selectedAssetSymbols.length === 0
+        ? 'No Global Markets assets are selected for automatic volatility alerts.'
+        : 'Global Markets volatility alerts are disabled in settings.');
+      return;
+    }
+    if (notificationAssetCatalog.length === 0) {
+      setAssetFeedStatus('Global Markets asset catalog is loading or unavailable.');
+      return;
+    }
+    const catalogBySymbol = new Map(notificationAssetCatalog.map(asset => [asset.symbol.toUpperCase(), asset]));
+    const supported = selectedAssetSymbols.filter(symbol => {
+      const asset = catalogBySymbol.get(symbol);
+      return asset?.quoteAvailable && Number.isFinite(asset.thresholdPct) && (asset.thresholdPct as number) > 0;
+    });
+    const unsupported = selectedAssetSymbols.filter(symbol => !supported.includes(symbol));
+    if (supported.length === 0) {
+      setAssetFeedStatus('Selected Global Markets assets lack a mapped Yahoo instrument or active research threshold.');
+      return;
+    }
+
+    lastAssetQuotePollRef.current = Date.now();
+    assetQuoteRequestInFlightRef.current = true;
+    try {
+      const result = await fetchNotificationAssetQuotes(supported);
+      if (requestVersion !== preferencesVersionRef.current) return;
+      checkNotificationAssetAlerts(result.quotes, notificationAssetCatalog, requestVersion);
+      const missing = [...new Set([...unsupported, ...result.unavailableSymbols])];
+      setAssetFeedStatus(
+        'Mapped-source quotes: ' + Object.keys(result.quotes).length + ' of ' + supported.length + ' selected instruments. ' +
+        (missing.length ? 'Unavailable or unsupported: ' + missing.join(', ') + '. ' : '') +
+        (result.unprocessedSymbols.length ? 'Not processed: ' + result.unprocessedSymbols.join(', ') + '. ' : '') +
+        'Alerts require a source trade timestamp no more than 2 minutes old, no reported provider delay, and an open provider session.'
+      );
+    } catch {
+      setAssetFeedStatus('Global Markets verified Yahoo quote feed is temporarily unavailable.');
+    } finally {
+      assetQuoteRequestInFlightRef.current = false;
+    }
+  }, [checkNotificationAssetAlerts, notificationAssetCatalog]);
+
+  const loadNotificationStockQuotes = useCallback(async (requestVersion = preferencesVersionRef.current) => {
+    if (stockQuoteRequestInFlightRef.current || Date.now() - lastStockQuotePollRef.current < 15000) return;
+    const activePreferences = preferencesRef.current;
+    const nonEquitySymbols = new Set(notificationAssetCatalogRef.current.map(asset => asset.symbol.toUpperCase()));
+    const selectedTickers = [...new Set(activePreferences.subscribedTickers
+      .map(symbol => symbol.toUpperCase().trim())
+      .filter(symbol => symbol && !nonEquitySymbols.has(symbol)))];
+    if (selectedTickers.length === 0) {
+      setStockQuoteFeedStatus('No selected equity symbols need direct notification quotes.');
+      return;
+    }
+    lastStockQuotePollRef.current = Date.now();
+    stockQuoteRequestInFlightRef.current = true;
+    try {
+      const result = await fetchNotificationStockQuotes(selectedTickers);
+      if (requestVersion !== preferencesVersionRef.current) return;
+      if (Object.keys(result.quotes).length > 0) {
+        checkMarketSessionAlerts(result.quotes);
+      }
+      setStockQuoteFeedStatus(
+        'Direct Yahoo notification quotes: ' + Object.keys(result.quotes).length + ' of ' + selectedTickers.length + ' selected equities. ' +
+        (result.unavailableSymbols.length ? 'Unavailable: ' + result.unavailableSymbols.join(', ') + '. ' : '') +
+        (result.unprocessedSymbols.length ? 'Not processed: ' + result.unprocessedSymbols.join(', ') + '. ' : '') +
+        'Events still require a source trade timestamp no more than 2 minutes old, no reported provider delay, and an open provider session.'
+      );
+    } catch {
+      setStockQuoteFeedStatus('Direct selected-equity Yahoo quote feed is temporarily unavailable.');
+    } finally {
+      stockQuoteRequestInFlightRef.current = false;
+    }
+  }, [checkMarketSessionAlerts]);
 
   // Poll Real-Time Market Quotes
   const loadMarketQuotes = useCallback(async (isManual: boolean = false) => {
+    if (marketQuotesInFlightRef.current) return;
+    marketQuotesInFlightRef.current = true;
+    const preferenceVersion = preferencesVersionRef.current;
     if (isManual) setIsQuotesLoading(true);
     try {
       const liveData = await fetchLiveMarketQuotes();
@@ -505,11 +738,13 @@ export default function App() {
         setLastQuotesUpdated(new Date());
 
         // Scan quotes for 52-week High/Low and >5% session moves
-        checkMarketSessionAlerts(liveData);
+        if (preferenceVersion === preferencesVersionRef.current) checkMarketSessionAlerts(liveData);
+
       }
     } catch (err) {
       console.warn('Could not fetch market quotes:', err);
     } finally {
+      marketQuotesInFlightRef.current = false;
       if (isManual) setIsQuotesLoading(false);
     }
   }, [checkMarketSessionAlerts]);
@@ -546,6 +781,25 @@ export default function App() {
     loadEarningsCalendar();
     loadSec8kFilings();
   }, [loadMarketQuotes, loadEarningsCalendar, loadSec8kFilings]);
+
+  // Independent from the equity display feed so non-equity alerts still check when it fails.
+  useEffect(() => {
+    if (!isStreaming) return;
+    const pollAssets = () => {
+      if (!document.hidden) {
+        void loadNotificationAssetQuotes();
+        void loadNotificationStockQuotes();
+      }
+    };
+    pollAssets();
+    const interval = window.setInterval(pollAssets, 15000);
+    const onVisibilityChange = () => { if (!document.hidden) pollAssets(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isStreaming, loadNotificationAssetQuotes, loadNotificationStockQuotes]);
 
   // Adaptive background-aware polling loop:
   // - Pauses when phone screen is locked or tab is hidden (saves battery & prevents crash queues)
@@ -604,6 +858,7 @@ export default function App() {
 
   // Persist preferences
   const handleUpdatePreferences = (newPrefs: AlertPreferences) => {
+    preferencesVersionRef.current++;
     setPreferences(newPrefs);
     savePreferences(newPrefs);
   };
@@ -669,31 +924,40 @@ export default function App() {
     localStorage.setItem('veritas_news_agent_linked_tickers', JSON.stringify(tickers));
   };
 
-  // Trigger test push from detail modal
-  const handleTriggerTestPush = (target: QuarterlyResult) => {
-    const isBeat = (target.epsActual ?? 0) >= target.epsEstimate;
-    dispatchPushNotification(
-      {
-        ticker: target.ticker,
-        companyName: target.companyName,
-        title: `${target.ticker} — ${isBeat ? 'Earnings Beat' : 'Earnings Miss'} (${target.quarter})`,
-        body: `${target.ticker} reported EPS of $${target.epsActual?.toFixed(2) || target.epsEstimate.toFixed(2)} vs consensus $${target.epsEstimate.toFixed(2)} and revenue of $${target.revenueActual?.toFixed(2) || target.revenueEstimate.toFixed(2)}B.`,
-        type: isBeat ? 'earnings-beat' : 'earnings-miss',
-        metrics: {
-          epsActual: target.epsActual,
-          epsEstimate: target.epsEstimate,
-          revenueActual: target.revenueActual,
-          revenueEstimate: target.revenueEstimate,
-          priceMove: target.priceReactionPercent
-        }
-      },
-      preferences,
-      (newNotif) => {
-        handleSaveNotifications([newNotif, ...notifications]);
-        setActiveToast(newNotif);
+  const handleCheckRecentSecFiling = useCallback(async (ticker: string): Promise<string> => {
+    const sym = ticker.toUpperCase().trim();
+    const activePreferences = preferencesRef.current;
+    if (!activePreferences.subscribedTickers.some(value => value.toUpperCase().trim() === sym)) {
+      return 'Select ' + sym + ' in alert settings before checking its SEC filings.';
+    }
+    if (!(activePreferences.alertOnSec8K ?? activePreferences.alertOnRelease ?? true) && !(activePreferences.alertOnRelease ?? true)) {
+      return 'SEC and financial-results alerts are disabled in alert settings.';
+    }
+    const preferenceVersion = preferencesVersionRef.current;
+    try {
+      const response = await fetch('/api/sec-8k-filings?symbols=' + encodeURIComponent(sym));
+      if (!response.ok) return 'SEC EDGAR request failed with HTTP ' + response.status + '.';
+      const payload = await response.json();
+      if (!payload?.success || !Array.isArray(payload.filings)) return 'SEC EDGAR could not return filings for ' + sym + '.';
+      if (preferenceVersion !== preferencesVersionRef.current || !preferencesRef.current.subscribedTickers.some(value => value.toUpperCase().trim() === sym)) {
+        return 'Alert settings changed during the check. Run it again with the current selection.';
       }
-    );
-  };
+      if (Array.isArray(payload.unavailableSymbols) && payload.unavailableSymbols.includes(sym)) {
+        return 'SEC company coverage is not configured for ' + sym + '.';
+      }
+      if (Array.isArray(payload.failedSymbols) && payload.failedSymbols.includes(sym)) {
+        return 'SEC EDGAR could not be reached for ' + sym + '. Try again shortly.';
+      }
+      const freshFilings = payload.filings.filter((filing: any) => filing.ticker?.toUpperCase() === sym && isFreshSecAcceptance(filing.acceptanceDateTime));
+      if (freshFilings.length === 0) return 'No Form 8-K has been accepted for ' + sym + ' in the last 10 minutes.';
+      const count = dispatchSecFilings(freshFilings, preferencesRef.current);
+      return count > 0
+        ? 'A fresh SEC Form 8-K was added to notifications for ' + sym + '.'
+        : 'The fresh SEC accession was already notified, or its alert preference is disabled.';
+    } catch {
+      return 'SEC EDGAR is temporarily unavailable. Try again shortly.';
+    }
+  }, [dispatchSecFilings]);
 
   const handleMarkAllAsRead = () => {
     const updated = notifications.map(n => ({ ...n, read: true }));
@@ -826,48 +1090,84 @@ export default function App() {
     handleSelectTickerFromPill(target.symbol);
   }, [handleSelectTickerFromPill]);
 
-  // Handle 200-day moving average breakdown alert notification
-  const handleTriggerTechnicalAlert = useCallback((
-    ticker: string, 
-    currentPrice: number, 
-    dma200: number, 
-    high52: number, 
-    low52: number
-  ) => {
-    const company = TECH_COMPANIES[ticker];
-    const diffPct = (((currentPrice - dma200) / dma200) * 100).toFixed(2);
-    const tradingDay = getTradingDayKey();
-    const dedupeKey = `DMA_BREAKDOWN:${ticker}:${tradingDay}`;
-
-    dispatchPushNotification(
-      {
-        ticker,
-        companyName: company?.name || ticker,
-        title: `${ticker} — 200 DMA Breakdown (${diffPct}%)`,
-        body: `${ticker} ($${currentPrice.toFixed(2)}) is trading ${diffPct}% below its 200-day moving average ($${dma200.toFixed(2)}). 52-Week Range: $${low52.toFixed(2)} - $${high52.toFixed(2)}.`,
-        type: 'momentum-down',
-        dedupeKey,
-        tradingDate: tradingDay,
-        metrics: {
-          epsActual: undefined,
-          epsEstimate: 0,
-          revenueActual: undefined,
-          revenueEstimate: 0,
-          priceMove: Number(diffPct)
-        },
-        metadata: {
-          currentPrice,
-          percentageChange: Number(diffPct),
-          source: '200-Day Moving Average Model'
-        }
-      },
-      preferences,
-      (newNotif) => {
-        handleSaveNotifications([newNotif, ...notifications]);
-        setActiveToast(newNotif);
+  const handleOpenNotification = useCallback((ticker: string, notification?: PushNotificationItem) => {
+    const symbol = ticker.toUpperCase().trim();
+    const asset = notification?.type === 'asset-volatility'
+      ? notificationAssetCatalog.find(item => item.symbol.toUpperCase() === symbol)
+        || (notification.metadata?.providerSymbol
+          ? notificationAssetCatalog.find(item => item.providerSymbol?.toUpperCase() === notification.metadata?.providerSymbol?.toUpperCase())
+          : undefined)
+      : undefined;
+    if (asset) {
+      if (asset.routeKind === 'global-index') {
+        setSelectedGlobalMarketSymbol(asset.providerSymbol || asset.symbol);
+        setGlobalMarketSelectionRequestId(value => value + 1);
+        return;
       }
-    );
-  }, [preferences, notifications, handleSaveNotifications]);
+      if (asset.routeKind === 'sector') {
+        setSelectedSectorAssetSymbol(asset.symbol);
+        setSectorAssetSelectionRequestId(value => value + 1);
+        setActiveTab('sectors');
+        return;
+      }
+      if (asset.routeKind === 'commodity') {
+        if (asset.targetId) setSelectedCommodityId(asset.targetId);
+        setActiveTab('commodities');
+        return;
+      }
+      if (asset.routeKind === 'bond') {
+        if (asset.targetId) setSelectedBondId(asset.targetId);
+        setActiveTab('bonds');
+        return;
+      }
+    }
+    const result = results.find(item => item.ticker.toUpperCase() === symbol);
+    if (result) {
+      setSelectedResultForModal(result);
+      return;
+    }
+    setSearchQuery(symbol);
+    setActiveTab('jpmorgan');
+  }, [notificationAssetCatalog, results]);
+
+  // Manual DMA notifications use only a selected stock's fresh quote and verified provider metric.
+  const handleTriggerTechnicalAlert = useCallback((ticker: string): string => {
+    const sym = ticker.toUpperCase().trim();
+    const activePreferences = preferencesRef.current;
+    if (!activePreferences.subscribedTickers.some(value => value.toUpperCase().trim() === sym)) return 'No alert: select this stock in alert settings first.';
+    if (activePreferences.alertOnDmaBreakdown === false) return 'No alert: verified 200-day breakdown alerts are disabled.';
+    const quote = resolveLiveQuote(sym, quotesRef.current);
+    if (!quote) return 'No alert: there is no provider quote for ' + sym + '.';
+    const eligible = getEligibleMarketQuote(quote);
+    if (!eligible) return 'No alert: the source trade must be no more than 2 minutes old, report no provider delay, and fall inside the exact regular session.';
+    const dma = quote.twoHundredDayAverage;
+    if (quote.isTwoHundredDayAverageVerified !== true || !Number.isFinite(dma) || (dma as number) <= 0) return 'No alert: a sufficiently sourced 200-day average is unavailable.';
+    if (eligible.price >= (dma as number)) return 'No alert: the fresh price is not below the verified 200-day average.';
+    const diffPct = ((eligible.price - (dma as number)) / (dma as number)) * 100;
+    const currency = getCurrencySymbol(quote.currency);
+    const dedupeKey = 'DMA_BREAKDOWN:' + sym + ':' + eligible.sessionDate;
+    const dispatched = dispatchPushNotification({
+      ticker: sym,
+      companyName: quote.companyName || TECH_COMPANIES[sym]?.name || sym,
+      title: sym + ' - Verified 200-Day Moving Average Breakdown (' + diffPct.toFixed(2) + '%)',
+      body: sym + ' is below its provider-verified 200-day average during the regular session. Live price: ' + currency + eligible.price.toFixed(2) + '; 200-day average: ' + currency + (dma as number).toFixed(2) + '.',
+      type: 'dma-breakdown',
+      dedupeKey,
+      eventOccurredAt: quote.providerTradeTimestamp,
+      source: quote.provider || 'Yahoo Finance quote feed',
+      tradingDate: eligible.sessionDate,
+      metrics: { priceMove: diffPct },
+      metadata: { currentPrice: eligible.price, source: quote.provider || 'Yahoo Finance quote feed' }
+    }, activePreferences, (newNotif) => {
+      setNotifications(prev => {
+        const next = [newNotif, ...prev];
+        saveNotifications(next);
+        return next;
+      });
+      setActiveToast(newNotif);
+    });
+    return dispatched ? 'Verified 200-day breakdown alert added.' : 'No alert: this exchange-day event was already notified.';
+  }, []);
 
   // Filter results
   const filteredResults = results.filter(item => {
@@ -891,10 +1191,7 @@ export default function App() {
       <LivePushToast
         notification={activeToast}
         onDismiss={() => setActiveToast(null)}
-        onViewDetails={(ticker) => {
-          const matched = results.find(r => r.ticker === ticker);
-          if (matched) setSelectedResultForModal(matched);
-        }}
+        onViewDetails={handleOpenNotification}
       />
 
       {/* Institutional Soft Corporate Header */}
@@ -927,7 +1224,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
         {/* Global Markets Live World Map & Session Status Display */}
-        <GlobalMarketsMap />
+        <GlobalMarketsMap selectedTicker={selectedGlobalMarketSymbol} selectionRequestId={globalMarketSelectionRequestId} />
 
         {/* View Switcher Tabs & Live Push Status Banner */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3.5 mb-5">
@@ -1159,6 +1456,8 @@ export default function App() {
             onSelectTicker={handleSelectTickerFromPill}
             onRefreshQuotes={() => loadMarketQuotes(true)}
             isLoadingQuotes={isQuotesLoading}
+            selectedAssetSymbol={selectedSectorAssetSymbol}
+            assetSelectionRequestId={sectorAssetSelectionRequestId}
           />
         )}
       </main>
@@ -1199,7 +1498,7 @@ export default function App() {
           result={selectedResultForModal}
           quote={resolveLiveQuote(selectedResultForModal.ticker, quotes)}
           onClose={() => setSelectedResultForModal(null)}
-          onTriggerTestPush={handleTriggerTestPush}
+          onCheckRecentSecFiling={handleCheckRecentSecFiling}
           preferences={preferences}
         />
       )}
@@ -1210,10 +1509,7 @@ export default function App() {
           onClose={() => setIsNotificationCenterOpen(false)}
           onMarkAllAsRead={handleMarkAllAsRead}
           onClearNotifications={handleClearNotifications}
-          onSelectTicker={(ticker) => {
-            const found = results.find(r => r.ticker === ticker);
-            if (found) setSelectedResultForModal(found);
-          }}
+          onSelectTicker={handleOpenNotification}
         />
       )}
 
@@ -1223,6 +1519,10 @@ export default function App() {
           onUpdatePreferences={handleUpdatePreferences}
           browserPermission={browserPermission}
           onRequestBrowserPermission={handleRequestBrowserPermission}
+          secFeedStatus={secFeedStatus}
+          stockQuoteFeedStatus={stockQuoteFeedStatus}
+          notificationAssets={notificationAssetCatalog}
+          assetFeedStatus={assetFeedStatus}
           onClose={() => setIsSettingsOpen(false)}
         />
       )}

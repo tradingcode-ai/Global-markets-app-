@@ -17,6 +17,9 @@ export interface LiveQuote {
   sparkline?: number[];
   lastTickDirection?: 'up' | 'down' | 'unchanged';
   provider?: string;
+  providerMarketSymbol?: string;
+  providerName?: string;
+  providerInstrumentType?: string;
   preMarketPrice?: number;
   preMarketChange?: number;
   preMarketChangePercent?: number;
@@ -24,6 +27,22 @@ export interface LiveQuote {
   postMarketChange?: number;
   postMarketChangePercent?: number;
   marketState?: 'PRE' | 'REGULAR' | 'POST' | 'CLOSED';
+  /** Yahoo's actual last regular-market trade time, independent of fetch time. */
+  providerTradeTimestamp?: string;
+  /** Provider-reported quote delay, when available. Positive values are ineligible for alerts. */
+  providerDelaySeconds?: number;
+  /** Provider's exchange session boundaries in epoch milliseconds. */
+  regularSessionStartMs?: number;
+  regularSessionEndMs?: number;
+  exchangeTimezoneName?: string;
+  /** Previous official regular-session close used only for alert calculations. */
+  alertCurrentPrice?: number;
+  alertPreviousClose?: number;
+  alertChangePercent?: number;
+  /** True only when the provider supplied a complete 52-week range. */
+  is52WeekMetricsVerified?: boolean;
+  /** True only when the 200-day average came from a sufficiently long daily series. */
+  isTwoHundredDayAverageVerified?: boolean;
 
   // Primary Local Listing & FX Conversion to USD
   primaryListingSymbol?: string;
@@ -43,6 +62,22 @@ export interface LiveQuote {
   enterpriseValueUsd?: string;
   peRatio?: number;
   exchangeName?: string;
+}
+
+export interface NotificationAssetCatalogItem {
+  symbol: string;
+  name: string;
+  assetClass: string;
+  group: 'Global indices' | 'Sector indices & ETFs' | 'Commodities' | 'Sovereign yields';
+  categoryKey: string;
+  thresholdPct?: number;
+  unit?: string;
+  currency?: string;
+  providerSymbol?: string;
+  quoteAvailable: boolean;
+  coverageReason?: string;
+  routeKind: 'global-index' | 'sector' | 'commodity' | 'bond';
+  targetId?: string;
 }
 
 export type ThemeMode = 'soft-light' | 'soft-slate';
@@ -267,6 +302,9 @@ export interface CompanyMeta {
 export type NotificationEventType =
   | 'earnings-beat'
   | 'earnings-miss'
+  | 'earnings-release'
+  | 'dma-breakdown'
+  | 'asset-volatility'
   | 'momentum-up'
   | 'momentum-down'
   | '52w-high'
@@ -285,6 +323,10 @@ export interface PushNotificationItem {
   title: string;
   body: string;
   timestamp: string;
+  /** Source event time; can be date-only when the source gives no time of day. */
+  eventOccurredAt?: string;
+  /** Local delivery time, separate from the time the event happened. */
+  deliveredAt?: string;
   tradingDate?: string;
   type: NotificationEventType;
   read: boolean;
@@ -308,21 +350,32 @@ export interface PushNotificationItem {
     currentPrice?: number;
     percentageChange?: number;
     quoteTimestamp?: string;
+    previousClose?: number;
     source?: string;
     guidanceNote?: string;
+    eventIsHistorical?: boolean;
+    assetClass?: string;
+    assetGroup?: string;
+    assetCategoryKey?: string;
+    thresholdPct?: number;
+    assetUnit?: string;
+    providerSymbol?: string;
   };
 }
 
 export interface AlertPreferences {
   browserNotificationsEnabled: boolean;
   soundEnabled: boolean;
-  subscribedTickers: string[]; // empty means all tech
+  subscribedTickers: string[]; // empty means no automatic ticker alerts
+  subscribedAssetSymbols?: string[]; // opt-in non-equity market alerts, independent from stock subscriptions
+  alertOnAssetVolatility?: boolean;
   alertOnEarningsBeat: boolean;
   alertOnEarningsMiss: boolean;
   alertOnSec8K: boolean;
   alertOnMomentumUp: boolean; // > +5.0%
   alertOnMomentumDown: boolean; // < -5.0%
   alertOnFiftyTwoWeekHighLow?: boolean;
+  alertOnDmaBreakdown?: boolean;
   // Legacy backwards compatibility fields
   minSurprisePercentage?: number;
   alertOnBeat?: boolean;

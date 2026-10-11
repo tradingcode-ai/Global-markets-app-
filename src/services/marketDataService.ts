@@ -1,4 +1,4 @@
-import { LiveQuote } from '../types';
+import { LiveQuote, NotificationAssetCatalogItem } from '../types';
 
 export interface LiveEarningsDateData {
   symbol: string;
@@ -23,6 +23,80 @@ export async function fetchLiveMarketQuotes(symbols?: string[]): Promise<Record<
     console.warn('Failed to fetch live market quotes:', err);
     return {};
   }
+}
+
+export async function fetchNotificationAssetCatalog(): Promise<NotificationAssetCatalogItem[]> {
+  try {
+    const response = await fetch('/api/notification-assets');
+    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+    const payload = await response.json();
+    return Array.isArray(payload?.assets) ? payload.assets : [];
+  } catch (error) {
+    console.warn('Could not load notification asset catalog:', error);
+    return [];
+  }
+}
+
+export async function fetchNotificationAssetQuotes(symbols: string[]): Promise<{ quotes: Record<string, LiveQuote>; unavailableSymbols: string[]; unprocessedSymbols: string[] }> {
+  const normalized = [...new Set(symbols.map(symbol => symbol.toUpperCase().trim()).filter(Boolean))];
+  if (!normalized.length) return { quotes: {}, unavailableSymbols: [], unprocessedSymbols: [] };
+  const batches: string[][] = [];
+  for (let index = 0; index < normalized.length; index += 80) batches.push(normalized.slice(index, index + 80));
+  const results = await Promise.all(batches.map(async batch => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+    try {
+      const response = await fetch('/api/notification-asset-quotes?symbols=' + encodeURIComponent(batch.join(',')), { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+      const payload = await response.json();
+      return {
+        quotes: payload?.quotes && typeof payload.quotes === 'object' ? payload.quotes as Record<string, LiveQuote> : {},
+        unavailableSymbols: Array.isArray(payload?.unavailableSymbols) ? payload.unavailableSymbols as string[] : [],
+        unprocessedSymbols: Array.isArray(payload?.unprocessedSymbols) ? payload.unprocessedSymbols as string[] : []
+      };
+    } catch (error) {
+      console.warn('Could not load verified notification asset quotes:', error);
+      return { quotes: {}, unavailableSymbols: batch, unprocessedSymbols: [] };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }));
+  return results.reduce((combined, result) => ({
+    quotes: { ...combined.quotes, ...result.quotes },
+    unavailableSymbols: [...combined.unavailableSymbols, ...result.unavailableSymbols],
+    unprocessedSymbols: [...combined.unprocessedSymbols, ...result.unprocessedSymbols]
+  }), { quotes: {} as Record<string, LiveQuote>, unavailableSymbols: [] as string[], unprocessedSymbols: [] as string[] });
+}
+
+export async function fetchNotificationStockQuotes(symbols: string[]): Promise<{ quotes: Record<string, LiveQuote>; unavailableSymbols: string[]; unprocessedSymbols: string[] }> {
+  const normalized = [...new Set(symbols.map(symbol => symbol.toUpperCase().trim()).filter(Boolean))];
+  if (!normalized.length) return { quotes: {}, unavailableSymbols: [], unprocessedSymbols: [] };
+  const batches: string[][] = [];
+  for (let index = 0; index < normalized.length; index += 80) batches.push(normalized.slice(index, index + 80));
+  const results = await Promise.all(batches.map(async batch => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+    try {
+      const response = await fetch('/api/market-quotes?alertOnly=1&symbols=' + encodeURIComponent(batch.join(',')), { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+      const payload = await response.json();
+      return {
+        quotes: payload?.quotes && typeof payload.quotes === 'object' ? payload.quotes as Record<string, LiveQuote> : {},
+        unavailableSymbols: Array.isArray(payload?.unavailableSymbols) ? payload.unavailableSymbols as string[] : [],
+        unprocessedSymbols: Array.isArray(payload?.unprocessedSymbols) ? payload.unprocessedSymbols as string[] : []
+      };
+    } catch (error) {
+      console.warn('Could not load selected-stock notification quotes:', error);
+      return { quotes: {}, unavailableSymbols: batch, unprocessedSymbols: [] };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }));
+  return results.reduce((combined, result) => ({
+    quotes: { ...combined.quotes, ...result.quotes },
+    unavailableSymbols: [...combined.unavailableSymbols, ...result.unavailableSymbols],
+    unprocessedSymbols: [...combined.unprocessedSymbols, ...result.unprocessedSymbols]
+  }), { quotes: {} as Record<string, LiveQuote>, unavailableSymbols: [] as string[], unprocessedSymbols: [] as string[] });
 }
 
 export async function fetchLiveEarningsCalendar(symbols?: string[]): Promise<Record<string, LiveEarningsDateData>> {
