@@ -35,6 +35,10 @@ import {
 import { fetchVerifiedResearchQuote } from './src/services/researchSessionQuotes';
 import { withoutReportVisualBytes } from './src/utils/researchReportPolicy';
 import { getVerifiedAlertPreviousClose, isFreshSecAcceptance } from './src/services/notificationRules';
+import { NOTIFICATION_APP_STOCKS } from './src/data/allAppStocks';
+import { createUnsupportedEarningsCalendarData } from './src/services/earningsCalendarRules';
+import type { LiveEarningsDateData } from './src/services/earningsCalendarRules';
+import { YahooEarningsCalendarProvider } from './src/services/yahooEarningsCalendarProvider';
 const { Pool } = pg;
 
 dotenv.config({ path: '.env.local' });
@@ -3322,24 +3326,9 @@ app.get('/api/market-quote/:symbol', async (req, res) => {
 });
 
 // ==========================================
-// EARNINGS CALENDAR & REPORTING DATES ENGINE
-// 100% Free & Open Institutional Feeds:
-// 1. Yahoo Finance Real-Time Calendar API (Keyless Crumb Session)
-// 2. SEC EDGAR Official Filings & Reporting Deadlines (Keyless U.S. Gov Public API)
-// 3. Nasdaq Public Calendar Feed (Keyless Exchange Endpoint)
+// EARNINGS CALENDAR
+// A separate Yahoo QuoteSummary calendar adapter; this does not feed historical results.
 // ==========================================
-interface LiveEarningsDateData {
-  symbol: string;
-  reportDate: string; // YYYY-MM-DD
-  reportTime: 'BMO' | 'AMC';
-  fiscalQuarter?: string;
-  epsEstimate?: number;
-  revenueEstimate?: number;
-  isConfirmed: boolean;
-  provider: string;
-  lastUpdated: string;
-}
-
 const SEC_CIK_REGISTRY: Record<string, string> = {
   'NVDA': '0001045810',
   'MSFT': '0000789019',
@@ -3398,9 +3387,6 @@ const SEC_CIK_REGISTRY: Record<string, string> = {
   'BBVA': '0000842180',
   'UBS': '0001114446'
 };
-
-let earningsCalendarCache: Record<string, { data: LiveEarningsDateData; timestamp: number }> = {};
-const EARNINGS_CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
 
 async function getYahooCrumb(): Promise<{ cookie: string; crumb: string } | null> {
   const session = await getYahooSession();
@@ -4093,233 +4079,67 @@ app.get('/api/quarterly-analyst-outlook', async (req, res) => {
 });
 
 
-// Fallback registry for verified next earnings dates
-const VERIFIED_EARNINGS_CALENDAR_REGISTRY: Record<string, { date: string; time: 'BMO' | 'AMC'; quarter: string; eps: number; rev: number }> = {
-  // Hyperscalers & Neo Clouds
-  'CRWV': { date: '2026-11-11', time: 'AMC', quarter: 'Q3 2026', eps: -0.80, rev: 3.10 },
-  'NBIS': { date: '2026-11-10', time: 'AMC', quarter: 'Q3 FY2026', eps: -0.45, rev: 0.75 },
-  'IREN': { date: '2026-11-05', time: 'AMC', quarter: 'Q1 FY2027', eps: -0.40, rev: 0.22 },
-  'SPCX': { date: '2026-11-03', time: 'AMC', quarter: 'Q3 2026', eps: -0.95, rev: 6.10 },
+// Live-only earnings calendar adapter. Dates and identity come from Yahoo QuoteSummary;
+// no SEC filing, local registry, quarter template, or estimate is used as a schedule fallback.
+const earningsCalendarStocksBySymbol = new Map(
+  NOTIFICATION_APP_STOCKS.map(stock => [stock.ticker.toUpperCase(), stock])
+);
+const yahooEarningsCalendarProvider = new YahooEarningsCalendarProvider({
+  mapSymbol: symbol => YAHOO_SYMBOL_MAP[symbol.toUpperCase()] || symbol,
+  maxConcurrent: 4,
+  quoteTimeoutMs: 8000,
+  authTimeoutMs: 5000,
+  cacheTtlMs: 30 * 60 * 1000,
+  errorCacheTtlMs: 60 * 1000
+});
+const EARNINGS_CALENDAR_MAX_REQUEST_SYMBOLS = 12;
 
-  // Megacap Tech
-  'NVDA': { date: '2026-11-18', time: 'AMC', quarter: 'Q3 FY2027', eps: 2.47, rev: 108.99 },
-  'MSFT': { date: '2026-10-27', time: 'AMC', quarter: 'Q1 FY2027', eps: 3.45, rev: 68.20 },
-  'AAPL': { date: '2026-10-29', time: 'AMC', quarter: 'Q4 FY2026', eps: 1.74, rev: 102.30 },
-  'GOOGL': { date: '2026-10-27', time: 'AMC', quarter: 'Q3 2026', eps: 2.15, rev: 92.40 },
-  'AMZN': { date: '2026-10-29', time: 'AMC', quarter: 'Q3 2026', eps: 1.48, rev: 168.50 },
-  'META': { date: '2026-10-28', time: 'AMC', quarter: 'Q3 2026', eps: 5.62, rev: 44.80 },
-  'TSM': { date: '2026-10-15', time: 'BMO', quarter: 'Q3 2026', eps: 1.95, rev: 26.50 },
-  'AVGO': { date: '2026-12-10', time: 'AMC', quarter: 'Q4 FY2026', eps: 1.42, rev: 14.20 },
-  'ORCL': { date: '2026-12-09', time: 'AMC', quarter: 'Q2 FY2027', eps: 1.55, rev: 14.80 },
-  'AMD': { date: '2026-10-27', time: 'AMC', quarter: 'Q3 2026', eps: 1.15, rev: 7.50 },
-  'CRM': { date: '2026-11-25', time: 'AMC', quarter: 'Q3 FY2027', eps: 2.65, rev: 10.10 },
-  'NFLX': { date: '2026-10-15', time: 'AMC', quarter: 'Q3 2026', eps: 5.40, rev: 10.20 },
-  // European Tech
-  'ASML': { date: '2026-10-14', time: 'BMO', quarter: 'Q3 2026', eps: 6.85, rev: 8.42 },
-  'SAP': { date: '2026-10-22', time: 'AMC', quarter: 'Q3 2026', eps: 1.65, rev: 9.10 },
-  'ARM': { date: '2026-11-04', time: 'AMC', quarter: 'Q2 FY2027', eps: 0.38, rev: 0.98 },
-  'SPOT': { date: '2026-11-10', time: 'BMO', quarter: 'Q3 2026', eps: 1.85, rev: 4.30 },
-  // Shovel Sellers (Semis & Equipment)
-  'AMAT': { date: '2026-11-12', time: 'AMC', quarter: 'Q4 FY2026', eps: 2.35, rev: 7.25 },
-  'LRCX': { date: '2026-10-21', time: 'AMC', quarter: 'Q1 FY2027', eps: 8.20, rev: 4.15 },
-  'KLAC': { date: '2026-10-22', time: 'AMC', quarter: 'Q1 FY2027', eps: 7.45, rev: 2.85 },
-  'TER': { date: '2026-10-28', time: 'AMC', quarter: 'Q3 2026', eps: 1.05, rev: 0.78 },
-  'MU': { date: '2026-12-16', time: 'AMC', quarter: 'Q1 FY2027', eps: 2.10, rev: 9.15 },
-  'INTC': { date: '2026-10-22', time: 'AMC', quarter: 'Q3 2026', eps: 0.18, rev: 13.50 },
-  'MRVL': { date: '2026-11-24', time: 'AMC', quarter: 'Q3 FY2027', eps: 0.58, rev: 1.65 },
-  'TXN': { date: '2026-10-20', time: 'AMC', quarter: 'Q3 2026', eps: 1.45, rev: 4.25 },
-  'NXPI': { date: '2026-11-02', time: 'AMC', quarter: 'Q3 2026', eps: 3.30, rev: 3.25 },
-  'WDC': { date: '2026-10-29', time: 'AMC', quarter: 'Q1 FY2027', eps: 1.85, rev: 4.35 },
-  'STX': { date: '2026-10-21', time: 'AMC', quarter: 'Q1 FY2027', eps: 1.95, rev: 2.25 },
-  'DELL': { date: '2026-11-24', time: 'AMC', quarter: 'Q3 FY2027', eps: 2.15, rev: 25.40 },
-  'SMCI': { date: '2026-11-03', time: 'AMC', quarter: 'Q1 FY2027', eps: 0.85, rev: 6.80 },
-  'HPE': { date: '2026-12-03', time: 'AMC', quarter: 'Q4 FY2026', eps: 0.58, rev: 8.60 },
-  'LITE': { date: '2026-11-05', time: 'AMC', quarter: 'Q1 FY2027', eps: 0.72, rev: 0.44 },
-  'COHR': { date: '2026-11-04', time: 'AMC', quarter: 'Q1 FY2027', eps: 0.85, rev: 1.45 },
-  'CIEN': { date: '2026-12-10', time: 'BMO', quarter: 'Q4 FY2026', eps: 0.78, rev: 1.15 },
-  'ASTS': { date: '2026-11-12', time: 'AMC', quarter: 'Q3 2026', eps: -0.22, rev: 0.04 },
-  'IONQ': { date: '2026-11-09', time: 'AMC', quarter: 'Q3 2026', eps: -0.24, rev: 0.02 },
-  'QBTS': { date: '2026-11-10', time: 'AMC', quarter: 'Q3 2026', eps: -0.15, rev: 0.01 },
-  // US Financials
-  'JPM': { date: '2026-10-14', time: 'BMO', quarter: 'Q3 2026', eps: 4.88, rev: 44.80 },
-  'BAC': { date: '2026-10-15', time: 'BMO', quarter: 'Q3 2026', eps: 0.92, rev: 26.50 },
-  'C': { date: '2026-10-14', time: 'BMO', quarter: 'Q3 2026', eps: 1.72, rev: 21.20 },
-  'WFC': { date: '2026-10-14', time: 'BMO', quarter: 'Q3 2026', eps: 1.45, rev: 21.00 },
-  'MS': { date: '2026-10-16', time: 'BMO', quarter: 'Q3 2026', eps: 2.18, rev: 16.80 },
-  'GS': { date: '2026-10-15', time: 'BMO', quarter: 'Q3 2026', eps: 10.45, rev: 14.50 },
-  'BX': { date: '2026-10-22', time: 'BMO', quarter: 'Q3 2026', eps: 1.25, rev: 3.10 },
-  'KKR': { date: '2026-10-29', time: 'BMO', quarter: 'Q3 2026', eps: 1.35, rev: 1.85 },
-  'APO': { date: '2026-11-04', time: 'BMO', quarter: 'Q3 2026', eps: 1.95, rev: 1.42 },
-  'ARES': { date: '2026-10-30', time: 'BMO', quarter: 'Q3 2026', eps: 1.28, rev: 1.15 },
-  // European Financials
-  'BCS': { date: '2026-10-23', time: 'BMO', quarter: 'Q3 2026', eps: 0.24, rev: 6.80 },
-  'HSBC': { date: '2026-10-28', time: 'BMO', quarter: 'Q3 2026', eps: 1.88, rev: 16.20 },
-  'ABN': { date: '2026-11-11', time: 'BMO', quarter: 'Q3 2026', eps: 0.95, rev: 2.25 },
-  'ING': { date: '2026-10-31', time: 'BMO', quarter: 'Q3 2026', eps: 0.62, rev: 5.75 },
-  'RABO': { date: '2026-11-19', time: 'BMO', quarter: 'Q3 2026', eps: 2.85, rev: 3.45 },
-  'BNP': { date: '2026-10-30', time: 'BMO', quarter: 'Q3 2026', eps: 2.72, rev: 12.80 },
-  'GLE': { date: '2026-10-31', time: 'BMO', quarter: 'Q3 2026', eps: 1.48, rev: 6.60 },
-  'UBS': { date: '2026-10-29', time: 'BMO', quarter: 'Q3 2026', eps: 0.68, rev: 12.20 },
-  'SAN': { date: '2026-10-28', time: 'BMO', quarter: 'Q3 2026', eps: 0.22, rev: 15.60 },
-  'BBVA': { date: '2026-10-30', time: 'BMO', quarter: 'Q3 2026', eps: 0.44, rev: 8.80 }
-};
-
-async function fetchEarningsDate(symbol: string): Promise<LiveEarningsDateData> {
+async function getLiveEarningsCalendarEntry(symbol: string, forceRefresh = false): Promise<LiveEarningsDateData> {
   const normalized = symbol.toUpperCase().trim();
-  const now = Date.now();
-
-  // 1. Check in-memory cache
-  const cached = earningsCalendarCache[normalized];
-  if (cached && (now - cached.timestamp) < EARNINGS_CACHE_TTL_MS) {
-    return cached.data;
+  const equity = earningsCalendarStocksBySymbol.get(normalized);
+  if (!equity) {
+    return createUnsupportedEarningsCalendarData(normalized, 'This ticker is not in the app equity inventory.');
   }
-
-  // 2. Primary Keyless Source: Yahoo Finance Calendar Events API with live Crumb session
-  try {
-    const session = await getYahooCrumb();
-    if (session) {
-      const yahooSymbol = YAHOO_SYMBOL_MAP[normalized] || normalized;
-      const yUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooSymbol)}?modules=calendarEvents&crumb=${encodeURIComponent(session.crumb)}`;
-      const yRes = await fetch(yUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Cookie': session.cookie
-        }
-      });
-
-      if (yRes.ok) {
-        const yJson = await yRes.json();
-        const cal = yJson?.quoteSummary?.result?.[0]?.calendarEvents;
-        const earnings = cal?.earnings;
-        const ed = earnings?.earningsDate?.[0];
-        if (ed) {
-          const dateStr = ed.fmt || (ed.raw ? new Date(ed.raw * 1000).toISOString().split('T')[0] : null);
-          if (dateStr) {
-            const isEstimate = earnings?.isEarningsDateEstimate !== false;
-            const epsEst = earnings?.earningsAverage?.raw !== undefined ? Number(earnings.earningsAverage.raw.toFixed(2)) : undefined;
-            const revEst = earnings?.revenueAverage?.raw !== undefined ? Number((earnings.revenueAverage.raw / 1e9).toFixed(2)) : undefined;
-            
-            const data: LiveEarningsDateData = {
-              symbol: normalized,
-              reportDate: dateStr,
-              reportTime: 'AMC',
-              fiscalQuarter: VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized]?.quarter || 'Next Quarter',
-              epsEstimate: epsEst || VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized]?.eps,
-              revenueEstimate: revEst || VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized]?.rev,
-              isConfirmed: !isEstimate,
-              provider: 'Yahoo Finance Real-Time Calendar',
-              lastUpdated: new Date().toISOString()
-            };
-            earningsCalendarCache[normalized] = { data, timestamp: now };
-            return data;
-          }
-        }
-      }
-    }
-  } catch (yErr) {
-    console.warn(`[Yahoo Calendar] Fetch error for ${normalized}:`, yErr);
-  }
-
-  // 3. Official Keyless Regulatory Source: SEC EDGAR Public Submissions API
-  const cik = SEC_CIK_REGISTRY[normalized];
-  if (cik) {
-    try {
-      const secUrl = `https://data.sec.gov/submissions/CIK${cik}.json`;
-      const secRes = await fetch(secUrl, {
-        headers: {
-          'User-Agent': 'GlobalMarketsResearchDesk support@investmentresearch.com',
-          'Accept-Encoding': 'gzip, deflate'
-        }
-      });
-      if (secRes.ok) {
-        const secJson = await secRes.json();
-        const recent = secJson?.filings?.recent;
-        if (recent && Array.isArray(recent.form) && recent.form.length > 0) {
-          const reg = VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized];
-          const data: LiveEarningsDateData = {
-            symbol: normalized,
-            reportDate: reg?.date || '2026-10-28',
-            reportTime: reg?.time || 'AMC',
-            fiscalQuarter: reg?.quarter || 'Q3 2026',
-            epsEstimate: reg?.eps,
-            revenueEstimate: reg?.rev,
-            isConfirmed: true,
-            provider: 'SEC EDGAR Official Regulatory Filings',
-            lastUpdated: new Date().toISOString()
-          };
-          earningsCalendarCache[normalized] = { data, timestamp: now };
-          return data;
-        }
-      }
-    } catch (secErr) {
-      console.warn(`[SEC EDGAR] Fetch error for ${normalized}:`, secErr);
-    }
-  }
-
-  // 4. Institutional Verified Consensus Calendar Registry Fallback
-  const reg = VERIFIED_EARNINGS_CALENDAR_REGISTRY[normalized] || {
-    date: '2026-10-28',
-    time: 'AMC',
-    quarter: 'Q3 2026',
-    eps: 1.50,
-    rev: 12.50
-  };
-
-  const fallbackData: LiveEarningsDateData = {
-    symbol: normalized,
-    reportDate: reg.date,
-    reportTime: reg.time,
-    fiscalQuarter: reg.quarter,
-    epsEstimate: reg.eps,
-    revenueEstimate: reg.rev,
-    isConfirmed: true,
-    provider: 'Yahoo Finance & SEC EDGAR Desk',
-    lastUpdated: new Date().toISOString()
-  };
-
-  earningsCalendarCache[normalized] = { data: fallbackData, timestamp: now };
-  return fallbackData;
+  return yahooEarningsCalendarProvider.get({ symbol: equity.ticker, name: equity.name }, forceRefresh);
 }
 
-// Live Earnings Calendar Endpoint
 app.get('/api/earnings-calendar', async (req, res) => {
+  const symbolsParam = typeof req.query.symbols === 'string' ? req.query.symbols : '';
+  const requestedSymbols = [...new Set(symbolsParam.split(',').map(symbol => symbol.trim().toUpperCase()).filter(Boolean))];
+  if (!requestedSymbols.length) {
+    return res.status(400).json({ success: false, error: 'Provide one to twelve app equity symbols.' });
+  }
+  if (requestedSymbols.length > EARNINGS_CALENDAR_MAX_REQUEST_SYMBOLS) {
+    return res.status(400).json({ success: false, error: 'Calendar requests are limited to twelve symbols.' });
+  }
+
   try {
-    const symbolsParam = req.query.symbols as string;
-    const requestedSymbols = symbolsParam 
-      ? symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-      : Object.keys(VERIFIED_EARNINGS_CALENDAR_REGISTRY);
-
-    const datesPromises = requestedSymbols.map(sym => fetchEarningsDate(sym));
-    const dates = await Promise.all(datesPromises);
-
-    const datesMap: Record<string, LiveEarningsDateData> = {};
-    for (const d of dates) {
-      datesMap[d.symbol] = d;
-    }
-
+    const forceRefresh = req.query.refresh === '1';
+    const results = await Promise.all(requestedSymbols.map(symbol => getLiveEarningsCalendarEntry(symbol, forceRefresh)));
+    const calendar: Record<string, LiveEarningsDateData> = {};
+    for (const item of results) calendar[item.symbol] = item;
     return res.json({
       success: true,
-      timestamp: new Date().toISOString(),
-      provider: 'Yahoo Finance & SEC EDGAR Real-Time Feeds (100% Free & Keyless)',
-      calendar: datesMap
+      provider: 'Yahoo Finance QuoteSummary calendarEvents',
+      checkedAt: new Date().toISOString(),
+      inventoryCount: NOTIFICATION_APP_STOCKS.length,
+      requestedCount: requestedSymbols.length,
+      calendar
     });
-  } catch (err: any) {
-    console.error('Error fetching earnings calendar:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Calendar fetch failed' });
+  } catch (error) {
+    console.error('Live earnings calendar request failed:', error);
+    return res.status(500).json({ success: false, error: 'Yahoo calendar request failed.' });
   }
 });
 
-// Single Stock Earnings Date Endpoint
 app.get('/api/earnings-calendar/:symbol', async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
-    const earningsDate = await fetchEarningsDate(symbol);
-    return res.json({ success: true, earningsDate });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
+    const earningsDate = await getLiveEarningsCalendarEntry(req.params.symbol);
+    return res.json({ success: true, provider: 'Yahoo Finance QuoteSummary calendarEvents', earningsDate });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Yahoo calendar request failed.' });
   }
 });
-
 // ==========================================
 // SEC EDGAR OFFICIAL 8-K FILINGS PIPELINE
 // Real-time regulatory feed from SEC EDGAR Submissions API

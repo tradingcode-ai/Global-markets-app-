@@ -1,14 +1,5 @@
 import { LiveQuote, NotificationAssetCatalogItem } from '../types';
-
-export interface LiveEarningsDateData {
-  symbol: string;
-  reportDate?: string;
-  reportTime?: 'BMO' | 'AMC';
-  isConfirmed?: boolean;
-  provider?: string;
-  epsEstimate?: number;
-  revenueEstimate?: number;
-}
+import { createUnavailableEarningsCalendarData, LiveEarningsDateData } from './earningsCalendarRules';
 
 export async function fetchLiveMarketQuotes(symbols?: string[]): Promise<Record<string, LiveQuote>> {
   try {
@@ -99,19 +90,63 @@ export async function fetchNotificationStockQuotes(symbols: string[]): Promise<{
   }), { quotes: {} as Record<string, LiveQuote>, unavailableSymbols: [] as string[], unprocessedSymbols: [] as string[] });
 }
 
-export async function fetchLiveEarningsCalendar(symbols?: string[]): Promise<Record<string, LiveEarningsDateData>> {
-  try {
-    const url = symbols && symbols.length > 0
-      ? `/api/earnings-calendar?symbols=${encodeURIComponent(symbols.join(','))}`
-      : '/api/earnings-calendar';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    const json = await res.json();
-    return json.calendar || {};
-  } catch (err) {
-    console.warn('Failed to fetch live earnings calendar:', err);
-    return {};
+export async function fetchLiveEarningsCalendar(
+  symbols: string[],
+  options: {
+    forceRefresh?: boolean;
+    signal?: AbortSignal;
+    onBatch?: (batch: Record<string, LiveEarningsDateData>) => void;
+  } = {}
+): Promise<Record<string, LiveEarningsDateData>> {
+  const normalized = [...new Set(symbols.map(symbol => symbol.toUpperCase().trim()).filter(Boolean))];
+  const combined: Record<string, LiveEarningsDateData> = {};
+  const batchSize = 12;
+
+  for (let offset = 0; offset < normalized.length; offset += batchSize) {
+    if (options.signal?.aborted) break;
+    const batch = normalized.slice(offset, offset + batchSize);
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort();
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    try {
+      const query = new URLSearchParams({ symbols: batch.join(',') });
+      if (options.forceRefresh) query.set('refresh', '1');
+      const response = await fetch(`/api/earnings-calendar?${query.toString()}`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+      const payload = await response.json();
+      const received = payload?.calendar && typeof payload.calendar === 'object'
+        ? payload.calendar as Record<string, LiveEarningsDateData>
+        : {};
+      const checkedAt = new Date().toISOString();
+      const batchResult: Record<string, LiveEarningsDateData> = {};
+      for (const symbol of batch) {
+        const data = received[symbol];
+        batchResult[symbol] = data && data.symbol === symbol
+          ? data
+          : createUnavailableEarningsCalendarData(symbol, 'The provider did not return a status for this ticker.', checkedAt);
+      }
+      Object.assign(combined, batchResult);
+      options.onBatch?.(batchResult);
+    } catch (error) {
+      if (options.signal?.aborted) break;
+      const checkedAt = new Date().toISOString();
+      const reason = error instanceof Error && error.name === 'AbortError'
+        ? 'The Yahoo calendar request timed out.'
+        : 'The Yahoo calendar source could not be reached.';
+      const failedBatch = Object.fromEntries(batch.map(symbol => [
+        symbol,
+        createUnavailableEarningsCalendarData(symbol, reason, checkedAt)
+      ]));
+      Object.assign(combined, failedBatch);
+      options.onBatch?.(failedBatch);
+    } finally {
+      clearTimeout(timeout);
+      options.signal?.removeEventListener('abort', abortFromCaller);
+    }
   }
+
+  return combined;
 }
 
 export async function fetchQuarterlyAnalystOutlook(symbols?: string[], forceRefresh = false): Promise<{ data: Record<string, any>; provider?: string }> {

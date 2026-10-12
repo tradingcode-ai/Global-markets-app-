@@ -40,7 +40,7 @@ import {
   isFreshSecAcceptance,
   saveQuoteObservation
 } from './services/notificationRules';
-import { fetchLiveMarketQuotes, fetchLiveEarningsCalendar, fetchQuarterlyAnalystOutlook, fetchNotificationAssetCatalog, fetchNotificationAssetQuotes, fetchNotificationStockQuotes } from './services/marketDataService';
+import { fetchLiveMarketQuotes, fetchQuarterlyAnalystOutlook, fetchNotificationAssetCatalog, fetchNotificationAssetQuotes, fetchNotificationStockQuotes } from './services/marketDataService';
 import { CorporateHeader } from './components/CorporateHeader';
 import { RealTimeTrackerBar } from './components/RealTimeTrackerBar';
 import { GlobalMarketsMap } from './components/GlobalMarketsMap';
@@ -749,38 +749,11 @@ export default function App() {
     }
   }, [checkMarketSessionAlerts]);
 
-  // Fetch Live Real-Time Earnings Reporting Dates from Yahoo Finance & SEC EDGAR Keyless Feeds
-  const loadEarningsCalendar = useCallback(async () => {
-    try {
-      const calData = await fetchLiveEarningsCalendar();
-      if (calData && Object.keys(calData).length > 0) {
-        setResults(prevResults => prevResults.map(r => {
-          const live = calData[r.ticker] || calData[r.ticker.toUpperCase()];
-          if (live) {
-            return {
-              ...r,
-              reportDate: live.reportDate || r.reportDate,
-              reportTime: live.reportTime || r.reportTime,
-              isDateConfirmed: live.isConfirmed,
-              liveDateProvider: live.provider,
-              epsEstimate: live.epsEstimate ?? r.epsEstimate,
-              revenueEstimate: live.revenueEstimate ?? r.revenueEstimate
-            };
-          }
-          return r;
-        }));
-      }
-    } catch (err) {
-      console.warn('Could not sync live earnings calendar:', err);
-    }
-  }, []);
-
   // Initial fetch on mount
   useEffect(() => {
     loadMarketQuotes(true);
-    loadEarningsCalendar();
     loadSec8kFilings();
-  }, [loadMarketQuotes, loadEarningsCalendar, loadSec8kFilings]);
+  }, [loadMarketQuotes, loadSec8kFilings]);
 
   // Independent from the equity display feed so non-equity alerts still check when it fails.
   useEffect(() => {
@@ -1407,12 +1380,8 @@ export default function App() {
         {/* Tab 3: Earnings Calendar View */}
         {activeTab === 'calendar' && (
           <EarningsCalendarView
-            results={filteredResults}
             subscribedTickers={preferences.subscribedTickers}
-            quotes={quotes}
             onToggleSubscription={handleToggleSubscription}
-            onSelectResult={(item) => setSelectedResultForModal(item)}
-            onGenerateAiMemo={(item) => setSelectedResultForModal(item)}
           />
         )}
 
