@@ -33,6 +33,7 @@ import {
   QuoteFetcher
 } from './src/services/marketResearchMonitor';
 import { fetchVerifiedResearchQuote } from './src/services/researchSessionQuotes';
+import { getResearchDatabaseId } from './src/services/marketResearchSessionStore';
 import { withoutReportVisualBytes } from './src/utils/researchReportPolicy';
 import { getVerifiedAlertPreviousClose, isFreshSecAcceptance } from './src/services/notificationRules';
 import { NOTIFICATION_APP_STOCKS } from './src/data/allAppStocks';
@@ -6637,11 +6638,11 @@ const researchQuoteFetcher: QuoteFetcher = async (symbol: string) => {
 let researchSchedulerTimer: NodeJS.Timeout | null = null;
 let researchSchedulerRunning = false;
 
-function setupResearchScheduler(intervalMin = 5) {
+function setupResearchScheduler(intervalMin = 15) {
   if (researchSchedulerTimer) {
     clearInterval(researchSchedulerTimer);
   }
-  const safeMin = Math.max(1, intervalMin);
+  const safeMin = Math.max(15, intervalMin);
   const ms = safeMin * 60 * 1000;
   console.log(`[Research Scheduler] Market Monitor scheduled to wake every ${safeMin} minutes.`);
   researchSchedulerTimer = setInterval(async () => {
@@ -6663,6 +6664,13 @@ function setupResearchScheduler(intervalMin = 5) {
 }
 
 // 1. Research Dashboard summary
+app.get('/api/research/health', async (_req, res) => {
+  const databaseId = await getResearchDatabaseId(getAgentPgPool()).catch(() => null);
+  res.json({ success: true, service: 'market-research', researchVersion: 'session-direction-v1',
+    commit: process.env.RENDER_GIT_COMMIT || null, databaseId, storageReady: Boolean(databaseId),
+    timestamp: new Date().toISOString() });
+});
+
 app.get('/api/research/dashboard', async (_req, res) => {
   try {
     const pool = getAgentPgPool();
@@ -6767,7 +6775,9 @@ app.post(['/api/research/monitor/run', '/api/research/scan'], async (_req, res) 
   try {
     const pool = getAgentPgPool();
     const result = await runMarketResearchMonitor(researchQuoteFetcher, pool, { autoRunAgent: true });
-    return res.json({ success: true, result });
+    return res.json({ success: true, result, events_triggered: result.newEvents.length,
+      scanned_count: result.checkedAssetsCount,
+      message: `Scan complete: ${result.checkedAssetsCount} assets checked, ${result.newEvents.length} new session events, ${result.skippedDedupCount} existing events reused.` });
   } catch (err: any) {
     console.error('Error running market research monitor:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -6806,7 +6816,7 @@ async function startServer() {
   if (process.env.MATRIX_REVIEW_MODE === '1') {
     console.log('[Research Scheduler] Paused for local Consensus Matrix review.');
   } else {
-    setupResearchScheduler(5);
+    setupResearchScheduler(15);
   }
 
   if (process.env.NODE_ENV === 'production') {

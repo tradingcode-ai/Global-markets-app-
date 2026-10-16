@@ -14,6 +14,7 @@ import {
 } from '../services/marketResearchService';
 import { ResearchReportModal } from './ResearchReportModal';
 import { isResearchReportRetained } from '../utils/researchReportPolicy';
+import { groupResearchReports } from '../services/researchReportGrouping';
 import { ResearchConfigModal } from './ResearchConfigModal';
 import { StockLogo } from './StockLogo';
 import { 
@@ -130,7 +131,7 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
     const assetsList = Object.values(data.config?.assets || {}) as AssetResearchConfig[];
     const monitored = assetsList.filter(a => a?.enabled).length;
     const active = data.activeEvents?.length ?? data.stats?.activeCount ?? 0;
-    const completed = data.recentReports?.length ?? data.stats?.totalReports ?? 0;
+    const completed = groupResearchReports(data.recentReports || [], data.recentEvents || []).length;
     const events = data.recentEvents?.length ?? data.stats?.totalEvents ?? 0;
     return { active, completed, events, monitored };
   }, [data]);
@@ -143,16 +144,17 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
   // Filtered reports
   const filteredReports = useMemo(() => {
     if (!data?.recentReports) return [];
-    if (!searchQuery.trim()) return data.recentReports;
+    const reports = groupResearchReports(data.recentReports, data.recentEvents || []);
+    if (!searchQuery.trim()) return reports;
     const q = searchQuery.toLowerCase();
-    return data.recentReports.filter(r => 
+    return reports.filter(r =>
       r.ticker.toLowerCase().includes(q) ||
       (r.assetName && r.assetName.toLowerCase().includes(q)) ||
       (r.asset && r.asset.toLowerCase().includes(q)) ||
       r.executiveSummary?.toLowerCase().includes(q) ||
       r.executive_summary?.toLowerCase().includes(q)
     );
-  }, [data?.recentReports, searchQuery]);
+  }, [data?.recentReports, data?.recentEvents, searchQuery]);
 
   // Filtered events
   const filteredEvents = useMemo(() => {
@@ -243,13 +245,13 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
           <div>
             <span className="text-slate-400 block text-[11px] font-sans">Monitor Interval</span>
             <span className="font-semibold text-white">
-              {data?.config?.schedulerIntervalMin || 5} minuut cyclus
+              Render 15m · GitHub 5m
             </span>
           </div>
           <div>
             <span className="text-slate-400 block text-[11px] font-sans">Deduplicatie</span>
             <span className="font-semibold text-white">
-              {data?.config?.dedupWindowHours || 24}u fingerprint venster
+              Max. 1 UP + 1 DOWN per beursessie
             </span>
           </div>
           <div>
@@ -498,6 +500,17 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({
                     <p className="text-xs text-slate-700 line-clamp-3 leading-relaxed">
                       {report.executiveSummary || report.executive_summary}
                     </p>
+                    {!!report.alternativeReports?.length && (
+                      <details className="text-xs text-slate-500" onClick={event => event.stopPropagation()}>
+                        <summary className="cursor-pointer">{report.alternativeReports.length} andere kopieën met dezelfde sessiereferentie</summary>
+                        <div className="mt-2 flex flex-col items-start gap-2">
+                          {report.alternativeReports.map(copy => <button key={copy.id} type="button"
+                            onClick={() => void handleOpenReport(copy.id)} className="text-blue-700 hover:underline">
+                            {copy.ticker} · {copy.status || 'Rapport'} · {copy.createdAt ? new Date(copy.createdAt).toLocaleString() : copy.id}
+                          </button>)}
+                        </div>
+                      </details>
+                    )}
                   </div>
 
                   {/* Footer metadata */}

@@ -600,6 +600,8 @@ export interface VisualBrief {
 
 export interface ResearchReport {
   id: string;
+  sessionKey?: string;
+  alternativeReports?: Array<{ id: string; ticker: string; status?: string; createdAt?: string }>;
   eventId?: string;
   event_id?: string;
   ticker: string;
@@ -663,6 +665,10 @@ export interface ResearchReport {
 
 export interface ResearchEvent {
   id: string;
+  sessionStart?: string;
+  sessionEnd?: string;
+  sessionDate?: string;
+  triggerDirection?: 'UP' | 'DOWN';
   ticker: string;
   assetName?: string;
   asset_name?: string;
@@ -724,7 +730,6 @@ export interface ResearchConfig {
   schedulerIntervalMin?: number;
   categories?: Record<string, CategoryThreshold>;
   assets?: Record<string, AssetResearchConfig>;
-  dedupWindowHours?: number;
   // Aliases for frontend/compatibility
   scheduler_interval_minutes?: number;
   is_scheduler_active?: boolean;

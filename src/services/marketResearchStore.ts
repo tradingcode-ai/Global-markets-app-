@@ -6,8 +6,10 @@ import {
   ResearchDashboardData,
   VisualEnrichmentPayload
 } from '../types/marketResearch';
-import { getDefaultResearchConfig } from './marketResearchConfig';
+import { getDefaultResearchConfig, normalizeResearchConfig } from './marketResearchConfig';
 import { getResearchSessionSnapshot } from './researchSessionQuotes';
+import { ensureResearchSessionSchema, completeResearchLease, type ResearchLease } from './marketResearchSessionStore';
+import { groupResearchReports } from './researchReportGrouping';
 import { isResearchReportRetained, RESEARCH_REPORT_RETENTION_MS, retainResearchDashboard, withoutReportVisualBytes } from '../utils/researchReportPolicy';
 
 // In-Memory Fallback Store
@@ -253,6 +255,10 @@ export async function ensureResearchTables(pool: pg.Pool | null): Promise<void> 
           ADD COLUMN IF NOT EXISTS session_close_source VARCHAR(128);
       `);
 
+      await ensureResearchSessionSchema(pool, client);
+      await client.query(`UPDATE market_research_config
+        SET config=(config - 'dedupWindowHours') || '{"schedulerIntervalMin":15,"scheduler_interval_minutes":15}'::jsonb
+        WHERE config ? 'dedupWindowHours' OR config->>'schedulerIntervalMin' IS DISTINCT FROM '15'`);
       tablesInitialized = true;
       console.log('[Market Research Store] PostgreSQL tables verified and active.');
 
@@ -319,6 +325,10 @@ function mapResearchEventRow(r: any): ResearchEvent {
     triggerPrice: r.trigger_price == null ? undefined : Number(r.trigger_price),
     triggerChangePercent: r.trigger_change_percent == null ? undefined : Number(r.trigger_change_percent),
     marketSymbol: r.market_symbol || undefined,
+    sessionStart: r.session_start instanceof Date ? r.session_start.toISOString() : r.session_start || undefined,
+    sessionEnd: r.session_end instanceof Date ? r.session_end.toISOString() : r.session_end || undefined,
+    sessionDate: r.session_date || undefined,
+    triggerDirection: r.trigger_direction || undefined,
     sessionClosePrice: r.session_close_price == null ? undefined : Number(r.session_close_price),
     sessionCloseChangePercent: r.session_close_change_percent == null ? undefined : Number(r.session_close_change_percent),
     sessionClosedAt: r.session_closed_at instanceof Date ? r.session_closed_at.toISOString() : r.session_closed_at || undefined,
@@ -511,51 +521,6 @@ export async function getResearchEvents(
   return list.slice(0, options?.limit || 50);
 }
 
-export async function findActiveEventForTicker(
-  ticker: string,
-  _dedupWindowHours = 24,
-  pool?: pg.Pool | null,
-  sessionDateStr?: string,
-  sessionStart?: string,
-  sessionEnd?: string
-): Promise<ResearchEvent | null> {
-  const todaySessionStr = sessionDateStr || new Date().toISOString().slice(0, 10);
-
-  if (pool) {
-    try {
-      await ensureResearchTables(pool);
-      // Use the provider's exchange session boundaries, never a UTC calendar date.
-      const res = await pool.query(
-        `SELECT * FROM market_research_events 
-         WHERE ticker = $1 
-           AND session_closed_at IS NULL
-           AND (
-             fingerprint LIKE $2
-             OR ($3::timestamptz IS NOT NULL AND $4::timestamptz IS NOT NULL
-                 AND triggered_at >= $3::timestamptz AND triggered_at < $4::timestamptz)
-           )
-         ORDER BY triggered_at DESC 
-         LIMIT 1`,
-        [ticker.toUpperCase(), `${ticker.toUpperCase()}_%_${todaySessionStr}`, sessionStart || null, sessionEnd || null]
-      );
-      if (res.rows && res.rows.length > 0) {
-        return mapResearchEventRow(res.rows[0]);
-      }
-    } catch (err: any) {
-      console.warn('[Market Research Store] DB findActiveEvent error:', err.message);
-    }
-  }
-
-  // Memory fallback - strictly scoped to todaySessionStr
-  const found = inMemoryStore.events.find(
-    e => e.ticker.toUpperCase() === ticker.toUpperCase() &&
-         !e.sessionClosedAt &&
-         (e.fingerprint?.includes(todaySessionStr) ||
-           (!!sessionStart && !!sessionEnd && !!e.triggeredAt && e.triggeredAt >= sessionStart && e.triggeredAt < sessionEnd))
-  );
-  return found || null;
-}
-
 const verifiedSessionStates = new Map<string, ResearchEvent['sessionState']>();
 
 /** Reconcile event sessions against exchange-local Yahoo daily bars. */
@@ -611,7 +576,7 @@ export async function cleanupStaleResearchEvents(
 
   // 1. Clean in-memory store
   for (const ev of inMemoryStore.events) {
-    if ((ev.status === 'RESEARCHING' || ev.status === 'NEW') &&
+    if (!ev.sessionStart && (ev.status === 'RESEARCHING' || ev.status === 'NEW') &&
         (ev.lastCheckedAt || ev.triggeredAt) < cutoffTime) {
       ev.status = 'COOLED_DOWN';
       ev.catalystSummary = ev.catalystSummary || 'Onderzoek afgerond / timeout hersteld';
@@ -628,6 +593,7 @@ export async function cleanupStaleResearchEvents(
          SET status = 'COOLED_DOWN',
              catalyst_summary = COALESCE(catalyst_summary, 'Onderzoek afgerond / timeout hersteld')
          WHERE status IN ('NEW', 'RESEARCHING') 
+           AND NOT EXISTS (SELECT 1 FROM market_research_session_claims c WHERE c.event_id=market_research_events.id)
            AND COALESCE(last_checked_at, triggered_at) < $1`,
         [cutoffTime]
       );
@@ -698,19 +664,10 @@ export function startResearchReportRetention(pool: pg.Pool | null): () => void {
   return () => clearInterval(timer);
 }
 
-export async function saveResearchReport(report: ResearchReport, pool: pg.Pool | null): Promise<ResearchReport> {
-  // Update memory store
-  const existingIdx = inMemoryStore.reports.findIndex(r => r.id === report.id);
-  if (existingIdx >= 0) {
-    inMemoryStore.reports[existingIdx] = { ...report };
-  } else {
-    inMemoryStore.reports.unshift({ ...report });
-  }
-
-  if (pool) {
-    try {
-      await ensureResearchTables(pool);
-      await pool.query(
+export async function saveResearchReport(report: ResearchReport, pool: pg.Pool | null, lease?: ResearchLease): Promise<ResearchReport> {
+  if (!pool || !lease) throw new Error('Report publication requires an owned PostgreSQL session reservation.');
+  await completeResearchLease(pool, lease, report, async client => {
+      await client.query(
         `INSERT INTO market_research_reports (
           id, event_id, asset_name, ticker, asset_class, change_percent, period,
           trigger_timestamp, executive_summary, immediate_catalyst, direct_market_impact,
@@ -755,11 +712,12 @@ export async function saveResearchReport(report: ResearchReport, pool: pg.Pool |
           JSON.stringify(report.visualPayload || report.visual_payload || null)
         ]
       );
-    } catch (err: any) {
-      console.warn('[Market Research Store] DB report save warning:', err.message);
-    }
-  }
-
+  });
+  // A memory copy is visible only after the fenced database transaction commits.
+  const existingIdx = inMemoryStore.reports.findIndex(r => r.id === report.id);
+  if (existingIdx >= 0) inMemoryStore.reports[existingIdx] = { ...report };
+  else inMemoryStore.reports.unshift({ ...report });
+  cachedDashboard = null;
   return report;
 }
 
@@ -815,21 +773,34 @@ export async function getResearchReports(
   if (pool) {
     try {
       await ensureResearchTables(pool);
-      let sql = `SELECT * FROM market_research_reports WHERE created_at > $1`;
+      // Group lightweight metadata before fetching report bodies/images or applying the page limit.
+      let sql = `SELECT r.id,r.event_id,r.ticker,r.status,r.created_at,r.change_percent,r.period,
+        e.fingerprint,e.session_date,e.trigger_direction,e.trigger_change_percent,e.market_symbol
+        FROM market_research_reports r LEFT JOIN market_research_events e ON e.id=r.event_id
+        WHERE r.created_at > $1`;
       const params: any[] = [new Date(Date.now() - RESEARCH_REPORT_RETENTION_MS).toISOString()];
 
       if (options?.ticker) {
         params.push(options.ticker.toUpperCase());
-        sql += ` AND ticker = $${params.length}`;
+        sql += ` AND r.ticker = $${params.length}`;
       }
 
-      const limit = Math.min(options?.limit || 30, 100);
-      sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
-      params.push(limit);
-
-      const res = await pool.query(sql, params);
+      const limit = Math.max(1, Math.min(options?.limit || 30, 100));
+      const metadata = await pool.query(sql, params);
+      const reportMetadata = metadata.rows.map(row => ({ id: row.id, eventId: row.event_id, ticker: row.ticker,
+        status: row.status, createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+        changePercent: Number(row.change_percent), period: row.period } as ResearchReport));
+      const eventMetadata = metadata.rows.map(row => ({ id: row.event_id, ticker: row.ticker, status: 'CLOSED',
+        fingerprint: row.fingerprint, sessionDate: row.session_date, marketSymbol: row.market_symbol,
+        triggerDirection: row.trigger_direction,
+        triggerChangePercent: row.trigger_change_percent == null ? undefined : Number(row.trigger_change_percent) } as ResearchEvent));
+      const grouped = groupResearchReports(reportMetadata, eventMetadata).slice(0, limit);
+      const byId = new Map(grouped.map(report => [report.id, report]));
+      if (!grouped.length) return [];
+      const res = await pool.query('SELECT * FROM market_research_reports WHERE id=ANY($1::text[]) ORDER BY created_at DESC', [grouped.map(report => report.id)]);
       if (res.rows && res.rows.length > 0) {
         return res.rows.map(r => ({
+          ...byId.get(r.id),
           id: r.id,
           eventId: r.event_id,
           assetName: r.asset_name,
@@ -860,7 +831,7 @@ export async function getResearchReports(
     }
   }
 
-  let list = inMemoryStore.reports.filter(report => isResearchReportRetained(report));
+  let list = groupResearchReports(inMemoryStore.reports.filter(report => isResearchReportRetained(report)), inMemoryStore.events);
   if (options?.ticker) {
     list = list.filter(r => r.ticker.toUpperCase() === options.ticker!.toUpperCase());
   }
@@ -872,7 +843,7 @@ export async function getResearchReports(
 // Configuration Management
 // ----------------------------------------------------------------------------
 
-export async function getResearchConfig(pool?: pg.Pool | null): Promise<ResearchConfig> {
+export async function getResearchConfig(pool?: pg.Pool | null, strict = false): Promise<ResearchConfig> {
   if (pool) {
     try {
       await ensureResearchTables(pool);
@@ -880,11 +851,12 @@ export async function getResearchConfig(pool?: pg.Pool | null): Promise<Research
       if (res.rows && res.rows.length > 0) {
         const rawConfig = res.rows[0].config;
         const parsed = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
-        inMemoryStore.config = parsed;
-        return parsed;
+        inMemoryStore.config = normalizeResearchConfig(parsed);
+        return inMemoryStore.config;
       }
     } catch (err: any) {
       console.warn('[Market Research Store] DB getConfig error:', err.message);
+      if (strict) throw err;
     }
   }
 
@@ -892,6 +864,7 @@ export async function getResearchConfig(pool?: pg.Pool | null): Promise<Research
 }
 
 export async function saveResearchConfig(config: ResearchConfig, pool?: pg.Pool | null): Promise<ResearchConfig> {
+  config = normalizeResearchConfig(config);
   inMemoryStore.config = { ...config };
 
   if (pool) {
@@ -979,14 +952,15 @@ export async function getResearchDashboardData(pool?: pg.Pool | null): Promise<R
   }));
   const activeEvents = events.filter(e => ['NEW', 'RESEARCHING', 'ACTIVE'].includes(e.status) && e.sessionState === 'LIVE');
   const monitoredAssets = Object.values(config.assets).filter(a => a.enabled);
+  const groupedReports = groupResearchReports(reports.filter(report => isResearchReportRetained(report)), events);
 
   const data: ResearchDashboardData = {
     activeEvents,
-    recentReports: reports.filter(report => isResearchReportRetained(report)).map(withoutReportVisualBytes),
+    recentReports: groupedReports.map(withoutReportVisualBytes),
     recentEvents: events,
     stats: {
       totalEvents: events.length,
-      totalReports: reports.filter(report => isResearchReportRetained(report)).length,
+      totalReports: groupedReports.length,
       activeCount: activeEvents.length,
       monitoredAssetsCount: monitoredAssets.length,
       lastRunAt: inMemoryStore.lastRunAt

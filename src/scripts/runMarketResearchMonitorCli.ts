@@ -3,6 +3,7 @@ import pg from 'pg';
 import { runMarketResearchMonitor, QuoteFetcher } from '../services/marketResearchMonitor';
 import { ensureResearchTables } from '../services/marketResearchStore';
 import { fetchVerifiedResearchQuote } from '../services/researchSessionQuotes';
+import { getResearchDatabaseId } from '../services/marketResearchSessionStore';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -47,6 +48,12 @@ async function main() {
   const pool = getDbPool();
   if (!pool) throw new Error('DATABASE_URL ontbreekt; monitor start niet zonder duurzame opslag.');
   await ensureResearchTables(pool);
+  console.log(`[Research Storage] Database ID: ${await getResearchDatabaseId(pool)}`);
+  console.log(`[Research Version] ${process.env.GITHUB_SHA || 'local'}`);
+  if (process.argv.includes('--storage-check')) {
+    await pool.end();
+    return;
+  }
 
   console.log('[CLI] Running deterministic market monitor over enabled assets...');
   const result = await runMarketResearchMonitor(cliQuoteFetcher, pool, { autoRunAgent: true, waitForAgent: true });

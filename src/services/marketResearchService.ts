@@ -4,7 +4,7 @@ import {
   ResearchEvent, 
   ResearchConfig 
 } from '../types/marketResearch';
-import { getDefaultResearchConfig } from './marketResearchConfig';
+import { getDefaultResearchConfig, normalizeResearchConfig } from './marketResearchConfig';
 import { isResearchReportRetained, retainResearchDashboard } from '../utils/researchReportPolicy';
 
 const BASE_URL = '';
@@ -210,7 +210,7 @@ function getStoredConfig(): ResearchConfig {
     const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...getDefaultResearchConfig(), ...parsed };
+      return normalizeResearchConfig({ ...getDefaultResearchConfig(), ...parsed });
     }
   } catch (err) {
     console.warn('[MarketResearchService] Error reading stored config:', err);
@@ -486,19 +486,13 @@ export async function triggerMarketScan(): Promise<{
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
-    if (res.ok) {
-      return await res.json();
-    }
+    const result = await res.json();
+    if (!res.ok || !result.success) throw new Error(result.error || 'Market scan failed.');
+    return result;
   } catch (err) {
-    console.warn('[MarketResearchService] API error triggering scan:', err);
+    return { success: false, events_triggered: 0,
+      message: err instanceof Error ? err.message : 'Market scan could not be reached.' };
   }
-
-  return {
-    success: true,
-    events_triggered: 0,
-    scanned_count: 50,
-    message: 'Marktscan voltooid: actieve activa geanalyseerd tegen deterministische drempels.'
-  };
 }
 
 /**
@@ -519,17 +513,10 @@ export async function triggerManualResearch(params: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
-    if (res.ok) {
-      return await res.json();
-    }
+    const result = await res.json();
+    if (!res.ok || !result.success) throw new Error(result.error || result.message || 'Research could not start.');
+    return result;
   } catch (err) {
-    console.warn('[MarketResearchService] API error triggering manual research:', err);
+    return { success: false, message: err instanceof Error ? err.message : 'Research could not be reached.' };
   }
-
-  const existing = INITIAL_RESEARCH_REPORTS.find(r => r.ticker.toUpperCase() === params.ticker.toUpperCase());
-  return {
-    success: true,
-    report: existing,
-    message: `Deep Market Research protocol uitgevoerd voor ${params.ticker}.`
-  };
 }

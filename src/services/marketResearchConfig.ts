@@ -190,9 +190,13 @@ export const DEFAULT_RESEARCH_ASSETS: Record<string, AssetResearchConfig> = {
 
 export function getDefaultResearchConfig(): ResearchConfig {
   return {
-    schedulerIntervalMin: 5,
+    schedulerIntervalMin: 15,
     categories: { ...DEFAULT_RESEARCH_CATEGORIES },
-    assets: { ...DEFAULT_RESEARCH_ASSETS },
-    dedupWindowHours: 24
+    assets: { ...DEFAULT_RESEARCH_ASSETS }
   };
+}
+
+export function normalizeResearchConfig(config: ResearchConfig): ResearchConfig {
+  const { dedupWindowHours: _obsolete, ...current } = config as ResearchConfig & { dedupWindowHours?: unknown };
+  return { ...current, schedulerIntervalMin: 15, scheduler_interval_minutes: 15 };
 }

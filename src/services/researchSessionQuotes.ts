@@ -16,12 +16,14 @@ export const RESEARCH_YAHOO_ALIASES: Record<string, string> = {
   DRO: 'DRO.AX', STM: 'STMPA.PA'
 };
 
-type YahooChart = {
+export type YahooChart = {
   meta?: {
+    symbol?: string;
     exchangeTimezoneName?: string;
     regularMarketPrice?: number;
     regularMarketTime?: number;
     regularMarketChangePercent?: number;
+    regularMarketChange?: number;
     regularMarketPreviousClose?: number;
     previousClose?: number;
     currentTradingPeriod?: { regular?: { start?: number; end?: number } };
@@ -33,7 +35,7 @@ type YahooChart = {
 const historyCache = new Map<string, { at: number; chart: YahooChart | null }>();
 
 export function researchYahooSymbol(symbol: string): string {
-  const upper = symbol.toUpperCase();
+  const upper = symbol.trim().toUpperCase();
   return RESEARCH_YAHOO_ALIASES[upper] || upper;
 }
 
@@ -55,26 +57,43 @@ async function fetchChart(symbol: string, range: string): Promise<YahooChart | n
 /** Only a fresh quote from an open regular session may create an automatic trigger. */
 export async function fetchVerifiedResearchQuote(symbol: string, nowMs = Date.now()): Promise<MarketQuoteInput | null> {
   const marketSymbol = researchYahooSymbol(symbol);
-  const chart = await fetchChart(marketSymbol, '2d');
+  const chart = await fetchChart(marketSymbol, '5d');
+  return parseVerifiedResearchQuote(symbol, chart, nowMs);
+}
+
+/** Interpret regular-session quote fields, never the start-of-range chartPreviousClose. */
+export function parseVerifiedResearchQuote(symbol: string, chart: YahooChart | null, nowMs = Date.now()): MarketQuoteInput | null {
+  const marketSymbol = researchYahooSymbol(symbol);
   const meta = chart?.meta;
   const regular = meta?.currentTradingPeriod?.regular;
   const now = nowMs / 1000;
-  if (!regular?.start || !regular?.end ||
+  if (meta?.symbol?.toUpperCase() !== marketSymbol.toUpperCase() || !meta.exchangeTimezoneName ||
+      !regular?.start || !regular?.end || regular.end <= regular.start ||
       now < regular.start || now >= regular.end ||
       !meta?.regularMarketTime || meta.regularMarketTime < regular.start ||
-      now - meta.regularMarketTime > 30 * 60 || meta.regularMarketTime > now + 60 ||
+      meta.regularMarketTime >= regular.end ||
+      now - meta.regularMarketTime > 2 * 60 || meta.regularMarketTime > now + 60 ||
       !Number.isFinite(meta.regularMarketPrice) || meta.regularMarketPrice! <= 0) return null;
 
-  const previousClose = meta.regularMarketPreviousClose ?? meta.previousClose;
+  // Yahoo sometimes omits the explicit previous close. Its regular quote change
+  // still gives that reference directly; daily futures bars can use a different
+  // settlement reference and chartPreviousClose can cover several days.
+  const reportedPct = meta.regularMarketChangePercent;
+  const previousClose = meta.regularMarketPreviousClose ??
+    (Number.isFinite(meta.regularMarketChange) ? meta.regularMarketPrice! - meta.regularMarketChange! :
+      Number.isFinite(reportedPct) && reportedPct! > -100 ? meta.regularMarketPrice! / (1 + reportedPct! / 100) : undefined);
   if (!Number.isFinite(previousClose) || previousClose! <= 0) return null;
   const changePercent = (meta.regularMarketPrice! / previousClose! - 1) * 100;
-  if (!Number.isFinite(changePercent)) return null;
+  if (!Number.isFinite(changePercent) || (Number.isFinite(reportedPct) && Math.abs(changePercent - reportedPct!) > 0.05)) return null;
+  let sessionDate: string;
+  try { sessionDate = exchangeDate(regular.start * 1000, meta.exchangeTimezoneName); }
+  catch { return null; }
   return {
     symbol, marketSymbol, price: meta.regularMarketPrice!, previousClose: previousClose!,
     changePercent, quoteTime: new Date(meta.regularMarketTime * 1000).toISOString(),
     sessionStart: new Date(regular.start * 1000).toISOString(),
     sessionEnd: new Date(regular.end * 1000).toISOString(),
-    sessionDate: exchangeDate(regular.start * 1000, meta.exchangeTimezoneName || 'UTC'),
+    sessionDate,
     isVerifiedRegularSession: true
   };
 }
@@ -99,6 +118,11 @@ export async function getResearchSessionSnapshot(
   event: ResearchEvent, nowMs = Date.now()
 ): Promise<ResearchSessionSnapshot> {
   if (!event.triggeredAt || !Number.isFinite(Date.parse(event.triggeredAt))) return { state: 'UNKNOWN' };
+  const storedStart = Date.parse(event.sessionStart || '');
+  const storedEnd = Date.parse(event.sessionEnd || '');
+  const storedSession = Number.isFinite(storedStart) && Number.isFinite(storedEnd) && storedEnd > storedStart;
+  if (storedSession && nowMs >= storedStart && nowMs < storedEnd) return { state: 'LIVE' };
+  if (storedSession && nowMs < storedStart) return { state: 'UNKNOWN' };
   const symbol = event.marketSymbol || researchYahooSymbol(event.ticker);
   let entry = historyCache.get(symbol);
   if (!entry || nowMs - entry.at > (entry.chart ? 5 * 60_000 : 60_000)) {
@@ -108,17 +132,17 @@ export async function getResearchSessionSnapshot(
   const chart = entry.chart;
   const regular = chart?.meta?.currentTradingPeriod?.regular;
   const zone = chart?.meta?.exchangeTimezoneName;
-  if (!chart || !zone || !regular?.start || !regular?.end) return { state: 'UNKNOWN' };
+  if (!chart || !zone || !regular?.start || !regular?.end) return { state: storedSession && nowMs >= storedEnd ? 'CLOSED' : 'UNKNOWN' };
 
-  const eventDay = exchangeDate(Date.parse(event.triggeredAt), zone);
+  const eventDay = event.sessionDate || exchangeDate(Date.parse(event.triggeredAt), zone);
   const today = exchangeDate(nowMs, zone);
   const nowSec = nowMs / 1000;
   const sameDay = eventDay === today;
-  const live = sameDay && nowSec >= regular.start && nowSec < regular.end;
+  const live = !storedSession && sameDay && nowSec >= regular.start && nowSec < regular.end;
   if (live) return { state: 'LIVE' };
 
   // Session ends at the official boundary; the close bar needs extra time to settle.
-  const ended = eventDay < today || (sameDay && nowSec >= regular.end) ||
+  const ended = storedSession ? nowMs >= storedEnd : eventDay < today || (sameDay && nowSec >= regular.end) ||
     (sameDay && regular.start > nowSec);
   if (!ended) return { state: 'UNKNOWN' };
   if (sameDay && nowSec >= regular.end && nowSec < regular.end + 15 * 60) {

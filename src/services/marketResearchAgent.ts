@@ -14,8 +14,9 @@ import {
 } from '../types/marketResearch';
 import {
   saveResearchReport,
-  updateResearchEvent
+  getResearchReport
 } from './marketResearchStore';
+import { acquireResearchLease, renewResearchLease, failResearchLease, type ResearchLease } from './marketResearchSessionStore';
 import { runAntiGravityVisualDataAgent } from './antiGravityVisualDataAgent';
 import {
   canAdvanceWorkflow,
@@ -750,11 +751,20 @@ export function deriveVisualBrief(report: ResearchReport): VisualBrief {
 
 // Concurrency mutex lock: ensures only 1 Deep Market Research Agent runs at any given moment
 let agentExecutionLock: Promise<any> = Promise.resolve();
+const eventExecutionFlights = new Map<string, Promise<{ success: boolean; report?: ResearchReport; error?: string }>>();
 
 export async function executeResearchForEvent(
   event: ResearchEvent,
   pool: pg.Pool | null
 ): Promise<{ success: boolean; report?: ResearchReport; error?: string }> {
+  const pending = eventExecutionFlights.get(event.id);
+  if (pending) return pending;
+  const flight = executeResearchSerially(event, pool).finally(() => eventExecutionFlights.delete(event.id));
+  eventExecutionFlights.set(event.id, flight);
+  return flight;
+}
+
+async function executeResearchSerially(event: ResearchEvent, pool: pg.Pool | null): Promise<{ success: boolean; report?: ResearchReport; error?: string }> {
   // Wait for previous agent execution to complete so research runs strictly 1-by-1
   const previous = agentExecutionLock;
   let release: (value?: any) => void = () => {};
@@ -762,30 +772,55 @@ export async function executeResearchForEvent(
 
   await previous.catch(() => {});
 
+  let lease: ResearchLease | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let renewing = false;
   try {
-    return await executeResearchForEventInternal(event, pool);
+    if (!pool) throw new Error('Research requires PostgreSQL session ownership.');
+    lease = await acquireResearchLease(pool, event.id);
+    if (!lease) {
+      const existing = await pool.query('SELECT report_id,state FROM market_research_session_claims WHERE event_id=$1', [event.id]);
+      if (existing.rows[0]?.state === 'COMPLETED') {
+        const report = await getResearchReport(existing.rows[0].report_id, pool);
+        if (report) return { success: true, report };
+      }
+      return { success: false, error: 'Research already running, awaiting retry, or this session is no longer eligible.' };
+    }
+    heartbeat = setInterval(() => {
+      if (renewing) return;
+      renewing = true;
+      void renewResearchLease(pool, lease!).catch(error => {
+        console.warn('[Research Agent] Session lease renewal failed:', error.message);
+      }).finally(() => { renewing = false; });
+    }, 30_000);
+    const result = await executeResearchForEventInternal({ ...event,
+      changePercent: event.triggerChangePercent ?? event.changePercent,
+      currentPrice: event.triggerPrice ?? event.currentPrice }, pool, lease);
+    if (!result.success) await failResearchLease(pool, lease, result.error || 'Research failed.');
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Research execution failed.';
+    if (pool && lease) await failResearchLease(pool, lease, message).catch(() => {});
+    return { success: false, error: message };
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    // Preserve the original pacing, including across separate scan queues.
+    if (lease) await new Promise(resolve => setTimeout(resolve, 2000));
     release();
   }
 }
 
 async function executeResearchForEventInternal(
   event: ResearchEvent,
-  pool: pg.Pool | null
+  pool: pg.Pool,
+  lease: ResearchLease
 ): Promise<{ success: boolean; report?: ResearchReport; error?: string }> {
   console.log(`[Research Agent] Starting Deep Market Research for ${event.ticker} (${event.assetName}, move: ${event.changePercent}%)...`);
-
-  // 1. Mark event as RESEARCHING
-  await updateResearchEvent(event.id, { status: 'RESEARCHING', lastCheckedAt: new Date().toISOString() }, pool);
 
   const aiClient = getGenAIClient();
   if (!aiClient) {
     const errorMsg = 'GEMINI_API_KEY is not configured. Deep Market Research requires Gemini API credentials.';
     console.warn(`[Research Agent] ${errorMsg}`);
-    await updateResearchEvent(event.id, {
-      status: 'COOLED_DOWN',
-      catalystSummary: 'Research suspended: GEMINI_API_KEY not configured.'
-    }, pool);
     return { success: false, error: errorMsg };
   }
 
@@ -980,10 +1015,6 @@ async function executeResearchForEventInternal(
   if (!rawMarkdown) {
     const errMsg = lastError?.message || 'Gemini Deep Research call produced empty output';
     console.error(`[Research Agent] Execution failed for ${event.ticker}:`, errMsg);
-    await updateResearchEvent(event.id, {
-      status: 'COOLED_DOWN',
-      catalystSummary: `Research attempt failed: ${errMsg}`
-    }, pool);
     return { success: false, error: errMsg };
   }
 
@@ -1004,16 +1035,17 @@ async function executeResearchForEventInternal(
     parsed.immediateCatalyst.length > 20 &&
     parsed.directMarketImpact.length > 15;
 
-  const reportId = `rep_${Date.now()}_${event.ticker.toLowerCase()}`;
+  const reportId = lease.reportId;
   const reportStatus = isValidReport ? 'COMPLETED' : 'PARTIAL';
 
   const report: ResearchReport = {
     id: reportId,
+    sessionKey: JSON.stringify([event.marketSymbol, event.sessionDate, event.triggerDirection]),
     eventId: event.id,
     assetName: event.assetName,
     ticker: event.ticker,
     assetClass: event.assetClass,
-    changePercent: event.changePercent,
+    changePercent: event.triggerChangePercent ?? event.changePercent,
     marketCapUsdBillions: event.marketCapUsdBillions ?? event.market_cap_usd_billions,
     period: event.period,
     triggerTimestamp: event.triggeredAt,
@@ -1105,22 +1137,7 @@ async function executeResearchForEventInternal(
   report.visualStatus = visualPayload.assetRegistry?.some(asset => asset.type === 'research_exhibit' && asset.stored) ? 'COMPLETE' : visualPayload.assetRegistry?.some(asset => asset.type === 'image' && asset.stored) ? 'HERO_FALLBACK' : 'FAILED';
   report.visual_status = report.visualStatus;
 
-  await saveResearchReport(report, pool);
-
-  await updateResearchEvent(
-    event.id,
-    {
-      status: 'ACTIVE',
-      reportId: report.id,
-      catalystSummary: parsed.bottomLine 
-        ? parsed.bottomLine.slice(0, 240)
-        : (typeof report.immediateCatalyst === 'string' 
-            ? report.immediateCatalyst.slice(0, 240) 
-            : (report.immediateCatalyst?.summary || '').slice(0, 240)),
-      lastCheckedAt: new Date().toISOString()
-    },
-    pool
-  );
+  await saveResearchReport(report, pool, lease);
 
   console.log(`[Research Agent] Successfully completed Deep Research for ${event.ticker} (Report ID: ${reportId}, model: ${modelUsed}, sources: ${allSources.length})`);
   return { success: true, report };

@@ -399,83 +399,14 @@ export const ResearchConfigModal: React.FC<ResearchConfigModalProps> = ({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div
-                  onClick={() => handleSetSchedulerInterval(5)}
-                  className={`p-5 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between ${
-                    config.schedulerIntervalMin === 5
-                      ? 'border-[#002d62] bg-blue-50/50 shadow-xs'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-slate-900 font-mono">
-                        Elke 5 Minuten
-                      </span>
-                      {config.schedulerIntervalMin === 5 && (
-                        <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Snelle realtime detectie tijdens actieve handelsuren.
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-200/80 text-[11px] font-mono text-blue-900 font-semibold">
-                    12 scans per uur
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+                  <h4 className="text-sm font-bold text-slate-900">GitHub - elke 5 minuten</h4>
+                  <p className="mt-2 text-xs text-slate-600">Onafhankelijke geplande scan en een HTTP-verzoek om Render wakker te houden. Starttijden kunnen vertraagd zijn.</p>
                 </div>
-
-                <div
-                  onClick={() => handleSetSchedulerInterval(10)}
-                  className={`p-5 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between ${
-                    config.schedulerIntervalMin === 10
-                      ? 'border-[#002d62] bg-blue-50/50 shadow-xs'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-slate-900 font-mono">
-                        Elke 10 Minuten
-                      </span>
-                      {config.schedulerIntervalMin === 10 && (
-                        <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Gebalanceerde modus voor normale marktomstandigheden.
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-200/80 text-[11px] font-mono text-slate-700 font-semibold">
-                    6 scans per uur
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => handleSetSchedulerInterval(15)}
-                  className={`p-5 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between ${
-                    config.schedulerIntervalMin === 15
-                      ? 'border-[#002d62] bg-blue-50/50 shadow-xs'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-slate-900 font-mono">
-                        Elke 15 Minuten
-                      </span>
-                      {config.schedulerIntervalMin === 15 && (
-                        <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Rustige achtergrondmodus (matcht met GitHub Actions runner).
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-200/80 text-[11px] font-mono text-slate-700 font-semibold">
-                    4 scans per uur
-                  </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h4 className="text-sm font-bold text-slate-900">Render - elke 15 minuten</h4>
+                  <p className="mt-2 text-xs text-slate-600">Achtergrondscan zolang de app actief is. Beide scanners delen maximaal 1 UP- en 1 DOWN-rapport per effect per beurssessie.</p>
                 </div>
               </div>
             </div>

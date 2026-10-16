@@ -1,27 +1,42 @@
 name: Deep Market Research Monitor Scheduled Runner
 
 # Automatic schedule for Deep Market Research Engine:
-# Runs every 15 minutes Monday through Friday across global market sessions.
+# Runs every 5 minutes Monday through Friday across global market sessions.
 # Prevents free cloud hosts (like Render) from sleeping, and independently
 # scans 100+ tickers/commodities/rates to trigger Deep Market Research reports.
 
 on:
   schedule:
-    # Offset by 3 minutes (:03, :18, :33, :48) so it never collides with News Agent runs at :30 and :00
-    - cron: '3,18,33,48 0-23 * * 1-5'
+    # Offset from the busiest start-of-hour scheduling period.
+    - cron: '3-58/5 * * * 1-5'
   workflow_dispatch:
     inputs:
       forceScan:
-        description: 'Force immediate market scan'
+        description: 'Run market scan; false checks storage only (session limits always apply)'
         required: false
         default: true
         type: boolean
 
 jobs:
+  keep-render-awake:
+    name: Keep Render awake without starting research
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Lightweight HTTP keep-alive
+        env:
+          APP_URL: 'https://markets-xp9o.onrender.com'
+        run: |
+          curl --silent --show-error --fail "$APP_URL/api/research/health" \
+            --max-time 60 || true
+
   run-market-research-monitor:
     name: Run Deep Market Research Monitor
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: market-research-monitor
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository code
@@ -35,18 +50,13 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit
 
-      - name: Ping live web application (Keep-Alive & Wakeup)
+      - name: Verify research storage
         env:
-          APP_URL: 'https://markets-xp9o.onrender.com'
-        run: |
-          if [ -n "$APP_URL" ]; then
-            echo "Sending keep-alive ping and wake-up trigger to $APP_URL/api/research/monitor/run"
-            curl -s -X POST "$APP_URL/api/research/monitor/run" \
-              -H "Content-Type: application/json" \
-              --max-time 15 || true
-          fi
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx tsx src/scripts/runMarketResearchMonitorCli.ts --storage-check
 
       - name: Run Autonomous Deep Market Research Monitor CLI
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.forceScan }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
